@@ -71,7 +71,7 @@ export function JobCanvasNode({ data }: NodeProps<Node<JobNodeData, 'job'>>) {
 }
 
 export function ResultCanvasNode({ data }: NodeProps<Node<ResultNodeData, 'result'>>) {
-  const isDraft = data.result.reviewStatus === 'draft';
+  const canSubmit = data.result.reviewStatus === 'draft' || data.result.reviewStatus === 'returned';
   const isApproved = data.result.reviewStatus === 'approved';
 
   return (
@@ -81,22 +81,41 @@ export function ResultCanvasNode({ data }: NodeProps<Node<ResultNodeData, 'resul
       <div className="canvas-node__content">
         <strong>{data.result.title}</strong>
         <small>{getReviewStatusLabel(data.result.reviewStatus)}</small>
+        {data.result.reviewComment && <small>{data.result.reviewComment}</small>}
       </div>
-      <div className="result-actions">
-        <button aria-label="继续创作" onClick={() => data.actions.onDerive?.(data.result)} type="button">
-          继续创作
-        </button>
+      <div className="result-actions nodrag">
         <button
-          aria-label="提交审核"
-          disabled={!isDraft}
-          onClick={() => data.actions.onSubmitReview?.(data.result.id)}
+          aria-label="继续创作"
+          onClick={(event) => {
+            event.stopPropagation();
+            data.actions.onDerive?.(data.result);
+          }}
           type="button"
         >
-          提交审核
+          继续创作
         </button>
-        <button aria-label="下载结果" disabled={!isApproved} type="button">
-          下载
-        </button>
+        {canSubmit && (
+          <button
+            aria-label="提交审核"
+            onClick={(event) => {
+              event.stopPropagation();
+              data.actions.onSubmitReview?.(data.result.id);
+            }}
+            type="button"
+          >
+            {data.result.reviewStatus === 'returned' ? '重新提交' : '提交审核'}
+          </button>
+        )}
+        {isApproved && (
+          <a
+            aria-label="下载结果"
+            download={`${data.result.title}.png`}
+            href={data.result.imageUrl}
+            onClick={(event) => event.stopPropagation()}
+          >
+            下载
+          </a>
+        )}
       </div>
       <Handle type="source" position={Position.Right} />
     </article>

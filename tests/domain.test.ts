@@ -10,6 +10,7 @@ import {
   getProfile,
   initialStudioState,
   moveCanvasItem,
+  returnResult,
   submitForReview,
   updateJobProgress,
 } from '../src/domain';
@@ -29,6 +30,14 @@ describe('Image Studio domain flow', () => {
       sceneId: 'scene-source',
       profileId: 'blend',
       reservedCredits: 72,
+      inputSnapshot: {
+        inputKind: 'scene',
+        inputNodeId: 'scene-source',
+        prompt: '',
+        ratio: '1:1',
+        parameters: {},
+        referenceAssetIds: ['asset-main'],
+      },
     });
     expect(next.usage.availableCredits).toBe(1928);
     expect(next.usage.frozenCredits).toBe(72);
@@ -80,8 +89,8 @@ describe('Image Studio domain flow', () => {
       operation: '定向光',
     });
     expect(derived.scenes.at(-1)).toMatchObject({
-      x: results[0].x + 300,
-      y: results[0].y,
+      x: results[0].x,
+      y: source.y + 324,
     });
   });
 
@@ -110,9 +119,129 @@ describe('Image Studio domain flow', () => {
       status: 'draft',
     });
     expect(derived.edges.at(-1)).toMatchObject({
-      source: 'scene-source',
+      source: sourceResultId,
       target: derived.scenes.at(-1)?.id,
       label: 'Directional Light',
+    });
+  });
+
+  it('stores an immutable generation input and parameter snapshot', () => {
+    const sourceJob = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const settled = completeJob(sourceJob, sourceJob.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    const sourceResultId = settled.results[0].id;
+    const branch = createDerivedScene(settled, {
+      parentSceneId: 'scene-source', sourceResultId, operation: '融图',
+    });
+    const next = createJob(branch, {
+      sceneId: branch.scenes.at(-1)!.id,
+      profileId: 'blend',
+      outputCount: 2,
+      inputKind: 'result',
+      inputNodeId: sourceResultId,
+      sourceResultId,
+      prompt: '保留瓶身轮廓，融入水面反光',
+      ratio: '4:5',
+      parameters: { blendStrength: 65 },
+      referenceAssetIds: ['asset-scene'],
+    });
+
+    expect(next.jobs.at(-1)!.inputSnapshot).toEqual({
+      inputKind: 'result',
+      inputNodeId: sourceResultId,
+      sourceResultId,
+      prompt: '保留瓶身轮廓，融入水面反光',
+      ratio: '4:5',
+      parameters: { blendStrength: 65 },
+      referenceAssetIds: ['asset-scene'],
+      sourceAssetId: 'asset-main',
+      sourceAssetVersion: 'v3',
+    });
+  });
+
+  it('keeps concurrent jobs in separate lanes and derives scene status from every active job', () => {
+    const first = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const second = createJob(first, {
+      sceneId: 'scene-source', profileId: 'light', outputCount: 1,
+    });
+
+    expect(second.jobs[0].y).not.toBe(second.jobs[1].y);
+
+    const firstRunning = updateJobProgress(second, second.jobs[0].id, 58);
+    const firstDone = completeJob(firstRunning, firstRunning.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    expect(firstDone.scenes[0].status).toBe('queued');
+
+    const secondRunning = updateJobProgress(firstDone, firstDone.jobs[1].id, 58);
+    expect(secondRunning.scenes[0].status).toBe('running');
+
+    const secondFailed = failJob(secondRunning, secondRunning.jobs[1].id, '服务暂时不可用');
+    expect(secondFailed.scenes[0].status).toBe('failed');
+  });
+
+  it('reserves a new lane when a parent scene already has a derived branch', () => {
+    const first = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const settled = completeJob(first, first.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    const branched = createDerivedScene(settled, {
+      parentSceneId: 'scene-source', sourceResultId: settled.results[0].id, operation: '定向光',
+    });
+    const second = createJob(branched, {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+
+    expect(branched.scenes.at(-1)!.y).toBe(first.jobs[0].y + 300);
+    expect(second.jobs.at(-1)!.y).toBe(branched.scenes.at(-1)!.y + 300);
+  });
+
+  it('treats zero successful outputs as failure and releases the full reserve', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 2,
+    });
+
+    const failed = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 0, actualCredits: 15,
+    });
+
+    expect(failed.jobs[0]).toMatchObject({
+      status: 'failed',
+      errorMessage: '任务未生成可用结果',
+    });
+    expect(failed.results).toHaveLength(0);
+    expect(failed.usage).toMatchObject({ availableCredits: 2000, frozenCredits: 0, spentCredits: 0 });
+  });
+
+  it('allows a submitted result to be returned with a reason and resubmitted', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    const resultId = settled.results[0].id;
+    const submitted = submitForReview(settled, resultId);
+    const returned = returnResult(submitted, resultId, '青井审核员', '瓶身高光过强');
+
+    expect(returned.results[0]).toMatchObject({
+      reviewStatus: 'returned',
+      reviewedBy: '青井审核员',
+      reviewComment: '瓶身高光过强',
+    });
+    expect(returned.auditEvents.at(-1)?.type).toBe('review.returned');
+
+    const resubmitted = submitForReview(returned, resultId);
+    expect(resubmitted.results[0]).toMatchObject({
+      reviewStatus: 'submitted',
+      reviewComment: undefined,
     });
   });
 

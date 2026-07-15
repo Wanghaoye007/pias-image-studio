@@ -13,6 +13,7 @@ import {
   Lock,
   ShieldCheck,
   Sparkles,
+  Undo2,
   Upload,
   Users,
   type LucideIcon,
@@ -21,6 +22,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import {
   approveResult,
   getProfile,
+  returnResult,
   type JobStatus,
   type ReviewStatus,
   type Scene,
@@ -82,6 +84,7 @@ const auditEventLabels: Record<string, string> = {
   'scene.derived': '已创建派生场景',
   'review.submitted': '已提交审核',
   'review.approved': '审核已通过',
+  'review.returned': '审核已退回',
 };
 
 export function getAuditTargetLabel(state: StudioState, targetId: string): string {
@@ -167,6 +170,12 @@ export function SecondaryView({ activeNav, state, setState }: SecondaryViewProps
         {activeNav === 'reviews' && (
           <ReviewsView
             onApprove={(resultId) => setState((current) => approveResult(current, resultId, '青井审核员'))}
+            onReturn={(resultId) => setState((current) => returnResult(
+              current,
+              resultId,
+              '青井审核员',
+              '请调整构图与光影后重新提交',
+            ))}
             state={state}
           />
         )}
@@ -248,7 +257,15 @@ function AssetsView({ state }: { state: StudioState }) {
   );
 }
 
-function ReviewsView({ state, onApprove }: { state: StudioState; onApprove: (resultId: string) => void }) {
+function ReviewsView({
+  state,
+  onApprove,
+  onReturn,
+}: {
+  state: StudioState;
+  onApprove: (resultId: string) => void;
+  onReturn: (resultId: string) => void;
+}) {
   return (
     <>
       <div className="section-title">
@@ -265,17 +282,29 @@ function ReviewsView({ state, onApprove }: { state: StudioState; onApprove: (res
               <div>
                 <strong>{result.title}</strong>
                 <small>{reviewStatusLabels[result.reviewStatus]} · {getSourceSceneLabel(sourceScene)}</small>
+                {result.reviewComment && <small>{result.reviewComment}</small>}
               </div>
               {result.reviewStatus === 'submitted' ? (
-                <button
-                  aria-label="通过审核"
-                  className="icon-button"
-                  onClick={() => onApprove(result.id)}
-                  title="通过审核"
-                  type="button"
-                >
-                  <Check aria-hidden="true" size={18} />
-                </button>
+                <div className="review-actions">
+                  <button
+                    aria-label="退回修改"
+                    className="icon-button"
+                    onClick={() => onReturn(result.id)}
+                    title="退回修改"
+                    type="button"
+                  >
+                    <Undo2 aria-hidden="true" size={18} />
+                  </button>
+                  <button
+                    aria-label="通过审核"
+                    className="icon-button"
+                    onClick={() => onApprove(result.id)}
+                    title="通过审核"
+                    type="button"
+                  >
+                    <Check aria-hidden="true" size={18} />
+                  </button>
+                </div>
               ) : result.reviewStatus === 'approved' ? (
                 <a
                   aria-label="下载结果"

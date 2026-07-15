@@ -13,7 +13,9 @@ const operationLabels: Record<string, string> = {
 };
 
 export function getOperationLabel(operation: string): string {
-  return operationLabels[operation] ?? operation;
+  if (operationLabels[operation]) return operationLabels[operation];
+  if (/[A-Za-z\u3040-\u30ff]/.test(operation)) return '其他处理';
+  return operation;
 }
 
 export function getSceneTitle(scene: Pick<Scene, 'operation' | 'title'>): string {

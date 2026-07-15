@@ -164,6 +164,8 @@ describe('workbench canvas', () => {
       Remove: '去除',
       Extract: '抠图',
     });
+    expect(getOperationLabel('Retouch Beta')).toBe('其他处理');
+    expect(getOperationLabel('レタッチ')).toBe('其他处理');
   });
 
   it('localizes legacy scene titles in the scene rail and its accessible names', () => {
@@ -265,7 +267,7 @@ describe('workbench canvas', () => {
     expect(screen.getAllByLabelText(/扩图区域/)).toHaveLength(9);
   });
 
-  it('renders accessible result actions and forwards domain action requests', () => {
+  it('renders accessible result actions, hides locked downloads, and enables real approved downloads', () => {
     const result: Result = {
       id: 'result-1',
       sourceSceneId: 'scene-source',
@@ -307,12 +309,33 @@ describe('workbench canvas', () => {
     const deriveButton = screen.getByRole('button', { name: '继续创作' });
     const reviewButton = screen.getByRole('button', { name: '提交审核' });
     expect(screen.getByAltText('生成 1')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '下载结果' })).toBeDisabled();
+    expect(screen.queryByRole('link', { name: '下载结果' })).not.toBeInTheDocument();
 
     deriveButton.click();
     reviewButton.click();
     expect(onDerive).toHaveBeenCalledWith(result);
     expect(onSubmitReview).toHaveBeenCalledWith(result.id);
+
+    const approved = { ...result, reviewStatus: 'approved' as const };
+    render(
+      <ReactFlowProvider>
+        <ResultCanvasNode
+          data={{ kind: 'result', result: approved, selected: false, actions: {} }}
+          id="result:result-approved"
+          type="result"
+          isConnectable
+          zIndex={0}
+          dragging={false}
+          selected={false}
+          selectable
+          deletable
+          draggable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+        />
+      </ReactFlowProvider>,
+    );
+    expect(screen.getByRole('link', { name: '下载结果' })).toHaveAttribute('href', '/result.png');
   });
 
   it('opens a Chinese context panel from the floating tool palette', () => {
@@ -401,6 +424,74 @@ describe('workbench canvas', () => {
 
     expect(screen.getAllByText('等待中')).toHaveLength(3);
     expect(screen.getByRole('button', { name: '取消任务' })).toBeInTheDocument();
+  });
+
+  it('creates a derived branch and snapshots inputs when a tool runs from a selected result', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    let latestState = settled;
+    render(<WorkbenchHarness initialState={settled} onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByAltText('生成 1'));
+    fireEvent.click(screen.getByRole('button', { name: '定向光' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
+      target: { value: '右上方柔光，保留瓶身标签' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: '画面比例' }), {
+      target: { value: '4:5' },
+    });
+    fireEvent.change(screen.getByRole('slider', { name: '光线强度' }), {
+      target: { value: '72' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+
+    const branchScene = latestState.scenes.at(-1)!;
+    const branchJob = latestState.jobs.at(-1)!;
+    expect(branchScene).toMatchObject({
+      parentSceneId: 'scene-source',
+      sourceResultId: settled.results[0].id,
+      operation: '定向光',
+    });
+    expect(branchJob).toMatchObject({
+      sceneId: branchScene.id,
+      inputSnapshot: {
+        inputKind: 'result',
+        inputNodeId: settled.results[0].id,
+        sourceResultId: settled.results[0].id,
+        prompt: '右上方柔光，保留瓶身标签',
+        ratio: '4:5',
+        parameters: { lightIntensity: 72 },
+      },
+    });
+    expect(branchJob.inputSnapshot.parameters).toEqual({ lightIntensity: 72 });
+  });
+
+  it('offers a keyboard-click path for adding an asset to the canvas', () => {
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /护肤套装，PIAS-SK-014/ }));
+
+    expect(latestState.scenes.at(-1)).toMatchObject({ sourceAssetId: 'asset-pack' });
+  });
+
+  it('renders an actionable mobile result preview alongside the desktop canvas', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+
+    render(<WorkbenchHarness initialState={settled} />);
+
+    const preview = screen.getByLabelText('移动端结果预览');
+    expect(preview).toHaveTextContent('移动端预览');
+    expect(within(preview).getByRole('button', { name: '提交审核' })).toBeInTheDocument();
   });
 
   it('reschedules an initially queued job in StrictMode and settles it exactly once', async () => {

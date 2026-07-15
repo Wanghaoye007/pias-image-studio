@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { getProfile, type TaskProfileId } from '../domain';
+import { useEffect, useRef } from 'react';
+import { getProfile, type Asset, type TaskParameters, type TaskProfileId } from '../domain';
 
 type ContextToolPanelProps = {
   tool: TaskProfileId;
@@ -8,9 +8,14 @@ type ContextToolPanelProps = {
   outputCount: number;
   ratio: string;
   availableCredits: number;
+  assets: Asset[];
+  parameters: TaskParameters;
+  referenceAssetId: string;
   onPromptChange: (prompt: string) => void;
   onOutputCountChange: (count: number) => void;
   onRatioChange: (ratio: string) => void;
+  onParameterChange: (key: string, value: string | number) => void;
+  onReferenceAssetChange: (assetId: string) => void;
   onClose: () => void;
   onRun: () => void;
 };
@@ -18,7 +23,9 @@ type ContextToolPanelProps = {
 export function ContextToolPanel(props: ContextToolPanelProps) {
   const profile = getProfile(props.tool);
   const estimate = profile.costPerOutput * props.outputCount;
-  const cannotRun = !props.prompt.trim() || estimate > props.availableCredits;
+  const cannotRun = !props.prompt.trim()
+    || estimate > props.availableCredits
+    || (props.tool === 'blend' && !props.referenceAssetId);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -78,7 +85,26 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
           <option value="16:9">16:9</option>
         </select>
       </label>
-      <ToolSpecificControl tool={props.tool} />
+      {props.tool === 'blend' && (
+        <label>
+          <span>参考素材</span>
+          <select
+            aria-label="参考素材"
+            onChange={(event) => props.onReferenceAssetChange(event.target.value)}
+            value={props.referenceAssetId}
+          >
+            <option value="">请选择参考素材</option>
+            {props.assets.map((asset) => (
+              <option key={asset.id} value={asset.id}>{asset.product} · {asset.skuCode}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      <ToolSpecificControl
+        onParameterChange={props.onParameterChange}
+        parameters={props.parameters}
+        tool={props.tool}
+      />
       <div className="credit-estimate">
         <span>预计消耗</span>
         <strong>{estimate} 点</strong>
@@ -91,11 +117,15 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
   );
 }
 
-function ToolSpecificControl({ tool }: { tool: TaskProfileId }) {
-  const [lightIntensity, setLightIntensity] = useState(60);
-  const [blendStrength, setBlendStrength] = useState(50);
-  const [angle, setAngle] = useState('正面');
-  const [expandDirection, setExpandDirection] = useState('四周');
+function ToolSpecificControl({
+  tool,
+  parameters,
+  onParameterChange,
+}: {
+  tool: TaskProfileId;
+  parameters: TaskParameters;
+  onParameterChange: (key: string, value: string | number) => void;
+}) {
 
   if (tool === 'light') {
     return (
@@ -105,9 +135,9 @@ function ToolSpecificControl({ tool }: { tool: TaskProfileId }) {
           aria-label="光线强度"
           max="100"
           min="0"
-          onChange={(event) => setLightIntensity(Number(event.target.value))}
+          onChange={(event) => onParameterChange('lightIntensity', Number(event.target.value))}
           type="range"
-          value={lightIntensity}
+          value={parameters.lightIntensity ?? 60}
         />
       </label>
     );
@@ -121,9 +151,9 @@ function ToolSpecificControl({ tool }: { tool: TaskProfileId }) {
           aria-label="融合强度"
           max="100"
           min="0"
-          onChange={(event) => setBlendStrength(Number(event.target.value))}
+          onChange={(event) => onParameterChange('blendStrength', Number(event.target.value))}
           type="range"
-          value={blendStrength}
+          value={parameters.blendStrength ?? 50}
         />
       </label>
     );
@@ -133,9 +163,9 @@ function ToolSpecificControl({ tool }: { tool: TaskProfileId }) {
     return (
       <SegmentedOptions
         label="视角"
-        onChange={setAngle}
+        onChange={(value) => onParameterChange('angle', value)}
         options={['正面', '侧面', '俯视']}
-        value={angle}
+        value={String(parameters.angle ?? '正面')}
       />
     );
   }
@@ -144,9 +174,9 @@ function ToolSpecificControl({ tool }: { tool: TaskProfileId }) {
     return (
       <SegmentedOptions
         label="扩图方向"
-        onChange={setExpandDirection}
+        onChange={(value) => onParameterChange('expandDirection', value)}
         options={['四周', '横向', '纵向']}
-        value={expandDirection}
+        value={String(parameters.expandDirection ?? '四周')}
       />
     );
   }

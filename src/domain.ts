@@ -3,6 +3,8 @@ export type ReviewStatus = 'draft' | 'submitted' | 'approved' | 'returned';
 
 export type CanvasNodeKind = 'scene' | 'job' | 'result';
 export type CanvasPosition = { x: number; y: number };
+export type JobInputKind = 'scene' | 'result';
+export type TaskParameters = Record<string, string | number>;
 export type TaskProfileId =
   | 'generate' | 'blend' | 'angle' | 'light'
   | 'remove' | 'extract' | 'expand' | 'upscale';
@@ -58,7 +60,20 @@ export type GenerationJob = {
   progress: number;
   x: number;
   y: number;
+  inputSnapshot: JobInputSnapshot;
   errorMessage?: string;
+};
+
+export type JobInputSnapshot = {
+  inputKind: JobInputKind;
+  inputNodeId: string;
+  prompt: string;
+  ratio: string;
+  parameters: TaskParameters;
+  referenceAssetIds: string[];
+  sourceAssetId?: string;
+  sourceAssetVersion?: string;
+  sourceResultId?: string;
 };
 
 export type Result = {
@@ -72,6 +87,8 @@ export type Result = {
   x: number;
   y: number;
   approvedBy?: string;
+  reviewedBy?: string;
+  reviewComment?: string;
 };
 
 export type Asset = {
@@ -200,7 +217,18 @@ export function initialStudioState(): StudioState {
 
 export function createJob(
   state: StudioState,
-  input: { sceneId: string; profileId: TaskProfileId; outputCount: number },
+  input: {
+    sceneId: string;
+    profileId: TaskProfileId;
+    outputCount: number;
+    inputKind?: JobInputKind;
+    inputNodeId?: string;
+    prompt?: string;
+    ratio?: string;
+    parameters?: TaskParameters;
+    referenceAssetIds?: string[];
+    sourceResultId?: string;
+  },
 ): StudioState {
   if (!Number.isInteger(input.outputCount) || input.outputCount <= 0) {
     throw new Error('产出数量必须为正整数');
@@ -210,11 +238,32 @@ export function createJob(
   if (!source) {
     throw new Error(`场景不存在：${input.sceneId}`);
   }
+  const inputKind = input.inputKind ?? 'scene';
+  const inputNodeId = input.inputNodeId ?? input.sceneId;
+  if (inputKind === 'result') {
+    const sourceResult = state.results.find((result) => result.id === input.sourceResultId);
+    if (!sourceResult || source.sourceResultId !== sourceResult.id) {
+      throw new Error('结果输入与目标分支不一致');
+    }
+  }
+  const referenceAssetIds = input.referenceAssetIds?.length
+    ? [...input.referenceAssetIds]
+    : input.profileId === 'blend' && source.sourceAssetId
+      ? [source.sourceAssetId]
+      : [];
+  if (input.profileId === 'blend' && referenceAssetIds.length === 0) {
+    throw new Error('融图任务必须选择参考素材');
+  }
+  if (referenceAssetIds.some((assetId) => !state.assets.some((asset) => asset.id === assetId))) {
+    throw new Error('参考素材不存在');
+  }
   const reservedCredits = profile.costPerOutput * input.outputCount;
   if (state.usage.availableCredits < reservedCredits) {
     throw new Error('可用额度不足');
   }
 
+  const sceneJobCount = state.jobs.filter((item) => item.sceneId === source.id).length;
+  const sceneBranchCount = state.scenes.filter((item) => item.parentSceneId === source.id).length;
   const job: GenerationJob = {
     id: `job-${state.jobs.length + 1}`,
     sceneId: input.sceneId,
@@ -225,15 +274,25 @@ export function createJob(
     actualCredits: 0,
     progress: 8,
     x: source.x + 320,
-    y: source.y + 24,
+    y: source.y + 24 + (sceneJobCount + sceneBranchCount) * 300,
+    inputSnapshot: {
+      inputKind,
+      inputNodeId,
+      prompt: input.prompt ?? '',
+      ratio: input.ratio ?? '1:1',
+      parameters: { ...(input.parameters ?? {}) },
+      referenceAssetIds,
+      ...(source.sourceAssetId ? { sourceAssetId: source.sourceAssetId } : {}),
+      ...(source.sourceAssetVersion ? { sourceAssetVersion: source.sourceAssetVersion } : {}),
+      ...(input.sourceResultId ? { sourceResultId: input.sourceResultId } : {}),
+    },
   };
+  const jobs = [...state.jobs, job];
 
   return {
     ...state,
-    jobs: [...state.jobs, job],
-    scenes: state.scenes.map((scene) =>
-      scene.id === input.sceneId ? { ...scene, status: 'queued' } : scene,
-    ),
+    jobs,
+    scenes: refreshSceneStatuses(state.scenes, jobs),
     usage: {
       ...state.usage,
       availableCredits: state.usage.availableCredits - reservedCredits,
@@ -272,16 +331,16 @@ function settleJob(
     throw new Error('任务已结算，不能重复结算');
   }
 
+  const jobs = state.jobs.map((item) =>
+    item.id === jobId
+      ? { ...item, status, ...(errorMessage !== undefined ? { errorMessage } : {}) }
+      : item,
+  );
+
   return {
     ...state,
-    jobs: state.jobs.map((item) =>
-      item.id === jobId
-        ? { ...item, status, ...(errorMessage !== undefined ? { errorMessage } : {}) }
-        : item,
-    ),
-    scenes: state.scenes.map((scene) =>
-      scene.id === job.sceneId ? { ...scene, status } : scene,
-    ),
+    jobs,
+    scenes: refreshSceneStatuses(state.scenes, jobs),
     usage: {
       ...state.usage,
       availableCredits: state.usage.availableCredits + job.reservedCredits,
@@ -341,14 +400,14 @@ export function updateJobProgress(state: StudioState, jobId: string, progress: n
     return state;
   }
 
+  const jobs = state.jobs.map((item) =>
+    item.id === jobId ? { ...item, status: progress >= 100 ? item.status : 'running', progress } : item,
+  );
+
   return {
     ...state,
-    jobs: state.jobs.map((job) =>
-      job.id === jobId ? { ...job, status: progress >= 100 ? job.status : 'running', progress } : job,
-    ),
-    scenes: state.scenes.map((scene) => {
-      return job?.sceneId === scene.id ? { ...scene, status: 'running' } : scene;
-    }),
+    jobs,
+    scenes: refreshSceneStatuses(state.scenes, jobs),
   };
 }
 
@@ -370,6 +429,9 @@ export function completeJob(
   if (!Number.isFinite(input.actualCredits) || input.actualCredits < 0 || input.actualCredits > job.reservedCredits) {
     throw new Error('实际额度超出预留范围');
   }
+  if (input.successfulOutputs === 0) {
+    return failJob(state, jobId, '任务未生成可用结果');
+  }
 
   const newResults = Array.from({ length: input.successfulOutputs }).map((_, index) => {
     const id = `result-${state.results.length + index + 1}`;
@@ -386,22 +448,24 @@ export function completeJob(
     };
   });
 
-  return {
-    ...state,
-    jobs: state.jobs.map((item) =>
-      item.id === jobId
-        ? { ...item, status: 'succeeded', progress: 100, actualCredits: input.actualCredits }
-        : item,
-    ),
-    scenes: state.scenes.map((scene) =>
+  const jobs = state.jobs.map((item) =>
+    item.id === jobId
+      ? { ...item, status: 'succeeded' as const, progress: 100, actualCredits: input.actualCredits }
+      : item,
+  );
+  const scenes = refreshSceneStatuses(
+    state.scenes.map((scene) =>
       scene.id === job.sceneId
-        ? {
-            ...scene,
-            status: 'succeeded',
-            resultIds: [...scene.resultIds, ...newResults.map((result) => result.id)],
-          }
+        ? { ...scene, resultIds: [...scene.resultIds, ...newResults.map((result) => result.id)] }
         : scene,
     ),
+    jobs,
+  );
+
+  return {
+    ...state,
+    jobs,
+    scenes,
     results: [...state.results, ...newResults],
     usage: {
       ...state.usage,
@@ -434,6 +498,8 @@ export function createDerivedScene(
   ) {
     throw new Error('源结果与父场景或任务归属不一致');
   }
+  const parentJobCount = state.jobs.filter((job) => job.sceneId === parent.id).length;
+  const parentBranchCount = state.scenes.filter((scene) => scene.parentSceneId === parent.id).length;
 
   const sceneId = `scene-${state.scenes.length + 1}`;
   const scene: Scene = {
@@ -442,12 +508,14 @@ export function createDerivedScene(
     skuCode: parent.skuCode,
     operation: input.operation,
     status: 'draft',
-    x: sourceResult.x + 300,
-    y: sourceResult.y,
+    x: sourceResult.x,
+    y: parent.y + 24 + (parentJobCount + parentBranchCount) * 300,
     imageUrl: sourceResult.imageUrl,
     resultIds: [],
     parentSceneId: parent.id,
     sourceResultId: sourceResult.id,
+    sourceAssetId: parent.sourceAssetId,
+    sourceAssetVersion: parent.sourceAssetVersion,
   };
 
   return {
@@ -458,7 +526,7 @@ export function createDerivedScene(
       ...state.edges,
       {
         id: `edge-${state.edges.length + 1}`,
-        source: parent.id,
+        source: sourceResult.id,
         target: scene.id,
         label: input.operation,
       },
@@ -475,14 +543,16 @@ export function submitForReview(state: StudioState, resultId: string): StudioSta
   if (!result) {
     throw new Error(`结果不存在：${resultId}`);
   }
-  if (result.reviewStatus !== 'draft') {
-    throw new Error('仅草稿结果可提交审核');
+  if (result.reviewStatus !== 'draft' && result.reviewStatus !== 'returned') {
+    throw new Error('仅草稿或已退回结果可提交审核');
   }
 
   return {
     ...state,
     results: state.results.map((result) =>
-      result.id === resultId ? { ...result, reviewStatus: 'submitted' } : result,
+      result.id === resultId
+        ? { ...result, reviewStatus: 'submitted', reviewedBy: undefined, reviewComment: undefined }
+        : result,
     ),
     auditEvents: [...state.auditEvents, audit('review.submitted', resultId, 'Mika Tanaka')],
   };
@@ -501,10 +571,38 @@ export function approveResult(state: StudioState, resultId: string, reviewer: st
     ...state,
     results: state.results.map((result) =>
       result.id === resultId
-        ? { ...result, reviewStatus: 'approved', approvedBy: reviewer }
+        ? { ...result, reviewStatus: 'approved', approvedBy: reviewer, reviewedBy: reviewer }
         : result,
     ),
     auditEvents: [...state.auditEvents, audit('review.approved', resultId, reviewer)],
+  };
+}
+
+export function returnResult(
+  state: StudioState,
+  resultId: string,
+  reviewer: string,
+  reason: string,
+): StudioState {
+  const result = state.results.find((item) => item.id === resultId);
+  if (!result) {
+    throw new Error(`结果不存在：${resultId}`);
+  }
+  if (result.reviewStatus !== 'submitted') {
+    throw new Error('仅待审核结果可退回');
+  }
+  if (!reason.trim()) {
+    throw new Error('退回原因不能为空');
+  }
+
+  return {
+    ...state,
+    results: state.results.map((item) =>
+      item.id === resultId
+        ? { ...item, reviewStatus: 'returned', reviewedBy: reviewer, reviewComment: reason.trim() }
+        : item,
+    ),
+    auditEvents: [...state.auditEvents, audit('review.returned', resultId, reviewer)],
   };
 }
 
@@ -514,6 +612,16 @@ export function setSelectedTool(state: StudioState, tool: TaskProfileId): Studio
 
 export function setSelectedScene(state: StudioState, sceneId: string): StudioState {
   return { ...state, selectedSceneId: sceneId };
+}
+
+function refreshSceneStatuses(scenes: Scene[], jobs: GenerationJob[]): Scene[] {
+  return scenes.map((scene) => {
+    const sceneJobs = jobs.filter((job) => job.sceneId === scene.id);
+    if (sceneJobs.length === 0) return scene;
+    if (sceneJobs.some((job) => job.status === 'running')) return { ...scene, status: 'running' };
+    if (sceneJobs.some((job) => job.status === 'queued')) return { ...scene, status: 'queued' };
+    return { ...scene, status: sceneJobs.at(-1)!.status };
+  });
 }
 
 function audit(type: string, targetId: string, actor: string): AuditEvent {

@@ -180,14 +180,25 @@ small {
 .workspace {
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: 56px minmax(0, 1fr);
+  display: block;
   overflow: hidden;
   background: var(--canvas);
 }
 
-.workspace.is-workbench {
-  display: block;
+.workspace-panel {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-panel[hidden] {
+  display: none !important;
+}
+
+.workspace-panel--secondary {
+  display: grid;
+  grid-template-rows: 56px minmax(0, 1fr);
 }
 
 .global-header {
@@ -521,6 +532,12 @@ small {
   display: grid;
   gap: 3px;
   overflow: hidden;
+}
+
+.review-row > .review-actions {
+  display: flex;
+  gap: 6px;
+  overflow: visible;
 }
 
 .review-row strong,
@@ -910,7 +927,8 @@ small {
 }
 
 .react-flow__node:focus-visible {
-  outline: 0;
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
 }
 
 .react-flow__handle {
@@ -1183,7 +1201,8 @@ progress::-moz-progress-bar {
   border-top: 1px solid var(--line-soft);
 }
 
-.result-actions button {
+.result-actions button,
+.result-actions a {
   height: 32px;
   padding: 0 4px;
   overflow: hidden;
@@ -1194,11 +1213,19 @@ progress::-moz-progress-bar {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
 }
 
-.result-actions button:hover:not(:disabled) {
+.result-actions button:hover:not(:disabled),
+.result-actions a:hover {
   border-color: rgb(47 128 255 / 60%);
   color: var(--text);
+}
+
+.mobile-preview {
+  display: none;
 }
 
 .light-controls,
@@ -1725,6 +1752,9 @@ progress::-moz-progress-bar {
 
   .workspace {
     grid-row: 2;
+  }
+
+  .workspace-panel--secondary {
     grid-template-rows: 52px minmax(0, 1fr);
   }
 
@@ -1817,6 +1847,7 @@ progress::-moz-progress-bar {
   .scene-rail,
   .tool-palette,
   .context-panel,
+  .canvas-stage > .react-flow,
   .canvas-stage .react-flow__controls,
   .canvas-stage .react-flow__minimap {
     display: none;
@@ -1827,12 +1858,92 @@ progress::-moz-progress-bar {
     grid-row: 2;
   }
 
-  .canvas-stage > .react-flow {
-    pointer-events: none;
+  .mobile-preview {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-rows: 48px minmax(0, 1fr);
+    overflow: hidden;
+    background: var(--canvas);
   }
 
-  .canvas-stage .react-flow__pane {
-    cursor: default;
+  .mobile-preview > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--panel);
+  }
+
+  .mobile-preview > header strong {
+    font-size: 13px;
+  }
+
+  .mobile-preview > header span {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .mobile-preview__results {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 10px 10px 88px;
+    overflow: auto;
+  }
+
+  .mobile-preview__results > article {
+    min-height: 96px;
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 9px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+  }
+
+  .mobile-preview__results img {
+    width: 76px;
+    height: 76px;
+    grid-row: 1 / 3;
+    border-radius: 6px;
+    object-fit: cover;
+  }
+
+  .mobile-preview__results article > div:not(.mobile-preview__actions) {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 2px;
+  }
+
+  .mobile-preview__results article strong,
+  .mobile-preview__results article small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-preview__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .mobile-preview__actions button,
+  .mobile-preview__actions a {
+    min-height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    color: var(--text);
+    background: var(--overlay);
+    font-size: 12px;
+    line-height: 30px;
+    text-decoration: none;
   }
 
   .task-tray {

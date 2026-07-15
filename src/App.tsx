@@ -19,11 +19,12 @@ function App() {
     <div className={`app-frame ${activeNav === 'studio' ? 'is-workbench' : ''}`}>
       <GlobalNav activeNav={activeNav} onNavigate={setActiveNav} state={state} />
       <div className={`workspace ${activeNav === 'studio' ? 'is-workbench' : ''}`}>
-        {activeNav === 'studio' ? (
+        <div className="workspace-panel workspace-panel--workbench" hidden={activeNav !== 'studio'}>
           <Workbench state={state} setState={setState} />
-        ) : (
+        </div>
+        <div className="workspace-panel workspace-panel--secondary" hidden={activeNav === 'studio'}>
           <SecondaryView activeNav={activeNav} setState={setState} state={state} />
-        )}
+        </div>
       </div>
     </div>
   );

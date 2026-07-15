@@ -33,8 +33,10 @@ describe('PIAS 中文应用框架', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: '审核' }));
-      expect(screen.getByText('草稿')).toBeInTheDocument();
-      expect(screen.getByText('待审核')).toBeInTheDocument();
+      const reviewView = screen.getByRole('heading', { level: 1, name: '审核' })
+        .closest<HTMLElement>('.workspace-panel')!;
+      expect(within(reviewView).getByText('草稿')).toBeInTheDocument();
+      expect(within(reviewView).getByText('待审核')).toBeInTheDocument();
       expect(screen.getByRole('img', { name: '生成 2' }).closest('article')).toHaveTextContent('审核已通过');
 
       fireEvent.click(screen.getByRole('button', { name: '图片工作台' }));
@@ -62,6 +64,47 @@ describe('PIAS 中文应用框架', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('在任务运行中切换页面后仍会完成结算并释放冻结额度', async () => {
+    vi.useFakeTimers();
+
+    try {
+      render(<App />);
+      fireEvent.click(screen.getByRole('button', { name: '生成' }));
+      fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
+        target: { value: '导航切换回归测试' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      fireEvent.click(screen.getByRole('button', { name: '用量' }));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(900);
+      });
+
+      const summary = screen.getByLabelText('工作区摘要');
+      expect(within(summary).getByText('冻结').closest('.metric')).toHaveTextContent('0');
+      expect(screen.getByText('任务 02 · 生成').closest('.ledger-row')).toHaveTextContent('已完成');
+      fireEvent.click(screen.getByRole('button', { name: '图片工作台' }));
+      expect(screen.getByLabelText('节点画布')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('审核员可以退回结果并显示退回原因', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '审核' }));
+    const pendingRow = screen.getByRole('img', { name: '生成 1' }).closest('article')!;
+
+    fireEvent.click(within(pendingRow).getByRole('button', { name: '退回修改' }));
+
+    expect(pendingRow).toHaveTextContent('已退回');
+    expect(pendingRow).toHaveTextContent('请调整构图与光影后重新提交');
   });
 
   it('批准目标待审核结果后才为该结果开放下载，并隐藏内部标识', () => {
@@ -94,10 +137,12 @@ describe('PIAS 中文应用框架', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: '首页' }));
+    const dashboard = screen.getByRole('heading', { level: 1, name: '首页' })
+      .closest<HTMLElement>('.workspace-panel')!;
 
-    expect(screen.getAllByText('任务 01 · 生成').length).toBeGreaterThan(0);
-    expect(screen.getByText('融图场景 · PIAS-SF-001')).toBeInTheDocument();
-    expect(screen.getByText('生成 1')).toBeInTheDocument();
+    expect(within(dashboard).getAllByText('任务 01 · 生成').length).toBeGreaterThan(0);
+    expect(within(dashboard).getByText('融图场景 · PIAS-SF-001')).toBeInTheDocument();
+    expect(within(dashboard).getByText('生成 1')).toBeInTheDocument();
     ['job-1', 'scene-2', 'result-1'].forEach((id) => {
       expect(screen.queryByText(id, { exact: true })).not.toBeInTheDocument();
     });

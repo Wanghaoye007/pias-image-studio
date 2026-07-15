@@ -8,6 +8,7 @@ type SceneRailProps = {
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onSelectScene: (scene: Scene) => void;
+  onAddAsset?: (asset: Asset) => void;
 };
 
 type RailTab = 'scenes' | 'assets';
@@ -17,6 +18,7 @@ export function SceneRail({
   collapsed,
   onToggleCollapsed,
   onSelectScene,
+  onAddAsset,
 }: SceneRailProps) {
   const [activeTab, setActiveTab] = useState<RailTab>('assets');
   const [query, setQuery] = useState('');
@@ -89,11 +91,12 @@ export function SceneRail({
                   value={query}
                 />
               </label>
-              <AssetGroup assets={filteredAssets.filter((asset) => asset.id === 'asset-main')} label="商品素材" />
-              <AssetGroup assets={filteredAssets.filter((asset) => asset.id === 'asset-scene')} label="上传素材" />
+              <AssetGroup assets={filteredAssets.filter((asset) => asset.id === 'asset-main')} label="商品素材" onAddAsset={onAddAsset} />
+              <AssetGroup assets={filteredAssets.filter((asset) => asset.id === 'asset-scene')} label="上传素材" onAddAsset={onAddAsset} />
               <AssetGroup
                 assets={filteredAssets.filter((asset) => !['asset-main', 'asset-scene'].includes(asset.id))}
                 label="品牌素材"
+                onAddAsset={onAddAsset}
               />
             </div>
           )}
@@ -103,7 +106,15 @@ export function SceneRail({
   );
 }
 
-function AssetGroup({ assets, label }: { assets: Asset[]; label: string }) {
+function AssetGroup({
+  assets,
+  label,
+  onAddAsset,
+}: {
+  assets: Asset[];
+  label: string;
+  onAddAsset?: (asset: Asset) => void;
+}) {
   return (
     <section className="asset-group" aria-label={label}>
       <h3>{label}</h3>
@@ -113,6 +124,7 @@ function AssetGroup({ assets, label }: { assets: Asset[]; label: string }) {
             aria-label={`${asset.product}，${asset.skuCode}，${asset.usage}`}
             draggable
             key={asset.id}
+            onClick={() => onAddAsset?.(asset)}
             onDragStart={(event) => handleAssetDragStart(event, asset.id)}
             type="button"
           >
