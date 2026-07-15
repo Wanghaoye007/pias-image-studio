@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode, useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -30,6 +30,16 @@ const reactFlowMocks = vi.hoisted(() => ({
   fitView: vi.fn(() => Promise.resolve(true)),
   screenToFlowPosition: vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y })),
   updateNodeInternals: vi.fn(),
+}));
+
+const deliveryMocks = vi.hoisted(() => ({
+  downloadProductionDelivery: vi.fn(() => Promise.resolve(['result.png', 'manifest.csv', 'manifest.json'])),
+  downloadWatermarkedPreview: vi.fn(() => Promise.resolve('result-preview.png')),
+}));
+
+vi.mock('../src/exportDelivery', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/exportDelivery')>()),
+  ...deliveryMocks,
 }));
 
 vi.mock('@xyflow/react', async (importOriginal) => {
@@ -632,7 +642,7 @@ describe('workbench canvas', () => {
     });
   });
 
-  it('moves results through favorite, adoption, comparison, and shared zoom', () => {
+  it('moves results through favorite, adoption, comparison, shared zoom, and synchronized panning', () => {
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source', profileId: 'generate', outputCount: 3,
     });
@@ -662,11 +672,40 @@ describe('workbench canvas', () => {
       target: { value: '150' },
     });
     expect(within(compareDialog).getByText('150%')).toBeInTheDocument();
+    expect(compareDialog).toHaveAttribute('aria-modal', 'true');
+    expect(within(compareDialog).getByRole('button', { name: '关闭结果对比' })).toHaveFocus();
+
+    const viewports = compareDialog.querySelectorAll<HTMLElement>('.result-compare-grid__viewport');
+    viewports[0].scrollLeft = 74;
+    viewports[0].scrollTop = 31;
+    fireEvent.scroll(viewports[0]);
+    expect(viewports[1].scrollLeft).toBe(74);
+    expect(viewports[1].scrollTop).toBe(31);
+
     fireEvent.click(within(compareDialog).getByRole('button', { name: '关闭结果对比' }));
     expect(screen.queryByRole('dialog', { name: '结果对比' })).not.toBeInTheDocument();
   });
 
-  it('inspects an approved result and records a configured production export', () => {
+  it('downloads only watermarked previews before approval', async () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+
+    render(<WorkbenchHarness initialState={settled} />);
+    fireEvent.click(screen.getByRole('button', { name: '查看结果详情' }));
+    const inspector = screen.getByRole('complementary', { name: '结果详情' });
+
+    expect(within(inspector).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(inspector).getByText('预览用途')).toBeInTheDocument();
+    fireEvent.click(within(inspector).getByRole('button', { name: '下载带水印预览' }));
+
+    await waitFor(() => expect(deliveryMocks.downloadWatermarkedPreview).toHaveBeenCalledWith(settled.results[0]));
+  });
+
+  it('inspects an approved result and records a configured production export', async () => {
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source', profileId: 'generate', outputCount: 1, ratio: '4:5',
     });
@@ -699,11 +738,19 @@ describe('workbench canvas', () => {
     expect(within(exportDialog).getByText(/PIAS_PIAS-SF-001_.*\.webp/)).toBeInTheDocument();
     fireEvent.click(within(exportDialog).getByRole('button', { name: '生成生产导出' }));
 
-    expect(latestState.auditEvents.at(-1)).toMatchObject({
-      type: 'result.exported',
-      targetId: 'result-1',
+    await waitFor(() => {
+      expect(deliveryMocks.downloadProductionDelivery).toHaveBeenCalledWith(approved, approved.results[0], {
+        format: 'webp',
+        size: '1080',
+        includeManifestCsv: true,
+        includeManifestJson: true,
+      });
+      expect(latestState.auditEvents.at(-1)).toMatchObject({
+        type: 'result.exported',
+        targetId: 'result-1',
+      });
     });
-    expect(screen.getByLabelText('画布操作反馈')).toHaveTextContent('导出任务已创建');
+    expect(screen.getByLabelText('画布操作反馈')).toHaveTextContent('已生成 3 个交付文件');
   });
 
   it('opens a Chinese context panel from the floating tool palette', () => {

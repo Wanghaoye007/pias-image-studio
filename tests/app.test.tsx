@@ -2,11 +2,21 @@ import { StrictMode } from 'react';
 // Vitest executes this source-level CSS assertion in Node; production code stays browser-only.
 // @ts-expect-error The project intentionally does not ship Node types.
 import { readFileSync } from 'node:fs';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { getAuditTargetLabel } from '../src/SecondaryViews';
 import { initialStudioState } from '../src/domain';
+
+const deliveryMocks = vi.hoisted(() => ({
+  downloadProductionDelivery: vi.fn(() => Promise.resolve(['result.png', 'manifest.csv', 'manifest.json'])),
+  downloadWatermarkedPreview: vi.fn(() => Promise.resolve('result-preview.png')),
+}));
+
+vi.mock('../src/exportDelivery', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/exportDelivery')>()),
+  ...deliveryMocks,
+}));
 
 declare const process: { cwd: () => string };
 
@@ -29,6 +39,7 @@ describe('PIAS 中文应用框架', () => {
     expect(mobileRules).toMatch(
       /\.react-flow__handle\.node-create-handle,\s*\.node-type-picker,\s*\.draft-task-node\s*\{\s*display:\s*none;/,
     );
+    expect(mobileRules).toMatch(/\.result-compare-backdrop\s*\{\s*display:\s*none;/);
   });
 
   it('默认打开节点画布，并提供中文全局导航', () => {
@@ -134,7 +145,7 @@ describe('PIAS 中文应用框架', () => {
     expect(pendingRow).toHaveTextContent('请调整构图与光影后重新提交');
   });
 
-  it('批准目标待审核结果后才为该结果开放下载，并隐藏内部标识', () => {
+  it('批准目标待审核结果后才开放受审计的生产导出，并隐藏内部标识', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: '审核' }));
@@ -143,8 +154,8 @@ describe('PIAS 中文应用框架', () => {
     const approvedRow = getReviewRow('生成 2');
 
     expect(pendingRow).toHaveTextContent('待审核');
-    expect(within(pendingRow).queryByRole('link', { name: '下载结果' })).not.toBeInTheDocument();
-    expect(within(approvedRow).getByRole('link', { name: '下载结果' })).toBeInTheDocument();
+    expect(within(pendingRow).queryByRole('button', { name: '生成生产导出' })).not.toBeInTheDocument();
+    expect(within(approvedRow).getByRole('button', { name: '生成生产导出' })).toBeInTheDocument();
     expect(pendingRow).not.toHaveTextContent('scene-source');
     expect(pendingRow).toHaveTextContent('源场景');
     expect(pendingRow).toHaveTextContent('PIAS-SF-001');
@@ -153,9 +164,13 @@ describe('PIAS 中文应用框架', () => {
 
     const approvedPendingRow = getReviewRow('生成 1');
     expect(approvedPendingRow).toHaveTextContent('审核已通过');
-    expect(within(approvedPendingRow).getByRole('link', { name: '下载结果' })).toBeInTheDocument();
+    expect(within(approvedPendingRow).getByRole('button', { name: '生成生产导出' })).toBeInTheDocument();
+
+    fireEvent.click(within(approvedRow).getByRole('button', { name: '生成生产导出' }));
+    await waitFor(() => expect(deliveryMocks.downloadProductionDelivery).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: '用量' }));
+    expect(screen.getByText('已导出').closest('article')).toHaveTextContent('1');
     expect(screen.getByText('任务 01 · 生成')).toBeInTheDocument();
     expect(screen.queryByText('job-1', { exact: true })).not.toBeInTheDocument();
   });
@@ -179,7 +194,7 @@ describe('PIAS 中文应用框架', () => {
     expect(getAuditTargetLabel(initialStudioState(), 'missing-object')).toBe('操作对象');
   });
 
-  it('从批准结果创建生产导出后同步用量统计和中文审计', () => {
+  it('从批准结果创建生产导出后同步用量统计和中文审计', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: '用量' }));
@@ -192,6 +207,8 @@ describe('PIAS 中文应用框架', () => {
     const inspector = screen.getByRole('complementary', { name: '结果详情' });
     fireEvent.click(within(inspector).getByRole('button', { name: '配置生产导出' }));
     fireEvent.click(screen.getByRole('button', { name: '生成生产导出' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '生产导出' })).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: '用量' }));
     expect(screen.getByText('已导出').closest('article')).toHaveTextContent('1');

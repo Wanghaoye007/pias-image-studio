@@ -18,16 +18,19 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import {
   approveResult,
   getProfile,
+  recordResultExport,
   returnResult,
+  type ExportSpec,
   type JobStatus,
   type ReviewStatus,
   type Scene,
   type StudioState,
 } from './domain';
+import { downloadProductionDelivery } from './exportDelivery';
 import { getSceneTitle } from './workbench/graph';
 
 export type NavKey = 'dashboard' | 'projects' | 'studio' | 'assets' | 'reviews' | 'usage' | 'admin';
@@ -94,6 +97,13 @@ const auditEventLabels: Record<string, string> = {
   'result.exported': '已创建生产导出',
 };
 
+const quickExportSpec: ExportSpec = {
+  format: 'png',
+  size: 'original',
+  includeManifestCsv: true,
+  includeManifestJson: true,
+};
+
 export function getAuditTargetLabel(state: StudioState, targetId: string): string {
   const jobIndex = state.jobs.findIndex((job) => job.id === targetId);
   if (jobIndex >= 0) {
@@ -154,6 +164,24 @@ export function SecondaryView({ activeNav, state, setState }: SecondaryViewProps
   const submittedResults = state.results.filter((result) => result.reviewStatus === 'submitted');
   const approvedResults = state.results.filter((result) => result.reviewStatus === 'approved');
   const activeLabel = navItems.find((item) => item.key === activeNav)?.label ?? '首页';
+  const [exportingResultId, setExportingResultId] = useState('');
+  const [exportNotice, setExportNotice] = useState('');
+
+  const handleQuickExport = async (resultId: string) => {
+    const result = state.results.find((item) => item.id === resultId);
+    if (!result) return;
+    setExportingResultId(resultId);
+    setExportNotice('');
+    try {
+      const files = await downloadProductionDelivery(state, result, quickExportSpec);
+      setState((current) => recordResultExport(current, resultId, 'Mika Tanaka', quickExportSpec));
+      setExportNotice(`已生成 ${files.length} 个交付文件`);
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : '生产导出失败');
+    } finally {
+      setExportingResultId('');
+    }
+  };
 
   return (
     <>
@@ -169,6 +197,9 @@ export function SecondaryView({ activeNav, state, setState }: SecondaryViewProps
         </div>
       </header>
       <section className="page-surface">
+        {activeNav === 'reviews' && exportNotice && (
+          <div className="secondary-notice" role="status">{exportNotice}</div>
+        )}
         {activeNav === 'dashboard' && (
           <OperationalDashboard approvedCount={approvedResults.length} state={state} />
         )}
@@ -176,7 +207,9 @@ export function SecondaryView({ activeNav, state, setState }: SecondaryViewProps
         {activeNav === 'assets' && <AssetsView state={state} />}
         {activeNav === 'reviews' && (
           <ReviewsView
+            exportingResultId={exportingResultId}
             onApprove={(resultId) => setState((current) => approveResult(current, resultId, '青井审核员'))}
+            onExport={(resultId) => { void handleQuickExport(resultId); }}
             onReturn={(resultId) => setState((current) => returnResult(
               current,
               resultId,
@@ -267,11 +300,15 @@ function AssetsView({ state }: { state: StudioState }) {
 function ReviewsView({
   state,
   onApprove,
+  onExport,
   onReturn,
+  exportingResultId,
 }: {
   state: StudioState;
   onApprove: (resultId: string) => void;
+  onExport: (resultId: string) => void;
   onReturn: (resultId: string) => void;
+  exportingResultId: string;
 }) {
   return (
     <>
@@ -313,15 +350,16 @@ function ReviewsView({
                   </button>
                 </div>
               ) : result.reviewStatus === 'approved' ? (
-                <a
-                  aria-label="下载结果"
-                  className="icon-link"
-                  download={`${result.title}.png`}
-                  href={result.imageUrl}
-                  title="下载结果"
+                <button
+                  aria-label="生成生产导出"
+                  className="icon-button"
+                  disabled={exportingResultId === result.id}
+                  onClick={() => onExport(result.id)}
+                  title="生成生产导出"
+                  type="button"
                 >
                   <Download aria-hidden="true" size={18} />
-                </a>
+                </button>
               ) : (
                 <span className="status-chip">{reviewStatusLabels[result.reviewStatus]}</span>
               )}

@@ -1,7 +1,8 @@
 import { Columns3, Info, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Result } from '../domain';
 import { getReviewStatusLabel } from './CanvasNodes';
+import { useModalFocus } from './useModalFocus';
 
 type ResultCompareProps = {
   results: Result[];
@@ -21,15 +22,70 @@ export function ResultCompare({
   onRemove,
 }: ResultCompareProps) {
   const [zoom, setZoom] = useState(100);
+  const dialogRef = useModalFocus<HTMLElement>(onClose, open);
+  const viewportRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const panGesture = useRef<{
+    index: number;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
 
   useEffect(() => {
-    if (!open) return undefined;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+    if (!open || typeof window.matchMedia !== 'function') return undefined;
+    const mobile = window.matchMedia('(max-width: 767px)');
+    const closeOnMobile = () => {
+      if (mobile.matches) onClose();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    closeOnMobile();
+    mobile.addEventListener('change', closeOnMobile);
+    return () => mobile.removeEventListener('change', closeOnMobile);
   }, [onClose, open]);
+
+  const synchronizeViewport = (sourceIndex: number) => {
+    const source = viewportRefs.current[sourceIndex];
+    if (!source) return;
+    viewportRefs.current.forEach((viewport, index) => {
+      if (!viewport || index === sourceIndex) return;
+      if (viewport.scrollLeft !== source.scrollLeft) viewport.scrollLeft = source.scrollLeft;
+      if (viewport.scrollTop !== source.scrollTop) viewport.scrollTop = source.scrollTop;
+    });
+  };
+
+  const handlePointerDown = (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
+    const viewport = viewportRefs.current[index];
+    if (!viewport) return;
+    panGesture.current = {
+      index,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    viewport.setPointerCapture(event.pointerId);
+    viewport.classList.add('is-panning');
+  };
+
+  const handlePointerMove = (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = panGesture.current;
+    const viewport = viewportRefs.current[index];
+    if (!gesture || !viewport || gesture.index !== index || gesture.pointerId !== event.pointerId) return;
+    viewport.scrollLeft = gesture.scrollLeft - (event.clientX - gesture.startX);
+    viewport.scrollTop = gesture.scrollTop - (event.clientY - gesture.startY);
+    synchronizeViewport(index);
+  };
+
+  const handlePointerEnd = (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = panGesture.current;
+    const viewport = viewportRefs.current[index];
+    if (!gesture || !viewport || gesture.index !== index || gesture.pointerId !== event.pointerId) return;
+    if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+    viewport.classList.remove('is-panning');
+    panGesture.current = null;
+  };
 
   if (results.length === 0) return null;
 
@@ -63,8 +119,15 @@ export function ResultCompare({
       </section>
 
       {open && (
-        <div className="result-dialog-backdrop">
-          <section aria-label="结果对比" className="result-compare-dialog" role="dialog">
+        <div className="result-dialog-backdrop result-compare-backdrop">
+          <section
+            aria-label="结果对比"
+            aria-modal="true"
+            className="result-compare-dialog"
+            ref={dialogRef}
+            role="dialog"
+            tabIndex={-1}
+          >
             <header>
               <div>
                 <span>统一视图</span>
@@ -83,14 +146,22 @@ export function ResultCompare({
                 />
                 <output>{zoom}%</output>
               </label>
-              <button aria-label="关闭结果对比" onClick={onClose} title="关闭" type="button">
+              <button aria-label="关闭结果对比" data-dialog-initial-focus onClick={onClose} title="关闭" type="button">
                 <X aria-hidden="true" size={18} />
               </button>
             </header>
             <div className="result-compare-grid" data-count={results.length}>
-              {results.map((result) => (
+              {results.map((result, index) => (
                 <article key={result.id}>
-                  <div className="result-compare-grid__viewport">
+                  <div
+                    className="result-compare-grid__viewport"
+                    onPointerCancel={(event) => handlePointerEnd(index, event)}
+                    onPointerDown={(event) => handlePointerDown(index, event)}
+                    onPointerMove={(event) => handlePointerMove(index, event)}
+                    onPointerUp={(event) => handlePointerEnd(index, event)}
+                    onScroll={() => synchronizeViewport(index)}
+                    ref={(element) => { viewportRefs.current[index] = element; }}
+                  >
                     <img
                       alt={result.title}
                       src={result.imageUrl}
@@ -132,4 +203,3 @@ export function ResultCompare({
     </>
   );
 }
-

@@ -59,6 +59,10 @@ import {
   type TaskParameters,
   type TaskProfileId,
 } from '../domain';
+import {
+  downloadProductionDelivery,
+  downloadWatermarkedPreview,
+} from '../exportDelivery';
 import { JobCanvasNode, canvasNodeTypes, getReviewStatusLabel } from './CanvasNodes';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { ContextToolPanel } from './ContextToolPanel';
@@ -219,6 +223,10 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   }, [canvasNotice]);
 
   useEffect(() => {
+    if (compareResultIds.length < 2) setCompareOpen(false);
+  }, [compareResultIds.length]);
+
+  useEffect(() => {
     setNodeDialog(null);
   }, [selectedNodeId]);
 
@@ -309,19 +317,16 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   }, []);
 
   const handleToggleCompare = useCallback((resultId: string) => {
-    setCompareResultIds((current) => {
-      if (current.includes(resultId)) {
-        const next = current.filter((id) => id !== resultId);
-        if (next.length < 2) setCompareOpen(false);
-        return next;
-      }
-      if (current.length >= 4) {
-        setCanvasNotice({ message: '最多同时对比 4 张结果', tone: 'warning' });
-        return current;
-      }
-      return [...current, resultId];
-    });
-  }, []);
+    if (compareResultIds.includes(resultId)) {
+      setCompareResultIds(compareResultIds.filter((id) => id !== resultId));
+      return;
+    }
+    if (compareResultIds.length >= 4) {
+      setCanvasNotice({ message: '最多同时对比 4 张结果', tone: 'warning' });
+      return;
+    }
+    setCompareResultIds([...compareResultIds, resultId]);
+  }, [compareResultIds]);
 
   const handleQualityIssue = useCallback((resultId: string, issue: QualityIssue) => {
     setState((current) => setResultQualityIssue(current, resultId, issue, 'Mika Tanaka'));
@@ -746,11 +751,31 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     : undefined;
   const exportResult = state.results.find((result) => result.id === exportResultId);
 
-  const handleExport = (result: Result, spec: ExportSpec) => {
-    const filename = buildExportFilename(state, result.id, spec);
-    setState((current) => recordResultExport(current, result.id, 'Mika Tanaka', spec));
-    setExportResultId(null);
-    setCanvasNotice({ message: `导出任务已创建：${filename}`, tone: 'success' });
+  const handlePreviewDownload = async (result: Result) => {
+    try {
+      const filename = await downloadWatermarkedPreview(result);
+      setCanvasNotice({ message: `已生成带水印预览：${filename}`, tone: 'success' });
+    } catch (error) {
+      setCanvasNotice({
+        message: error instanceof Error ? error.message : '预览文件生成失败',
+        tone: 'warning',
+      });
+    }
+  };
+
+  const handleExport = async (result: Result, spec: ExportSpec) => {
+    try {
+      const files = await downloadProductionDelivery(state, result, spec);
+      setState((current) => recordResultExport(current, result.id, 'Mika Tanaka', spec));
+      setExportResultId(null);
+      setCanvasNotice({ message: `已生成 ${files.length} 个交付文件`, tone: 'success' });
+    } catch (error) {
+      setCanvasNotice({
+        message: error instanceof Error ? error.message : '生产导出失败',
+        tone: 'warning',
+      });
+      throw error;
+    }
   };
 
   return (
@@ -785,7 +810,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
       />
       <main
         aria-label="节点画布"
-        className={`canvas-stage${interaction.draftNode ? ' is-configuring-draft' : ''}`}
+        className={`canvas-stage${interaction.draftNode ? ' is-configuring-draft' : ''}${inspectedResult || exportResult ? ' is-showing-result-overlay' : ''}`}
         onDragLeave={(event) => {
           const relatedTarget = event.relatedTarget;
           if (!(relatedTarget instanceof Element) || !event.currentTarget.contains(relatedTarget)) {
@@ -821,6 +846,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
           </ReactFlow>
         </JobActionsContext.Provider>
         <MobileResultPreview
+          onOpenExport={(resultId) => setExportResultId(resultId)}
           onOpenDetails={handleOpenDetails}
           onSubmitReview={handleSubmitReview}
           onToggleAdoption={handleToggleAdoption}
@@ -882,6 +908,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
           <ResultInspector
             job={inspectedJob}
             onClose={() => setInspectedResultId(null)}
+            onDownloadPreview={() => { void handlePreviewDownload(inspectedResult); }}
             onOpenExport={() => setExportResultId(inspectedResult.id)}
             onQualityIssue={(issue) => handleQualityIssue(inspectedResult.id, issue)}
             onSetPrimary={() => handleSetPrimary(inspectedResult.id)}
@@ -974,12 +1001,14 @@ function MobileResultPreview({
   results,
   onSubmitReview,
   onOpenDetails,
+  onOpenExport,
   onToggleAdoption,
   onToggleFavorite,
 }: {
   results: Result[];
   onSubmitReview: (resultId: string) => void;
   onOpenDetails: (resultId: string) => void;
+  onOpenExport: (resultId: string) => void;
   onToggleAdoption: (resultId: string) => void;
   onToggleFavorite: (resultId: string) => void;
 }) {
@@ -1024,7 +1053,9 @@ function MobileResultPreview({
                   </button>
                 )}
                 {result.reviewStatus === 'approved' && (
-                  <a aria-label="下载结果" download={`${result.title}.png`} href={result.imageUrl}>下载</a>
+                  <button aria-label="配置生产导出" onClick={() => onOpenExport(result.id)} type="button">
+                    生产导出
+                  </button>
                 )}
               </div>
             </article>

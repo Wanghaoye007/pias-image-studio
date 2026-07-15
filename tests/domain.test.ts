@@ -638,6 +638,12 @@ describe('Image Studio domain flow', () => {
       type: 'result.exported',
       targetId: 'result-1',
       actor: 'Mika Tanaka',
+      details: {
+        format: 'png',
+        size: 'original',
+        includeManifestCsv: true,
+        includeManifestJson: true,
+      },
     });
   });
 

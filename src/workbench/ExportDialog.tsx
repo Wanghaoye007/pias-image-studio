@@ -1,12 +1,13 @@
 import { FileArchive, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ExportFormat, ExportSize, ExportSpec, Result } from '../domain';
+import { useModalFocus } from './useModalFocus';
 
 type ExportDialogProps = {
   result: Result;
   buildFilename: (spec: ExportSpec) => string;
   onClose: () => void;
-  onSubmit: (spec: ExportSpec) => void;
+  onSubmit: (spec: ExportSpec) => Promise<void> | void;
 };
 
 export function ExportDialog({ result, buildFilename, onClose, onSubmit }: ExportDialogProps) {
@@ -14,6 +15,9 @@ export function ExportDialog({ result, buildFilename, onClose, onSubmit }: Expor
   const [size, setSize] = useState<ExportSize>('original');
   const [includeManifestCsv, setIncludeManifestCsv] = useState(true);
   const [includeManifestJson, setIncludeManifestJson] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const dialogRef = useModalFocus<HTMLElement>(onClose);
   const spec = useMemo<ExportSpec>(() => ({
     format,
     size,
@@ -21,17 +25,27 @@ export function ExportDialog({ result, buildFilename, onClose, onSubmit }: Expor
     includeManifestJson,
   }), [format, includeManifestCsv, includeManifestJson, size]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setErrorMessage('');
+    try {
+      await onSubmit(spec);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '导出失败，请重试');
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="result-dialog-backdrop">
-      <section aria-label="生产导出" className="export-dialog" role="dialog">
+      <section
+        aria-label="生产导出"
+        aria-modal="true"
+        className="export-dialog"
+        ref={dialogRef}
+        role="dialog"
+        tabIndex={-1}
+      >
         <header>
           <div>
             <FileArchive aria-hidden="true" size={18} />
@@ -45,7 +59,7 @@ export function ExportDialog({ result, buildFilename, onClose, onSubmit }: Expor
         <div className="export-dialog__body">
           <label>
             <span>文件格式</span>
-            <select aria-label="文件格式" onChange={(event) => setFormat(event.target.value as ExportFormat)} value={format}>
+            <select aria-label="文件格式" data-dialog-initial-focus onChange={(event) => setFormat(event.target.value as ExportFormat)} value={format}>
               <option value="png">PNG</option>
               <option value="jpeg">JPEG</option>
               <option value="webp">WebP</option>
@@ -75,14 +89,16 @@ export function ExportDialog({ result, buildFilename, onClose, onSubmit }: Expor
             <code>{buildFilename(spec)}</code>
           </div>
           <p>{format === 'jpeg' ? 'JPEG 不保留透明通道，透明区域将使用白色背景。' : '保持当前色彩与审核版本，不执行额外放大。'}</p>
+          {errorMessage && <p className="export-dialog__error" role="alert">{errorMessage}</p>}
         </div>
         <footer>
           <span>导出完成后保留 24 小时</span>
-          <button onClick={onClose} type="button">取消</button>
-          <button className="is-primary" onClick={() => onSubmit(spec)} type="button">生成生产导出</button>
+          <button disabled={isSubmitting} onClick={onClose} type="button">取消</button>
+          <button className="is-primary" disabled={isSubmitting} onClick={handleSubmit} type="button">
+            {isSubmitting ? '正在生成交付文件' : '生成生产导出'}
+          </button>
         </footer>
       </section>
     </div>
   );
 }
-

@@ -44,6 +44,7 @@ type ResultInspectorProps = {
   scene: Scene;
   job: GenerationJob;
   onClose: () => void;
+  onDownloadPreview: () => void;
   onOpenExport: () => void;
   onQualityIssue: (issue: QualityIssue) => void;
   onSetPrimary: () => void;
@@ -57,6 +58,7 @@ export function ResultInspector({
   scene,
   job,
   onClose,
+  onDownloadPreview,
   onOpenExport,
   onQualityIssue,
   onSetPrimary,
@@ -83,7 +85,8 @@ export function ResultInspector({
       <div className="result-inspector__scroll">
         <div className="result-inspector__preview">
           <img alt={result.title} src={result.imageUrl} />
-          <span>{result.width ?? 2048} x {result.height ?? 2048}</span>
+          {!isApproved && <span className="result-inspector__watermark">预览用途</span>}
+          <span className="result-inspector__dimensions">{result.width ?? 2048} x {result.height ?? 2048}</span>
         </div>
 
         <section className="result-inspector__section">
@@ -145,10 +148,10 @@ export function ResultInspector({
           {isApproved ? (
             <button className="is-primary" onClick={onOpenExport} type="button">配置生产导出</button>
           ) : (
-            <a download={`${result.title}-预览.png`} href={result.imageUrl}>
+            <button onClick={onDownloadPreview} type="button">
               <Download aria-hidden="true" size={15} />
-              下载预览图
-            </a>
+              下载带水印预览
+            </button>
           )}
           {canSubmit && <button onClick={onSubmitReview} type="button">提交审核</button>}
         </section>
@@ -156,4 +159,3 @@ export function ResultInspector({
     </aside>
   );
 }
-

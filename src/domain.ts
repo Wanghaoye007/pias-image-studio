@@ -144,6 +144,7 @@ export type AuditEvent = {
   actor: string;
   targetId: string;
   at: string;
+  details?: Record<string, string | number | boolean>;
 };
 
 export type StudioState = {
@@ -831,7 +832,7 @@ export function recordResultExport(
   state: StudioState,
   resultId: string,
   actor: string,
-  _spec: ExportSpec,
+  spec: ExportSpec,
 ): StudioState {
   const result = findResult(state, resultId);
   if (result.reviewStatus !== 'approved') {
@@ -840,7 +841,7 @@ export function recordResultExport(
 
   return {
     ...state,
-    auditEvents: [...state.auditEvents, audit('result.exported', resultId, actor)],
+    auditEvents: [...state.auditEvents, audit('result.exported', resultId, actor, { ...spec })],
   };
 }
 
@@ -925,13 +926,19 @@ function sanitizeFilenamePart(value: string): string {
     .replace(/^-|-$/g, '') || '未命名';
 }
 
-function audit(type: string, targetId: string, actor: string): AuditEvent {
+function audit(
+  type: string,
+  targetId: string,
+  actor: string,
+  details?: AuditEvent['details'],
+): AuditEvent {
   return {
     id: `audit-${type}-${targetId}-${Date.now()}`,
     type,
     actor,
     targetId,
     at: new Date().toISOString(),
+    ...(details ? { details } : {}),
   };
 }
 

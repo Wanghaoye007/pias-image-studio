@@ -2896,6 +2896,13 @@ progress::-moz-progress-bar {
   place-items: center;
   overflow: auto;
   background: #090a0d;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.result-compare-grid__viewport.is-panning {
+  cursor: grabbing;
 }
 
 .result-compare-grid__viewport img {
@@ -2991,8 +2998,9 @@ progress::-moz-progress-bar {
   object-fit: contain;
 }
 
-.result-inspector__preview span {
+.result-inspector__dimensions {
   position: absolute;
+  z-index: 2;
   right: 8px;
   bottom: 8px;
   padding: 3px 6px;
@@ -3000,6 +3008,21 @@ progress::-moz-progress-bar {
   color: #dfe1e5;
   background: rgb(9 10 13 / 82%);
   font-size: 10px;
+}
+
+.result-inspector__watermark {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgb(255 255 255 / 58%);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-shadow: 0 1px 12px rgb(0 0 0 / 58%);
+  transform: rotate(-18deg);
+  pointer-events: none;
 }
 
 .result-inspector__section {
@@ -3204,6 +3227,20 @@ progress::-moz-progress-bar {
 .export-dialog fieldset,
 .export-dialog__filename {
   grid-column: 1 / -1;
+}
+
+.export-dialog__body > p.export-dialog__error {
+  color: #ffb8b8;
+}
+
+.secondary-notice {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 1px solid #315f51;
+  border-radius: 6px;
+  color: #c7f0df;
+  background: #17342b;
+  font-size: 12px;
 }
 
 .export-dialog > footer {
@@ -3488,7 +3525,12 @@ progress::-moz-progress-bar {
     display: none;
   }
 
+  .result-compare-backdrop {
+    display: none;
+  }
+
   .result-inspector {
+    position: fixed;
     z-index: 80;
     inset: 0;
     width: auto;
@@ -3541,6 +3583,10 @@ progress::-moz-progress-bar {
   .canvas-stage {
     grid-column: 1;
     grid-row: 2;
+  }
+
+  .canvas-stage.is-showing-result-overlay {
+    z-index: 100;
   }
 
   .mobile-preview {
