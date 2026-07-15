@@ -17,10 +17,7 @@ export function NodeTypePicker({ position, onClose, onSelect }: NodeTypePickerPr
       style={{ left: position.x, top: position.y }}
     >
       <header>
-        <div>
-          <strong>添加处理节点</strong>
-          <span>选择下一步操作</span>
-        </div>
+        <strong>添加处理节点</strong>
         <button
           aria-label="关闭节点类型选择器"
           className="icon-button"
@@ -44,10 +41,7 @@ export function NodeTypePicker({ position, onClose, onSelect }: NodeTypePickerPr
               <span className="node-type-picker__icon" style={{ '--tool-accent': profile.accent } as React.CSSProperties}>
                 <Icon aria-hidden="true" size={18} />
               </span>
-              <span>
-                <strong>{profile.label}</strong>
-                <small>{profile.description}</small>
-              </span>
+              <strong>{profile.label}</strong>
             </button>
           );
         })}

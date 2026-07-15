@@ -26,6 +26,7 @@ import { Workbench } from '../src/workbench/Workbench';
 const reactFlowMocks = vi.hoisted(() => ({
   fitView: vi.fn(() => Promise.resolve(true)),
   screenToFlowPosition: vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y })),
+  updateNodeInternals: vi.fn(),
 }));
 
 vi.mock('@xyflow/react', async (importOriginal) => {
@@ -33,6 +34,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
 
   return {
     ...actual,
+    useUpdateNodeInternals: () => reactFlowMocks.updateNodeInternals,
     useReactFlow: () => ({
       fitView: reactFlowMocks.fitView,
       screenToFlowPosition: reactFlowMocks.screenToFlowPosition,
@@ -249,6 +251,7 @@ describe('workbench canvas', () => {
   it('exposes a large creation handle only on selected source-capable nodes', () => {
     const state = initialStudioState();
     const onCreateNode = vi.fn();
+    reactFlowMocks.updateNodeInternals.mockClear();
     const { rerender } = render(
       <ReactFlowProvider>
         <SceneCanvasNode
@@ -277,6 +280,9 @@ describe('workbench canvas', () => {
 
     const handle = screen.getByRole('button', { name: '拖拽新增节点' });
     expect(handle).toHaveClass('node-create-handle');
+    expect(handle.style.getPropertyValue('--node-create-size')).toBe('44px');
+    expect(handle.style.getPropertyValue('--node-create-visual-size')).toBe('36px');
+    expect(reactFlowMocks.updateNodeInternals).toHaveBeenCalledWith('scene:scene-source');
     fireEvent.keyDown(handle, { key: 'Enter' });
     expect(onCreateNode).toHaveBeenCalledWith('scene:scene-source');
 
@@ -307,6 +313,7 @@ describe('workbench canvas', () => {
     );
 
     expect(screen.queryByRole('button', { name: '拖拽新增节点' })).not.toBeInTheDocument();
+    expect(reactFlowMocks.updateNodeInternals).toHaveBeenCalledTimes(2);
   });
 
   it('renders eight node choices and reports the selected tool', () => {
@@ -324,6 +331,8 @@ describe('workbench canvas', () => {
     expect(within(picker).getAllByRole('button')).toHaveLength(9);
     expect(within(picker).getByRole('button', { name: '生成' })).toBeInTheDocument();
     expect(within(picker).getByRole('button', { name: '超分' })).toBeInTheDocument();
+    expect(within(picker).getAllByText('生成')).toHaveLength(1);
+    expect(within(picker).queryByText('选择下一步操作')).not.toBeInTheDocument();
 
     fireEvent.click(within(picker).getByRole('button', { name: '融图' }));
     expect(onSelect).toHaveBeenCalledWith('blend');
@@ -359,6 +368,7 @@ describe('workbench canvas', () => {
 
     expect(screen.getByText('定向光')).toBeInTheDocument();
     expect(screen.getByText('待配置')).toBeInTheDocument();
+    expect(screen.queryByText('设置参数后创建任务')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '取消新增节点' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
@@ -610,8 +620,9 @@ describe('workbench canvas', () => {
   });
 
   it('opens a node picker from the selected source creation handle and cancels the draft cleanly', async () => {
-    let latestState = initialStudioState();
-    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+    const initialState = initialStudioState();
+    let latestState = initialState;
+    render(<WorkbenchHarness initialState={initialState} onStateChange={(state) => { latestState = state; }} />);
 
     const creationHandle = document.querySelector<HTMLElement>('.node-create-handle');
     expect(creationHandle).not.toBeNull();
@@ -622,27 +633,32 @@ describe('workbench canvas', () => {
     fireEvent.click(within(picker).getByRole('button', { name: '融图' }));
     expect(screen.getByRole('dialog', { name: '融图参数' })).toBeInTheDocument();
     expect(screen.getByText('待配置')).toBeInTheDocument();
-    expect(latestState.jobs).toHaveLength(0);
+    expect(screen.getByLabelText('节点画布')).toHaveClass('is-configuring-draft');
+    expect(latestState).toEqual(initialState);
 
     fireEvent.click(screen.getByRole('button', { name: '关闭参数面板' }));
     expect(screen.queryByText('待配置')).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '融图参数' })).not.toBeInTheDocument();
-    expect(latestState.jobs).toHaveLength(0);
+    expect(screen.getByLabelText('节点画布')).not.toHaveClass('is-configuring-draft');
+    expect(latestState).toEqual(initialState);
   });
 
   it('submits a draft task at the creation-handle fallback position', async () => {
-    let latestState = initialStudioState();
-    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+    const initialState = initialStudioState();
+    let latestState = initialState;
+    render(<WorkbenchHarness initialState={initialState} onStateChange={(state) => { latestState = state; }} />);
 
     const creationHandle = document.querySelector<HTMLElement>('.node-create-handle');
     expect(creationHandle).not.toBeNull();
     fireEvent.click(creationHandle!);
     const picker = screen.getByRole('dialog', { name: '节点类型选择器' });
-    fireEvent.click(within(picker).getByRole('button', { name: '生成' }));
+    fireEvent.click(within(picker).getByRole('button', { name: '融图' }));
+    expect(latestState).toEqual(initialState);
     fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
 
     expect(latestState.jobs).toHaveLength(1);
-    expect(latestState.jobs[0]).toMatchObject({ x: 320, y: 64, profileId: 'generate' });
+    expect(latestState.jobs[0]).toMatchObject({ x: 320, y: 64, profileId: 'blend' });
+    expect(latestState.selectedTool).toBe('blend');
     expect(screen.queryByText('待配置')).not.toBeInTheDocument();
   });
 

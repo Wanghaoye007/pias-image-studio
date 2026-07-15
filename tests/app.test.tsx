@@ -1,11 +1,36 @@
 import { StrictMode } from 'react';
+// Vitest executes this source-level CSS assertion in Node; production code stays browser-only.
+// @ts-expect-error The project intentionally does not ship Node types.
+import { readFileSync } from 'node:fs';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { getAuditTargetLabel } from '../src/SecondaryViews';
 import { initialStudioState } from '../src/domain';
 
+declare const process: { cwd: () => string };
+
 describe('PIAS 中文应用框架', () => {
+  it('参数面板方向与画布落点语义保持一致', () => {
+    const styles = readFileSync(`${process.cwd()}/src/styles.css`, 'utf8');
+
+    expect(styles).toMatch(
+      /\.context-panel\[data-placement="left"\]\s*\{[^}]*left:\s*76px;[^}]*right:\s*auto;/s,
+    );
+    expect(styles).toMatch(
+      /\.context-panel\[data-placement="right"\]\s*\{[^}]*right:\s*76px;[^}]*left:\s*auto;/s,
+    );
+  });
+
+  it('移动端样式明确隐藏新增节点编辑控件', () => {
+    const styles = readFileSync(`${process.cwd()}/src/styles.css`, 'utf8');
+    const mobileRules = styles.slice(styles.indexOf('@media (max-width: 767px)'));
+
+    expect(mobileRules).toMatch(
+      /\.react-flow__handle\.node-create-handle,\s*\.node-type-picker,\s*\.draft-task-node\s*\{\s*display:\s*none;/,
+    );
+  });
+
   it('默认打开节点画布，并提供中文全局导航', () => {
     render(<App />);
 

@@ -1,5 +1,13 @@
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import {
+  Handle,
+  Position,
+  useUpdateNodeInternals,
+  useViewport,
+  type Node,
+  type NodeProps,
+} from '@xyflow/react';
 import { ImagePlus, Plus } from 'lucide-react';
+import { useEffect, type CSSProperties } from 'react';
 import type { GenerationJob, JobStatus, ReviewStatus, Scene } from '../domain';
 import {
   AnglePreview,
@@ -172,11 +180,23 @@ function CreationHandle({
   onCreateNode?: (sourceNodeId: string) => void;
   selected: boolean;
 }) {
+  const { zoom } = useViewport();
+  const updateNodeInternals = useUpdateNodeInternals();
+
+  useEffect(() => {
+    updateNodeInternals(nodeId);
+  }, [nodeId, selected, updateNodeInternals, zoom]);
+
   if (!selected) {
     return <Handle type="source" position={Position.Right} />;
   }
 
   const activate = () => onCreateNode?.(nodeId);
+  const safeZoom = zoom > 0 ? zoom : 1;
+  const createHandleStyle = {
+    '--node-create-size': `${44 / safeZoom}px`,
+    '--node-create-visual-size': `${36 / safeZoom}px`,
+  } as CSSProperties;
 
   return (
     <Handle
@@ -195,6 +215,7 @@ function CreationHandle({
       }}
       position={Position.Right}
       role="button"
+      style={createHandleStyle}
       tabIndex={0}
       title="拖拽新增节点"
       type="source"

@@ -159,6 +159,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     `scene:${state.selectedSceneId}`,
     createInitialInteractionState,
   );
+  const activeTool = interaction.activeTool ?? state.selectedTool;
   const selectedNodeId = interaction.selectedNodeIds.at(-1) ?? '';
   const commandScene = useMemo(() => {
     const parsed = parseCanvasNodeId(selectedNodeId);
@@ -354,18 +355,17 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   }, [cancelDraftNode, screenToFlowPosition]);
 
   const handleDraftToolSelect = useCallback((tool: TaskProfileId) => {
-    setState((current) => setSelectedTool(current, tool));
     setOutputCount(getProfile(tool).defaultOutputs);
     setPrompt('');
     setRatio('1:1');
     setToolParameters(defaultToolParameters);
     dispatchInteraction({ type: 'SELECT_DRAFT_TOOL', tool });
-  }, [setState]);
+  }, []);
 
   const graph = useMemo(() => buildCanvasGraph(
     state,
     selectedNodeId,
-    state.selectedTool,
+    activeTool,
     { onCreateNode: handleCreateNode, onDerive: handleDerive, onSubmitReview: handleSubmitReview },
     {
       mode: interaction.mode,
@@ -376,7 +376,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
       onCancelDraft: cancelDraftNode,
       onParameterChange: handleParameterChange,
     },
-  ), [cancelDraftNode, dragTargetNodeId, handleCreateNode, handleDerive, handleParameterChange, handleSubmitReview, interaction.draftNode, interaction.mode, ratio, selectedNodeId, state, toolParameters]);
+  ), [activeTool, cancelDraftNode, dragTargetNodeId, handleCreateNode, handleDerive, handleParameterChange, handleSubmitReview, interaction.draftNode, interaction.mode, ratio, selectedNodeId, state, toolParameters]);
 
   const handleToolSelect = (tool: TaskProfileId, trigger: HTMLButtonElement) => {
     markUserGesture();
@@ -575,6 +575,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   const handleRunSelected = useCallback(() => {
     const parsed = parseCanvasNodeId(selectedNodeId);
     const draftPosition = interaction.draftNode?.canvasPosition;
+    const runTool = interaction.activeTool ?? state.selectedTool;
     const predictedBranchId = parsed?.kind === 'result' ? getNextSceneId(state) : null;
     const predictedJobId = `job-${state.jobs.length + 1}`;
     const focusTargets = [
@@ -601,7 +602,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
         next = createDerivedScene(current, {
           parentSceneId: result.sourceSceneId,
           sourceResultId: result.id,
-          operation: getProfile(current.selectedTool).label,
+          operation: getProfile(runTool).label,
         });
         sceneId = next.selectedSceneId;
         inputKind = 'result';
@@ -616,23 +617,24 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
         inputNodeId = parsed.id;
       }
 
+      next = setSelectedTool(next, runTool);
       return createJob(next, {
         sceneId,
-        profileId: current.selectedTool,
+        profileId: runTool,
         outputCount,
         inputKind,
         inputNodeId,
         prompt,
         ratio,
-        parameters: parametersForTool(current.selectedTool, toolParameters),
-        referenceAssetIds: current.selectedTool === 'blend' && referenceAssetId
+        parameters: parametersForTool(runTool, toolParameters),
+        referenceAssetIds: runTool === 'blend' && referenceAssetId
           ? [referenceAssetId]
           : [],
         sourceResultId,
         position: draftPosition,
       });
     });
-  }, [interaction.draftNode, outputCount, prompt, ratio, referenceAssetId, selectedNodeId, setState, state.jobs.length, state.scenes.length, toolParameters]);
+  }, [interaction.activeTool, interaction.draftNode, outputCount, prompt, ratio, referenceAssetId, selectedNodeId, setState, state.jobs.length, state.scenes.length, state.selectedTool, toolParameters]);
 
   useEffect(() => {
     const request = pendingFocusRef.current;
@@ -703,7 +705,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
       />
       <main
         aria-label="节点画布"
-        className="canvas-stage"
+        className={`canvas-stage${interaction.draftNode ? ' is-configuring-draft' : ''}`}
         onDragLeave={(event) => {
           const relatedTarget = event.relatedTarget;
           if (!(relatedTarget instanceof Element) || !event.currentTarget.contains(relatedTarget)) {
@@ -742,7 +744,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
           onSubmitReview={handleSubmitReview}
           results={state.results}
         />
-        <ToolPalette activeTool={state.selectedTool} onSelect={handleToolSelect} />
+        <ToolPalette activeTool={activeTool} onSelect={handleToolSelect} />
         <CanvasCommandBar
           hasSelectedScene={Boolean(commandScene)}
           onCreate={handleCreateBlankScene}
@@ -779,7 +781,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
             prompt={prompt}
             referenceAssetId={referenceAssetId}
             ratio={ratio}
-            tool={state.selectedTool}
+            tool={activeTool}
           />
         )}
         {nodeDialog === 'rename' && commandScene && (

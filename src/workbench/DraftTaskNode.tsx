@@ -31,7 +31,6 @@ export function DraftTaskNode({ data }: NodeProps<Node<DraftTaskNodeData, 'draft
       <div className="draft-task-node__body">
         <strong>{profile.label}</strong>
         <span>待配置</span>
-        <small>设置参数后创建任务</small>
       </div>
     </article>
   );

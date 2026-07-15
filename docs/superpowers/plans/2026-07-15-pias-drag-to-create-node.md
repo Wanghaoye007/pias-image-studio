@@ -290,17 +290,17 @@ git commit -m "feat: complete drag-to-create task flow"
 - Consumes: class names from Tasks 3 and 4.
 - Produces: 44px handle target, 320px picker, 220px × 160px draft node, edge-safe responsive behavior, and final browser evidence.
 
-- [ ] **Step 1: Add a failing mobile visibility assertion**
+- [x] **Step 1: Add a failing mobile visibility assertion**
 
 Assert that the mobile preview remains the only editing surface below the existing CSS breakpoint and the new controls have dedicated classes that are hidden by the mobile media query.
 
-- [ ] **Step 2: Run the app test and confirm red**
+- [x] **Step 2: Run the app test and confirm red**
 
 Run: `npm test -- --run tests/app.test.tsx`
 
 Expected: FAIL until the new control classes are present and covered by the mobile rule.
 
-- [ ] **Step 3: Implement final styling**
+- [x] **Step 3: Implement final styling**
 
 Add styles for:
 
@@ -310,13 +310,13 @@ Add styles for:
 - `.draft-edge`: blue 1.5px dashed line.
 - reduced motion and `<768px` hiding rules.
 
-- [ ] **Step 4: Run complete automated verification**
+- [x] **Step 4: Run complete automated verification**
 
 Run: `npm test && npm run build && git diff --check`
 
 Expected: all tests pass, production build exits 0, and diff check prints nothing.
 
-- [ ] **Step 5: Run browser interaction QA**
+- [x] **Step 5: Run browser interaction QA**
 
 At `http://127.0.0.1:5173/` verify:
 
@@ -329,7 +329,7 @@ At `http://127.0.0.1:5173/` verify:
 7. 375×812: mobile preview contains no creation handle or picker.
 8. Capture desktop, edge-drop, tablet, and mobile screenshots and confirm console error count is zero.
 
-- [ ] **Step 6: Review and commit**
+- [x] **Step 6: Review and commit**
 
 Run `git diff --check`, inspect `git diff`, and stage only the implementation files. Then commit:
 
