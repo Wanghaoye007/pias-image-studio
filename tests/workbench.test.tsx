@@ -166,6 +166,10 @@ describe('workbench canvas', () => {
     });
     expect(getOperationLabel('Retouch Beta')).toBe('其他处理');
     expect(getOperationLabel('レタッチ')).toBe('其他处理');
+    expect(getOperationLabel('拡張')).toBe('其他处理');
+    expect(getOperationLabel('확장')).toBe('其他处理');
+    expect(getOperationLabel('Ретушь')).toBe('其他处理');
+    expect(getOperationLabel('商品素材')).toBe('商品素材');
   });
 
   it('localizes legacy scene titles in the scene rail and its accessible names', () => {

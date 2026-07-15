@@ -11,11 +11,22 @@ const operationLabels: Record<string, string> = {
   Remove: '去除',
   Extract: '抠图',
 };
+const knownChineseOperations = new Set([
+  '生成',
+  '融图',
+  '定向光',
+  '快速视角',
+  '扩图',
+  '超分',
+  '去除',
+  '抠图',
+  '商品素材',
+  '其他处理',
+]);
 
 export function getOperationLabel(operation: string): string {
   if (operationLabels[operation]) return operationLabels[operation];
-  if (/[A-Za-z\u3040-\u30ff]/.test(operation)) return '其他处理';
-  return operation;
+  return knownChineseOperations.has(operation) ? operation : '其他处理';
 }
 
 export function getSceneTitle(scene: Pick<Scene, 'operation' | 'title'>): string {
