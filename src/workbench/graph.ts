@@ -7,7 +7,7 @@ import {
   type TaskParameters,
   type TaskProfileId,
 } from '../domain';
-import type { InteractionMode } from './interactionMachine';
+import type { DraftNodeCreation, InteractionMode } from './interactionMachine';
 
 const operationLabels: Record<string, string> = {
   Generate: '生成',
@@ -80,16 +80,25 @@ export type ResultNodeData = {
   onParameterChange?: (key: string, value: string | number) => void;
 };
 
+export type DraftTaskNodeData = {
+  kind: 'draft-task';
+  tool: TaskProfileId;
+  sourceNodeId: string;
+  onCancel?: () => void;
+};
+
 export type CanvasGraphInteraction = {
   mode: InteractionMode;
   parameters: TaskParameters;
   ratio: string;
   dropTargetNodeId?: string;
+  draftNode?: DraftNodeCreation | null;
+  onCancelDraft?: () => void;
   onParameterChange: (key: string, value: string | number) => void;
 };
 
 export type CanvasGraph = {
-  nodes: Node<SceneNodeData | JobNodeData | ResultNodeData>[];
+  nodes: Node<SceneNodeData | JobNodeData | ResultNodeData | DraftTaskNodeData>[];
   edges: Edge[];
 };
 
@@ -155,9 +164,34 @@ export function buildCanvasGraph(
     },
   }));
 
+  const draftNode = interaction?.draftNode?.selectedTool
+    ? {
+        id: 'draft:task',
+        type: 'draft-task',
+        position: interaction.draftNode.canvasPosition,
+        draggable: false,
+        selectable: false,
+        data: {
+          kind: 'draft-task' as const,
+          tool: interaction.draftNode.selectedTool,
+          sourceNodeId: interaction.draftNode.sourceNodeId,
+          onCancel: interaction.onCancelDraft,
+        },
+      }
+    : null;
+  const draftEdge = interaction?.draftNode?.selectedTool
+    ? {
+        id: 'draft-edge',
+        source: interaction.draftNode.sourceNodeId,
+        target: 'draft:task',
+        animated: true,
+        className: 'draft-edge',
+      }
+    : null;
+
   return {
-    nodes: [...sceneNodes, ...jobNodes, ...resultNodes],
-    edges: buildEdges(state),
+    nodes: [...sceneNodes, ...jobNodes, ...resultNodes, ...(draftNode ? [draftNode] : [])],
+    edges: [...buildEdges(state), ...(draftEdge ? [draftEdge] : [])],
   };
 }
 

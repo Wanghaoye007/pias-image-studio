@@ -96,6 +96,36 @@ describe('workbench canvas', () => {
     });
   });
 
+  it('projects a transient draft task and edge without mutating studio state', () => {
+    const state = initialStudioState();
+    const graph = buildCanvasGraph(state, 'scene:scene-source', 'blend', {}, {
+      mode: 'configuring-draft-node',
+      parameters: {},
+      ratio: '1:1',
+      onParameterChange: vi.fn(),
+      draftNode: {
+        sourceNodeId: 'scene:scene-source',
+        screenPosition: { x: 640, y: 360 },
+        canvasPosition: { x: 860, y: 420 },
+        placement: 'right',
+        selectedTool: 'blend',
+      },
+    });
+
+    expect(graph.nodes.find((node) => node.id === 'draft:task')).toMatchObject({
+      type: 'draft-task',
+      position: { x: 860, y: 420 },
+      data: { tool: 'blend', sourceNodeId: 'scene:scene-source' },
+    });
+    expect(graph.edges.find((edge) => edge.id === 'draft-edge')).toMatchObject({
+      source: 'scene:scene-source',
+      target: 'draft:task',
+      animated: true,
+    });
+    expect(state.jobs).toHaveLength(0);
+    expect(state.edges).toHaveLength(0);
+  });
+
   it('maps derivation edges from a result to its derived scene', () => {
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source',

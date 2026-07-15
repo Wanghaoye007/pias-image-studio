@@ -380,6 +380,17 @@ describe('Image Studio domain flow', () => {
     expect(movedResult.results[0]).toMatchObject({ x: 820, y: 180 });
   });
 
+  it('creates a job at an explicit draft node position', () => {
+    const next = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'generate',
+      outputCount: 1,
+      position: { x: 860, y: 420 },
+    });
+
+    expect(next.jobs[0]).toMatchObject({ x: 860, y: 420 });
+  });
+
   it('defines Chinese labels for every workbench tool', () => {
     expect(getProfile('generate').label).toBe('生成');
     expect(getProfile('blend').label).toBe('融图');

@@ -110,7 +110,7 @@ git commit -m "feat: model drag-to-create node state"
 - Consumes: `DraftNodeCreation` from Task 1.
 - Produces: optional `position` input for `createJob`, `DraftTaskNodeData`, one transient `draft:task` node, and one transient `draft-edge` edge.
 
-- [ ] **Step 1: Write failing domain and graph tests**
+- [x] **Step 1: Write failing domain and graph tests**
 
 Add a domain assertion:
 
@@ -138,13 +138,13 @@ expect(graph.edges.find((edge) => edge.id === 'draft-edge')).toMatchObject({
 });
 ```
 
-- [ ] **Step 2: Run focused tests and confirm red**
+- [x] **Step 2: Run focused tests and confirm red**
 
 Run: `npm test -- --run tests/domain.test.ts tests/workbench.test.tsx`
 
 Expected: FAIL because `position` and the draft graph projection are missing.
 
-- [ ] **Step 3: Add the minimal domain and graph support**
+- [x] **Step 3: Add the minimal domain and graph support**
 
 Extend `createJob` input with `position?: CanvasPosition` and assign coordinates as follows:
 
@@ -155,13 +155,13 @@ y: input.position?.y ?? source.y + 24 + (sceneJobCount + sceneBranchCount) * 300
 
 Extend `CanvasGraphInteraction` with optional draft data and append the draft node/edge only when `selectedTool` exists. The draft projection must not mutate `state`.
 
-- [ ] **Step 4: Run focused tests and confirm green**
+- [x] **Step 4: Run focused tests and confirm green**
 
 Run: `npm test -- --run tests/domain.test.ts tests/workbench.test.tsx`
 
 Expected: focused domain and graph tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain.ts src/workbench/graph.ts tests/domain.test.ts tests/workbench.test.tsx

@@ -228,6 +228,7 @@ export function createJob(
     parameters?: TaskParameters;
     referenceAssetIds?: string[];
     sourceResultId?: string;
+    position?: CanvasPosition;
   },
 ): StudioState {
   if (!Number.isInteger(input.outputCount) || input.outputCount <= 0) {
@@ -273,8 +274,8 @@ export function createJob(
     reservedCredits,
     actualCredits: 0,
     progress: 8,
-    x: source.x + 320,
-    y: source.y + 24 + (sceneJobCount + sceneBranchCount) * 300,
+    x: input.position?.x ?? source.x + 320,
+    y: input.position?.y ?? source.y + 24 + (sceneJobCount + sceneBranchCount) * 300,
     inputSnapshot: {
       inputKind,
       inputNodeId,
