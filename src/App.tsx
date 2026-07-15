@@ -53,6 +53,8 @@ import {
   taskProfiles,
   updateJobProgress,
   type Result,
+  type JobStatus,
+  type ReviewStatus,
   type Scene,
   type StudioState,
   type TaskProfileId,
@@ -61,14 +63,59 @@ import {
 type NavKey = 'dashboard' | 'projects' | 'studio' | 'assets' | 'reviews' | 'usage' | 'admin';
 
 const navItems: Array<{ key: NavKey; label: string; icon: typeof Gauge }> = [
-  { key: 'dashboard', label: 'Dashboard', icon: Gauge },
-  { key: 'projects', label: 'Projects', icon: FolderKanban },
-  { key: 'studio', label: 'Image Studio', icon: Image },
-  { key: 'assets', label: 'Assets', icon: Archive },
-  { key: 'reviews', label: 'Reviews', icon: BadgeCheck },
-  { key: 'usage', label: 'Usage', icon: Coins },
-  { key: 'admin', label: 'Admin', icon: ShieldCheck },
+  { key: 'dashboard', label: '首页', icon: Gauge },
+  { key: 'projects', label: '项目', icon: FolderKanban },
+  { key: 'studio', label: '图片工作台', icon: Image },
+  { key: 'assets', label: '素材库', icon: Archive },
+  { key: 'reviews', label: '审核', icon: BadgeCheck },
+  { key: 'usage', label: '用量', icon: Coins },
+  { key: 'admin', label: '企业管理', icon: ShieldCheck },
 ];
+
+const jobStatusLabels: Record<JobStatus, string> = {
+  queued: '等待中',
+  running: '生成中',
+  succeeded: '已完成',
+  failed: '失败',
+  canceled: '已取消',
+};
+
+const reviewStatusLabels: Record<ReviewStatus, string> = {
+  draft: '草稿',
+  submitted: '待审核',
+  approved: '审核已通过',
+  returned: '已退回',
+};
+
+const sceneStatusLabels: Record<Scene['status'], string> = {
+  source: '源素材',
+  ...jobStatusLabels,
+  draft: '草稿',
+};
+
+const auditEventLabels: Record<string, string> = {
+  'job.created': '已创建任务',
+  'job.succeeded': '任务已完成',
+  'job.failed': '任务失败',
+  'job.canceled': '任务已取消',
+  'scene.created_from_asset': '已从素材创建场景',
+  'scene.derived': '已创建派生场景',
+  'review.submitted': '已提交审核',
+  'review.approved': '审核已通过',
+};
+
+const operationLabels: Record<string, string> = {
+  Blend: '融图',
+  'Directional Light': '定向光',
+};
+
+function displayOperation(operation: string) {
+  return operationLabels[operation] ?? operation;
+}
+
+function displayTenantName(tenantName: string) {
+  return tenantName === 'PIAS Japan' ? 'PIAS 日本' : tenantName;
+}
 
 const toolIcons: Record<TaskProfileId, typeof Wand2> = {
   generate: Wand2,
@@ -169,7 +216,7 @@ function App() {
           {activeNav === 'reviews' && (
             <ReviewsView
               state={state}
-              onApprove={(resultId) => setState((current) => approveResult(current, resultId, 'Aoi Reviewer'))}
+              onApprove={(resultId) => setState((current) => approveResult(current, resultId, '青井审核员'))}
             />
           )}
           {activeNav === 'usage' && <UsageView state={state} />}
@@ -180,19 +227,19 @@ function App() {
 
     return (
       <section className="studio-shell">
-        <aside className="asset-panel" aria-label="SKU Assets">
+        <aside className="asset-panel" aria-label="SKU 素材">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">PIAS Catalog</span>
-              <h2>SKU Assets</h2>
+              <span className="eyebrow">PIAS 素材目录</span>
+              <h2>SKU 素材</h2>
             </div>
-            <button className="icon-button" title="Upload" type="button">
+            <button className="icon-button" title="上传" type="button">
               <Upload size={18} />
             </button>
           </div>
           <label className="search-box">
             <Search size={16} />
-            <input value="PIAS" readOnly aria-label="Search assets" />
+            <input value="PIAS" readOnly aria-label="搜索素材" />
           </label>
           <div className="asset-list">
             {state.assets.map((asset) => (
@@ -215,15 +262,15 @@ function App() {
           <div className="studio-topbar">
             <div>
               <span className="eyebrow">{state.projectName}</span>
-              <h1>Image Studio</h1>
+              <h1>图片工作台</h1>
             </div>
             <div className="lease-pill">
               <Lock size={14} />
-              Saved · 編集権限あり
+              已保存 · 可编辑
             </div>
           </div>
 
-          <div className="tool-strip" aria-label="Image tools">
+          <div className="tool-strip" aria-label="图片工具">
             {taskProfiles.map((profile) => {
               const Icon = toolIcons[profile.id];
               return (
@@ -239,7 +286,7 @@ function App() {
                   type="button"
                 >
                   <Icon size={18} />
-                  <span>{profile.labelJa}</span>
+                  <span>{profile.label}</span>
                 </button>
               );
             })}
@@ -268,7 +315,7 @@ function App() {
               <span className="eyebrow">{selectedScene?.skuCode}</span>
               <h2>{selectedProfile.label}</h2>
             </div>
-            <span className="status-chip">{selectedScene?.status}</span>
+            <span className="status-chip">{selectedScene ? sceneStatusLabels[selectedScene.status] : ''}</span>
           </div>
 
           <div className="control-group">
@@ -288,17 +335,17 @@ function App() {
           </div>
 
           <div className="estimate-band">
-            <span>Reserve</span>
-            <strong>{estimate} credits</strong>
+            <span>预留用量</span>
+            <strong>{estimate} 点</strong>
           </div>
 
           <button className="primary-action" onClick={runSelectedJob} type="button">
             <Play size={18} />
-            生成ジョブを作成
+            创建生成任务
           </button>
 
           <section className="result-section">
-            <h3>Results</h3>
+            <h3>结果</h3>
             <div className="result-list">
               {state.results
                 .filter((result) => result.sourceSceneId === selectedScene?.id)
@@ -307,26 +354,26 @@ function App() {
                     <img src={result.imageUrl} alt={result.title} />
                     <div>
                       <strong>{result.title}</strong>
-                      <small>{result.reviewStatus}</small>
+                      <small>{reviewStatusLabels[result.reviewStatus]}</small>
                     </div>
                     <div className="result-actions">
-                      <button title="Derive" onClick={() => deriveFromResult(result, selectedProfile.label)} type="button">
+                      <button title="创建派生场景" onClick={() => deriveFromResult(result, selectedProfile.label)} type="button">
                         <Waypoints size={15} />
                       </button>
                       <button
                         disabled={result.reviewStatus !== 'draft'}
-                        title={result.reviewStatus === 'draft' ? 'Submit review' : 'Review already submitted'}
+                        title={result.reviewStatus === 'draft' ? '提交审核' : '已提交审核'}
                         onClick={() => setState((current) => submitForReview(current, result.id))}
                         type="button"
                       >
                         <Send size={15} />
                       </button>
                       {result.reviewStatus === 'approved' ? (
-                        <a className="icon-link" href={result.imageUrl} download={`${result.title}.png`} title="Download">
+                        <a className="icon-link" href={result.imageUrl} download={`${result.title}.png`} title="下载">
                           <Download size={15} />
                         </a>
                       ) : (
-                        <button disabled title="Production download requires approval" type="button">
+                        <button disabled title="需审核通过后下载" type="button">
                           <Download size={15} />
                         </button>
                       )}
@@ -367,21 +414,21 @@ function App() {
           })}
         </nav>
         <div className="tenant-block">
-          <strong>{state.tenantName}</strong>
-          <small>Japan region · MFA</small>
+          <strong>{displayTenantName(state.tenantName)}</strong>
+          <small>日本区域 · 已启用多因素认证</small>
         </div>
       </aside>
 
       <div className="workspace">
         <header className="global-header">
           <div>
-            <span className="eyebrow">Enterprise content production</span>
+            <span className="eyebrow">企业内容生产</span>
             <h1>{activeNav === 'studio' ? state.workspaceName : navItems.find((item) => item.key === activeNav)?.label}</h1>
           </div>
           <div className="header-metrics">
-            <Metric label="Frozen" value={state.usage.frozenCredits.toString()} />
-            <Metric label="Spent" value={state.usage.spentCredits.toString()} />
-            <Metric label="Review" value={submittedResults.length.toString()} />
+            <Metric label="冻结" value={state.usage.frozenCredits.toString()} />
+            <Metric label="已用" value={state.usage.spentCredits.toString()} />
+            <Metric label="待审核" value={submittedResults.length.toString()} />
           </div>
         </header>
         {renderMain()}
@@ -400,9 +447,9 @@ function seedDemoState(): StudioState {
   const derived = createDerivedScene(settled, {
     parentSceneId: 'scene-source',
     sourceResultId: settled.results[0].id,
-    operation: 'Blend',
+    operation: '融图',
   });
-  return approveResult(submitForReview(derived, settled.results[1].id), settled.results[1].id, 'Aoi Reviewer');
+  return approveResult(submitForReview(derived, settled.results[1].id), settled.results[1].id, '青井审核员');
 }
 
 const nodeTypes = {
@@ -421,17 +468,17 @@ function SceneNode({ data }: NodeProps<Node<SceneNodeData>>) {
     <div className={`scene-node ${data.selected ? 'is-selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
       <div className="scene-image">
-        <img src={scene.imageUrl} alt={`${scene.title} preview`} />
-        <span>{scene.status}</span>
+        <img src={scene.imageUrl} alt={`${scene.title} 预览`} />
+        <span>{sceneStatusLabels[scene.status]}</span>
       </div>
       <div className="scene-body">
-        <small>{scene.operation}</small>
+        <small>{displayOperation(scene.operation)}</small>
         <strong>{scene.title}</strong>
         <p>{scene.skuCode}</p>
       </div>
       <div className="scene-results">
         {data.results.slice(0, 4).map((result) => (
-          <img key={result.id} src={result.imageUrl} alt={`${result.title} thumbnail`} />
+          <img key={result.id} src={result.imageUrl} alt={`${result.title} 缩略图`} />
         ))}
       </div>
       <Handle type="source" position={Position.Right} />
@@ -452,15 +499,15 @@ function TaskCenter({ state, submittedCount }: { state: StudioState; submittedCo
   return (
     <section className="task-center">
       <div className="task-header">
-        <h3>Task Center</h3>
-        <span>{submittedCount} review</span>
+        <h3>任务中心</h3>
+        <span>{submittedCount} 项待审核</span>
       </div>
       {state.jobs.slice(-4).map((job) => (
         <div className="job-row" key={job.id}>
           <Sparkles size={15} />
           <span>{getProfile(job.profileId).label}</span>
           <progress value={job.progress} max={100} />
-          <strong>{job.status}</strong>
+          <strong>{jobStatusLabels[job.status]}</strong>
         </div>
       ))}
     </section>
@@ -471,16 +518,16 @@ function OperationalDashboard({ state, approvedCount }: { state: StudioState; ap
   return (
     <>
       <div className="overview-grid">
-        <Kpi icon={Image} label="Production images" value={approvedCount.toString()} tone="green" />
-        <Kpi icon={Sparkles} label="Jobs" value={state.jobs.length.toString()} tone="blue" />
-        <Kpi icon={Coins} label="Available" value={state.usage.availableCredits.toString()} tone="gold" />
-        <Kpi icon={ShieldCheck} label="Audit events" value={state.auditEvents.length.toString()} tone="red" />
+        <Kpi icon={Image} label="已审核图片" value={approvedCount.toString()} tone="green" />
+        <Kpi icon={Sparkles} label="任务数" value={state.jobs.length.toString()} tone="blue" />
+        <Kpi icon={Coins} label="可用用量" value={state.usage.availableCredits.toString()} tone="gold" />
+        <Kpi icon={ShieldCheck} label="审计事件" value={state.auditEvents.length.toString()} tone="red" />
       </div>
       <div className="wide-table">
-        <TableHeader title="Recent operations" action="Export manifest" />
+        <TableHeader title="最近操作" action="导出清单" />
         {state.auditEvents.slice(-6).map((event) => (
           <div className="table-row" key={event.id}>
-            <span>{event.type}</span>
+            <span>{auditEventLabels[event.type] ?? '审计事件'}</span>
             <strong>{event.actor}</strong>
             <small>{event.targetId}</small>
           </div>
@@ -494,17 +541,17 @@ function ProjectsView({ state }: { state: StudioState }) {
   return (
     <>
       <div className="section-title">
-        <h2>Projects</h2>
+        <h2>项目</h2>
         <button className="secondary-action" type="button">
           <FolderKanban size={17} />
-          New project
+          新建项目
         </button>
       </div>
       <article className="project-row">
         <div>
-          <span className="eyebrow">IMAGE Workspace</span>
+          <span className="eyebrow">图片工作区</span>
           <h3>{state.projectName}</h3>
-          <p>PIAS-SF-001 · {state.scenes.length} scenes · {state.results.length} results</p>
+          <p>PIAS-SF-001 · {state.scenes.length} 个场景 · {state.results.length} 个结果</p>
         </div>
         <ChevronRight size={22} />
       </article>
@@ -516,10 +563,10 @@ function AssetsView({ state }: { state: StudioState }) {
   return (
     <>
       <div className="section-title">
-        <h2>Assets</h2>
+        <h2>素材库</h2>
         <button className="secondary-action" type="button">
           <Upload size={17} />
-          Upload
+          上传
         </button>
       </div>
       <div className="asset-grid-page">
@@ -542,8 +589,8 @@ function ReviewsView({ state, onApprove }: { state: StudioState; onApprove: (res
   return (
     <>
       <div className="section-title">
-        <h2>Reviews</h2>
-        <span className="status-chip">{state.results.filter((result) => result.reviewStatus === 'submitted').length} pending</span>
+        <h2>审核</h2>
+        <span className="status-chip">{state.results.filter((result) => result.reviewStatus === 'submitted').length} 项待审核</span>
       </div>
       <div className="review-stack">
         {state.results.map((result) => (
@@ -551,14 +598,14 @@ function ReviewsView({ state, onApprove }: { state: StudioState; onApprove: (res
             <img src={result.imageUrl} alt={result.title} />
             <div>
               <strong>{result.title}</strong>
-              <small>{result.reviewStatus} · {result.sourceSceneId}</small>
+              <small>{reviewStatusLabels[result.reviewStatus]} · {result.sourceSceneId}</small>
             </div>
             {result.reviewStatus === 'submitted' ? (
-              <button className="icon-button" onClick={() => onApprove(result.id)} title="Approve" type="button">
+              <button className="icon-button" onClick={() => onApprove(result.id)} title="通过审核" type="button">
                 <Check size={18} />
               </button>
             ) : (
-              <span className="status-chip">{result.reviewStatus}</span>
+              <span className="status-chip">{reviewStatusLabels[result.reviewStatus]}</span>
             )}
           </article>
         ))}
@@ -572,17 +619,17 @@ function UsageView({ state }: { state: StudioState }) {
   return (
     <>
       <div className="overview-grid">
-        <Kpi icon={Coins} label="Monthly credits" value={state.usage.monthlyCredits.toString()} tone="blue" />
-        <Kpi icon={Gauge} label="Spent" value={`${spentPct}%`} tone="red" />
-        <Kpi icon={Lock} label="Frozen" value={state.usage.frozenCredits.toString()} tone="gold" />
-        <Kpi icon={Download} label="Exports" value="1" tone="green" />
+        <Kpi icon={Coins} label="每月用量" value={state.usage.monthlyCredits.toString()} tone="blue" />
+        <Kpi icon={Gauge} label="已用" value={`${spentPct}%`} tone="red" />
+        <Kpi icon={Lock} label="冻结" value={state.usage.frozenCredits.toString()} tone="gold" />
+        <Kpi icon={Download} label="已导出" value="1" tone="green" />
       </div>
       <div className="usage-ledger">
         {state.jobs.map((job) => (
           <div className="ledger-row" key={job.id}>
             <span>{job.id}</span>
             <strong>{getProfile(job.profileId).label}</strong>
-            <small>{job.actualCredits || job.reservedCredits} credits</small>
+            <small>{job.actualCredits || job.reservedCredits} 点</small>
           </div>
         ))}
       </div>
@@ -592,22 +639,22 @@ function UsageView({ state }: { state: StudioState }) {
 
 function AdminView({ state }: { state: StudioState }) {
   const rows = [
-    ['Owner', 'SAML/OIDC', 'MFA required'],
-    ['Admin', 'Members, quota', 'MFA required'],
-    ['Creator', 'Projects, assets, jobs', 'Tenant scoped'],
-    ['Reviewer', 'Approve, return', 'Project scoped'],
+    ['所有者', '单点登录 / 开放式连接', '需多因素认证'],
+    ['管理员', '成员、配额', '需多因素认证'],
+    ['创作者', '项目、素材、任务', '租户范围'],
+    ['审核员', '通过、退回', '项目范围'],
   ];
   return (
     <>
       <div className="section-title">
-        <h2>Admin</h2>
+        <h2>企业管理</h2>
         <button className="secondary-action" type="button">
           <Users size={17} />
-          Invite
+          邀请成员
         </button>
       </div>
       <div className="wide-table">
-        <TableHeader title={state.tenantName} action="Audit log" />
+        <TableHeader title={displayTenantName(state.tenantName)} action="审计日志" />
         {rows.map((row) => (
           <div className="table-row" key={row[0]}>
             <span>{row[0]}</span>
