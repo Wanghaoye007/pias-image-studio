@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { useState } from 'react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { StrictMode, useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
@@ -20,8 +20,38 @@ import {
 import { buildCanvasGraph } from '../src/workbench/graph';
 import { Workbench } from '../src/workbench/Workbench';
 
-function WorkbenchHarness({ initialState = initialStudioState() }: { initialState?: StudioState }) {
+const reactFlowMocks = vi.hoisted(() => ({
+  fitView: vi.fn(() => Promise.resolve(true)),
+  screenToFlowPosition: vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y })),
+}));
+
+vi.mock('@xyflow/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@xyflow/react')>();
+
+  return {
+    ...actual,
+    useReactFlow: () => ({
+      fitView: reactFlowMocks.fitView,
+      screenToFlowPosition: reactFlowMocks.screenToFlowPosition,
+      zoomIn: vi.fn(),
+      zoomOut: vi.fn(),
+    }),
+  };
+});
+
+function WorkbenchHarness({
+  initialState = initialStudioState(),
+  onStateChange,
+}: {
+  initialState?: StudioState;
+  onStateChange?: (state: StudioState) => void;
+}) {
   const [state, setState] = useState(initialState);
+
+  useEffect(() => {
+    onStateChange?.(state);
+  }, [onStateChange, state]);
+
   return <Workbench state={state} setState={setState} />;
 }
 
@@ -217,6 +247,22 @@ describe('workbench canvas', () => {
     expect(screen.getByRole('button', { name: '融图' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('moves keyboard focus into the parameter dialog and returns it to its tool trigger on Escape', () => {
+    render(<WorkbenchHarness />);
+    const toolButton = screen.getByRole('button', { name: '融图' });
+
+    toolButton.focus();
+    fireEvent.click(toolButton);
+
+    const description = screen.getByRole('textbox', { name: '创作描述' });
+    expect(description).toHaveFocus();
+
+    fireEvent.keyDown(description, { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog', { name: '融图参数' })).not.toBeInTheDocument();
+    expect(toolButton).toHaveFocus();
+  });
+
   it('keeps the task tray and scene library in the workbench', () => {
     render(<WorkbenchHarness />);
 
@@ -239,6 +285,18 @@ describe('workbench canvas', () => {
     expect(screen.getAllByText('PIAS-SK-014')).toHaveLength(2);
   });
 
+  it('fits the selected scene node instead of estimating a fixed center', () => {
+    reactFlowMocks.fitView.mockClear();
+    render(<WorkbenchHarness />);
+
+    fireEvent.click(screen.getByRole('tab', { name: '场景' }));
+    fireEvent.click(screen.getByRole('button', { name: /源场景，PIAS-SF-001/ }));
+
+    expect(reactFlowMocks.fitView).toHaveBeenCalledWith(expect.objectContaining({
+      nodes: [{ id: 'scene:scene-source' }],
+    }));
+  });
+
   it('runs a task and exposes cancellation while it is queued', () => {
     render(<WorkbenchHarness />);
     fireEvent.click(screen.getByRole('button', { name: '生成' }));
@@ -252,6 +310,60 @@ describe('workbench canvas', () => {
     expect(screen.getByRole('button', { name: '取消任务' })).toBeInTheDocument();
   });
 
+  it('reschedules an initially queued job in StrictMode and settles it exactly once', async () => {
+    vi.useFakeTimers();
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'generate',
+      outputCount: 1,
+    });
+    let latestState = queued;
+
+    try {
+      render(
+        <StrictMode>
+          <WorkbenchHarness initialState={queued} onStateChange={(state) => { latestState = state; }} />
+        </StrictMode>,
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1400);
+      });
+
+      expect(latestState.jobs[0]).toMatchObject({ status: 'succeeded', progress: 100 });
+      expect(latestState.results).toHaveLength(1);
+      expect(latestState.auditEvents.filter((event) => event.type === 'job.succeeded')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not create outputs when a canceled job reaches its delayed completion callback', async () => {
+    vi.useFakeTimers();
+    let latestState = initialStudioState();
+
+    try {
+      render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+      fireEvent.click(screen.getByRole('button', { name: '生成' }));
+      fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
+        target: { value: '干净的白色棚拍背景' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+      fireEvent.click(screen.getByRole('button', { name: /任务队列/ }));
+      fireEvent.click(screen.getByRole('button', { name: '取消任务' }));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1400);
+      });
+
+      expect(latestState.jobs[0]).toMatchObject({ status: 'canceled' });
+      expect(latestState.results).toHaveLength(0);
+      expect(latestState.usage).toMatchObject({ frozenCredits: 0, spentCredits: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('allows failed tasks to be retried from the task tray', () => {
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source',
@@ -259,12 +371,17 @@ describe('workbench canvas', () => {
       outputCount: 1,
     });
     const failed = failJob(queued, queued.jobs[0].id, '图像服务暂时不可用');
-    render(<WorkbenchHarness initialState={failed} />);
+    let latestState = failed;
+    render(<WorkbenchHarness initialState={failed} onStateChange={(state) => { latestState = state; }} />);
 
     fireEvent.click(screen.getByRole('button', { name: /任务队列/ }));
     expect(screen.getAllByText('图像服务暂时不可用')).toHaveLength(2);
     fireEvent.click(screen.getAllByRole('button', { name: '重试任务' })[0]);
 
     expect(screen.getAllByText('等待中')).toHaveLength(3);
+    expect(latestState.jobs).toHaveLength(2);
+    expect(latestState.jobs[0]).toMatchObject({ id: queued.jobs[0].id, status: 'failed' });
+    expect(latestState.jobs[1]).toMatchObject({ status: 'queued' });
+    expect(latestState.jobs[1].id).not.toBe(queued.jobs[0].id);
   });
 });

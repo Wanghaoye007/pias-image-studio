@@ -13,7 +13,7 @@ import { taskProfiles, type TaskProfileId } from '../domain';
 
 type ToolPaletteProps = {
   activeTool: TaskProfileId;
-  onSelect: (tool: TaskProfileId) => void;
+  onSelect: (tool: TaskProfileId, trigger: HTMLButtonElement) => void;
 };
 
 const toolIcons: Record<TaskProfileId, LucideIcon> = {
@@ -38,7 +38,7 @@ export function ToolPalette({ activeTool, onSelect }: ToolPaletteProps) {
             aria-pressed={activeTool === profile.id}
             className={activeTool === profile.id ? 'is-active' : ''}
             key={profile.id}
-            onClick={() => onSelect(profile.id)}
+            onClick={(event) => onSelect(profile.id, event.currentTarget)}
             title={profile.description}
             type="button"
           >

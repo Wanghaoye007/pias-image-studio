@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getProfile, type TaskProfileId } from '../domain';
 
 type ContextToolPanelProps = {
@@ -19,9 +19,24 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
   const profile = getProfile(props.tool);
   const estimate = profile.costPerOutput * props.outputCount;
   const cannotRun = !props.prompt.trim() || estimate > props.availableCredits;
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    promptRef.current?.focus();
+  }, []);
 
   return (
-    <section className="context-panel" role="dialog" aria-label={`${profile.label}参数`}>
+    <section
+      aria-label={`${profile.label}参数`}
+      className="context-panel"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          props.onClose();
+        }
+      }}
+      role="dialog"
+    >
       <header>
         <strong>{profile.label}</strong>
         <button aria-label="关闭参数面板" onClick={props.onClose} title="关闭参数面板" type="button">
@@ -33,6 +48,7 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
         <textarea
           aria-label="创作描述"
           onChange={(event) => props.onPromptChange(event.target.value)}
+          ref={promptRef}
           value={props.prompt}
         />
       </label>

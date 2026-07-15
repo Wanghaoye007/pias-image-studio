@@ -95,37 +95,44 @@ export function Workbench(props: WorkbenchProps) {
 }
 
 function WorkbenchContent({ state, setState }: WorkbenchProps) {
-  const { screenToFlowPosition, setCenter } = useReactFlow();
+  const { fitView, screenToFlowPosition } = useReactFlow();
   const [selectedNodeId, setSelectedNodeId] = useState(`scene:${state.selectedSceneId}`);
   const [panelOpen, setPanelOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [outputCount, setOutputCount] = useState(getProfile(state.selectedTool).defaultOutputs);
   const [ratio, setRatio] = useState('1:1');
-  const timeoutIds = useRef<number[]>([]);
-  const scheduledJobIds = useRef(new Set<string>());
+  const scheduledJobTimers = useRef(new Map<string, number[]>());
+  const toolTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => () => {
-    timeoutIds.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    scheduledJobTimers.current.forEach((timeoutIds) => {
+      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    });
+    scheduledJobTimers.current.clear();
   }, []);
 
   const scheduleJob = useCallback((jobId: string, successfulOutputs: number, actualCredits: number) => {
-    timeoutIds.current.push(window.setTimeout(() => {
+    if (scheduledJobTimers.current.has(jobId)) return;
+
+    const timeoutIds: number[] = [];
+    scheduledJobTimers.current.set(jobId, timeoutIds);
+    timeoutIds.push(window.setTimeout(() => {
       setState((current) => updateJobProgress(current, jobId, 58));
     }, 500));
-    timeoutIds.current.push(window.setTimeout(() => {
+    timeoutIds.push(window.setTimeout(() => {
       setState((current) => {
         const job = current.jobs.find((item) => item.id === jobId);
         if (!job || terminalStatuses.has(job.status)) return current;
         return completeJob(current, jobId, { successfulOutputs, actualCredits });
       });
+      scheduledJobTimers.current.delete(jobId);
     }, 1400));
   }, [setState]);
 
   useEffect(() => {
     state.jobs.forEach((job) => {
-      if (job.status !== 'queued' || scheduledJobIds.current.has(job.id)) return;
-      scheduledJobIds.current.add(job.id);
+      if (job.status !== 'queued') return;
       scheduleJob(job.id, job.outputCount, job.reservedCredits);
     });
   }, [scheduleJob, state.jobs]);
@@ -167,16 +174,22 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     { onDerive: handleDerive, onSubmitReview: handleSubmitReview },
   ), [handleDerive, handleSubmitReview, selectedNodeId, state]);
 
-  const handleToolSelect = (tool: TaskProfileId) => {
+  const handleToolSelect = (tool: TaskProfileId, trigger: HTMLButtonElement) => {
+    toolTriggerRef.current = trigger;
     setState((current) => setSelectedTool(current, tool));
     setOutputCount(getProfile(tool).defaultOutputs);
     setPanelOpen(true);
   };
 
+  const handlePanelClose = useCallback(() => {
+    setPanelOpen(false);
+    toolTriggerRef.current?.focus();
+  }, []);
+
   const handleSceneSelect = (scene: Scene) => {
     setState((current) => setSelectedScene(current, scene.id));
     setSelectedNodeId(`scene:${scene.id}`);
-    void setCenter(scene.x + 140, scene.y + 100, { duration: 300, zoom: 1 });
+    void fitView({ duration: 300, nodes: [{ id: `scene:${scene.id}` }], padding: 0.2 });
   };
 
   const handleNodeClick = (_event: React.MouseEvent, node: Node) => {
@@ -250,7 +263,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
         {panelOpen && (
           <ContextToolPanel
             availableCredits={state.usage.availableCredits}
-            onClose={() => setPanelOpen(false)}
+            onClose={handlePanelClose}
             onOutputCountChange={setOutputCount}
             onPromptChange={setPrompt}
             onRatioChange={setRatio}
