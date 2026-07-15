@@ -1839,14 +1839,16 @@ progress::-moz-progress-bar {
   background: rgb(7 8 10 / 22%);
 }
 
-.light-overlay__beam {
+.light-overlay__ray {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 52%;
+  z-index: 1;
+  top: var(--light-y);
+  left: var(--light-x);
+  width: var(--light-length);
   height: 1px;
+  transform: rotate(calc(var(--light-angle) + 180deg + var(--ray-offset)));
   transform-origin: 0 50%;
-  background: rgb(255 255 255 / 42%);
+  background: rgb(255 255 255 / 34%);
 }
 
 .light-overlay__handle,

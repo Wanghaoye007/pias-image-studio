@@ -34,7 +34,11 @@ export function LightOverlay({
   onDirectionChange?: (direction: LightDirection) => void;
 }) {
   const selected = lightDirections.find((item) => item.id === direction) ?? lightDirections[2];
+  const offsetX = selected.x - 50;
+  const offsetY = selected.y - 50;
   const style = {
+    '--light-angle': `${Math.round(Math.atan2(offsetY, offsetX) * 180 / Math.PI)}deg`,
+    '--light-length': `${Math.min(84, Math.hypot(offsetX, offsetY) * 1.55)}%`,
     '--light-x': `${selected.x}%`,
     '--light-y': `${selected.y}%`,
   } as CSSProperties;
@@ -61,7 +65,14 @@ export function LightOverlay({
 
   return (
     <div aria-label="定向光控制" className="light-overlay nodrag" data-overlay="light" style={style}>
-      <span className="light-overlay__beam" />
+      {[-14, -7, 0, 7, 14].map((offset) => (
+        <span
+          aria-hidden="true"
+          className="light-overlay__ray"
+          key={offset}
+          style={{ '--ray-offset': `${offset}deg` } as CSSProperties}
+        />
+      ))}
       {lightDirections.map((item) => (
         <button
           aria-label={`定向光控制柄 ${item.label}`}

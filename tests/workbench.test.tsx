@@ -294,9 +294,13 @@ describe('workbench canvas', () => {
     render(<WorkbenchHarness />);
 
     fireEvent.click(screen.getByRole('button', { name: '定向光' }));
-    fireEvent.click(screen.getByRole('button', { name: '右上光' }));
+    fireEvent.click(screen.getByRole('button', { name: '左下光' }));
 
-    expect(screen.getByLabelText('定向光控制点')).toHaveAttribute('data-direction', 'top-right');
+    expect(screen.getByLabelText('定向光控制点')).toHaveAttribute('data-direction', 'bottom-left');
+    expect(screen.getByLabelText('定向光控制')).toHaveStyle({
+      '--light-angle': '135deg',
+    });
+    expect(screen.getByLabelText('定向光控制').querySelectorAll('.light-overlay__ray')).toHaveLength(5);
   });
 
   it('exposes stable state hooks for visual frame comparison', () => {
