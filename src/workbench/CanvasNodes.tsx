@@ -1,6 +1,6 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { JobStatus, ReviewStatus, Scene } from '../domain';
-import type { JobNodeData, ResultNodeData, SceneNodeData } from './graph';
+import { getSceneTitle, type JobNodeData, type ResultNodeData, type SceneNodeData } from './graph';
 
 const jobStatusLabels: Record<JobStatus, string> = {
   queued: '等待中',
@@ -38,13 +38,14 @@ export function getSceneStatusLabel(status: Scene['status']): string {
 export function SceneCanvasNode({ data }: NodeProps<Node<SceneNodeData, 'scene'>>) {
   const approvedCount = data.results.filter((result) => result.reviewStatus === 'approved').length;
   const submittedCount = data.results.filter((result) => result.reviewStatus === 'submitted').length;
+  const sceneTitle = getSceneTitle(data.scene);
 
   return (
     <article className={`canvas-node scene-node ${data.selected ? 'is-selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
-      <img src={data.scene.imageUrl} alt={data.scene.title} />
+      <img src={data.scene.imageUrl} alt={sceneTitle} />
       <div className="canvas-node__content">
-        <strong>{data.scene.title}</strong>
+        <strong>{sceneTitle}</strong>
         <span>{data.scene.skuCode}</span>
         <small>{getSceneStatusLabel(data.scene.status)}</small>
         <small>审核：{approvedCount} 已通过 / {submittedCount} 待审核</small>

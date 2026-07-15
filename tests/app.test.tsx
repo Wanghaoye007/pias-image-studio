@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 
@@ -20,7 +20,7 @@ describe('PIAS 中文应用框架', () => {
     });
   });
 
-  it('严格模式下每次开始生成只创建一个任务', async () => {
+  it('实际状态流转只显示中文状态，不泄露内部枚举', async () => {
     vi.useFakeTimers();
 
     try {
@@ -30,27 +30,61 @@ describe('PIAS 中文应用框架', () => {
         </StrictMode>,
       );
 
+      fireEvent.click(screen.getByRole('button', { name: '审核' }));
+      expect(screen.getByText('草稿')).toBeInTheDocument();
+      expect(screen.getByText('待审核')).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: '生成 2' }).closest('article')).toHaveTextContent('审核已通过');
+
+      fireEvent.click(screen.getByRole('button', { name: '图片工作台' }));
       fireEvent.click(screen.getByRole('button', { name: '生成' }));
+      fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
+        target: { value: '白色棚拍背景' },
+      });
       fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+      fireEvent.click(screen.getByRole('button', { name: /任务队列，1 个进行中任务，展开/ }));
+      expect(screen.getAllByText('等待中')).toHaveLength(3);
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1400);
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      expect(screen.getAllByText('生成中')).toHaveLength(3);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(900);
       });
 
-      fireEvent.click(screen.getByRole('button', { name: /任务队列，0 个进行中任务，展开/ }));
-      expect(screen.getAllByText('已完成')).toHaveLength(3);
+      expect(screen.queryAllByText('已完成')).not.toHaveLength(0);
+      ['queued', 'running', 'succeeded', 'failed', 'canceled', 'draft', 'submitted', 'approved', 'returned'].forEach((status) => {
+        expect(screen.queryByText(status, { exact: true })).not.toBeInTheDocument();
+      });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('批准已提交审核的结果后开放下载', () => {
+  it('批准目标待审核结果后才为该结果开放下载，并隐藏内部标识', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: '审核' }));
-    expect(screen.getByText('待审核')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '通过审核' }));
+    const getReviewRow = (title: string) => screen.getByRole('img', { name: title }).closest('article')!;
+    const pendingRow = getReviewRow('生成 1');
+    const approvedRow = getReviewRow('生成 2');
 
-    expect(screen.getAllByRole('link', { name: '下载结果' })).toHaveLength(2);
+    expect(pendingRow).toHaveTextContent('待审核');
+    expect(within(pendingRow).queryByRole('link', { name: '下载结果' })).not.toBeInTheDocument();
+    expect(within(approvedRow).getByRole('link', { name: '下载结果' })).toBeInTheDocument();
+    expect(pendingRow).not.toHaveTextContent('scene-source');
+    expect(pendingRow).toHaveTextContent('源场景');
+    expect(pendingRow).toHaveTextContent('PIAS-SF-001');
+
+    fireEvent.click(within(pendingRow).getByRole('button', { name: '通过审核' }));
+
+    const approvedPendingRow = getReviewRow('生成 1');
+    expect(approvedPendingRow).toHaveTextContent('审核已通过');
+    expect(within(approvedPendingRow).getByRole('link', { name: '下载结果' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '用量' }));
+    expect(screen.getByText('任务 01 · 生成')).toBeInTheDocument();
+    expect(screen.queryByText('job-1', { exact: true })).not.toBeInTheDocument();
   });
 });

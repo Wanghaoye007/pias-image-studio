@@ -17,7 +17,7 @@ import {
   getJobStatusLabel,
   getReviewStatusLabel,
 } from '../src/workbench/CanvasNodes';
-import { buildCanvasGraph } from '../src/workbench/graph';
+import { buildCanvasGraph, getOperationLabel } from '../src/workbench/graph';
 import { Workbench } from '../src/workbench/Workbench';
 
 const reactFlowMocks = vi.hoisted(() => ({
@@ -113,6 +113,55 @@ describe('workbench canvas', () => {
       source: `result:${settled.results[0].id}`,
       target: 'scene:scene-2',
       label: '融图',
+    });
+  });
+
+  it('localizes legacy operation names in derived scene nodes and edges', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'generate',
+      outputCount: 1,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1,
+      actualCredits: 15,
+    });
+    const derived = createDerivedScene(settled, {
+      parentSceneId: 'scene-source',
+      sourceResultId: settled.results[0].id,
+      operation: 'Directional Light',
+    });
+
+    const graph = buildCanvasGraph(derived, 'scene:scene-2', 'light');
+    const legacyScene = graph.nodes.find((node) => node.id === 'scene:scene-2');
+    const derivedEdge = graph.edges.find((edge) => edge.id === 'edge-1');
+
+    expect(legacyScene).toMatchObject({
+      data: { scene: { operation: '定向光', title: '定向光场景' } },
+    });
+    expect(derivedEdge).toMatchObject({ label: '定向光' });
+    expect(legacyScene).not.toMatchObject({
+      data: { scene: { operation: 'Directional Light', title: 'Directional Light场景' } },
+    });
+
+    expect(Object.fromEntries([
+      'Generate',
+      'Blend',
+      'Directional Light',
+      'Quick Angle',
+      'Expand',
+      'Upscale',
+      'Remove',
+      'Extract',
+    ].map((operation) => [operation, getOperationLabel(operation)]))).toEqual({
+      Generate: '生成',
+      Blend: '融图',
+      'Directional Light': '定向光',
+      'Quick Angle': '快速视角',
+      Expand: '扩图',
+      Upscale: '超分',
+      Remove: '去除',
+      Extract: '抠图',
     });
   });
 

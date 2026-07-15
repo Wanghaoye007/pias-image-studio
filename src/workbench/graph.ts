@@ -1,5 +1,27 @@
 import type { Edge, Node } from '@xyflow/react';
-import { getProfile, type Result, type StudioState, type TaskProfileId } from '../domain';
+import { getProfile, type Result, type Scene, type StudioState, type TaskProfileId } from '../domain';
+
+const operationLabels: Record<string, string> = {
+  Generate: '生成',
+  Blend: '融图',
+  'Directional Light': '定向光',
+  'Quick Angle': '快速视角',
+  Expand: '扩图',
+  Upscale: '超分',
+  Remove: '去除',
+  Extract: '抠图',
+};
+
+export function getOperationLabel(operation: string): string {
+  return operationLabels[operation] ?? operation;
+}
+
+export function getSceneTitle(scene: Pick<Scene, 'operation' | 'title'>): string {
+  const operationLabel = getOperationLabel(scene.operation);
+  return operationLabel === scene.operation
+    ? scene.title
+    : scene.title.replace(scene.operation, operationLabel);
+}
 
 export type CanvasNodeActions = {
   onDerive?: (result: Result) => void;
@@ -44,7 +66,11 @@ export function buildCanvasGraph(
     position: { x: scene.x, y: scene.y },
     data: {
       kind: 'scene',
-      scene,
+      scene: {
+        ...scene,
+        operation: getOperationLabel(scene.operation),
+        title: getSceneTitle(scene),
+      },
       results: state.results.filter((result) => scene.resultIds.includes(result.id)),
       selected: selectedNodeId === `scene:${scene.id}`,
       activeTool,
@@ -95,7 +121,7 @@ function buildEdges(state: StudioState): Edge[] {
     id: edge.id,
     source: `result:${resolveDerivedResultId(state, edge.source, edge.target)}`,
     target: `scene:${edge.target}`,
-    label: edge.label,
+    label: getOperationLabel(edge.label),
     className: 'lineage-edge is-succeeded',
   }));
 

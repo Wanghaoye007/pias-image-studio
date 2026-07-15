@@ -26,6 +26,7 @@ import {
   type Scene,
   type StudioState,
 } from './domain';
+import { getSceneTitle } from './workbench/graph';
 
 export type NavKey = 'dashboard' | 'projects' | 'studio' | 'assets' | 'reviews' | 'usage' | 'admin';
 
@@ -81,13 +82,6 @@ const auditEventLabels: Record<string, string> = {
   'scene.derived': '已创建派生场景',
   'review.submitted': '已提交审核',
   'review.approved': '审核已通过',
-};
-
-const operationLabels: Record<string, string> = {
-  Blend: '融图',
-  'Directional Light': '定向光',
-  商品素材: '商品素材',
-  融图: '融图',
 };
 
 export function GlobalNav({
@@ -247,38 +241,42 @@ function ReviewsView({ state, onApprove }: { state: StudioState; onApprove: (res
         <span className="status-chip">{state.results.filter((result) => result.reviewStatus === 'submitted').length} 项待审核</span>
       </div>
       <div className="review-stack">
-        {state.results.map((result) => (
-          <article className="review-row" key={result.id}>
-            <img alt={result.title} src={result.imageUrl} />
-            <div>
-              <strong>{result.title}</strong>
-              <small>{reviewStatusLabels[result.reviewStatus]} · {result.sourceSceneId}</small>
-            </div>
-            {result.reviewStatus === 'submitted' ? (
-              <button
-                aria-label="通过审核"
-                className="icon-button"
-                onClick={() => onApprove(result.id)}
-                title="通过审核"
-                type="button"
-              >
-                <Check aria-hidden="true" size={18} />
-              </button>
-            ) : result.reviewStatus === 'approved' ? (
-              <a
-                aria-label="下载结果"
-                className="icon-link"
-                download={`${result.title}.png`}
-                href={result.imageUrl}
-                title="下载结果"
-              >
-                <Download aria-hidden="true" size={18} />
-              </a>
-            ) : (
-              <span className="status-chip">{reviewStatusLabels[result.reviewStatus]}</span>
-            )}
-          </article>
-        ))}
+        {state.results.map((result) => {
+          const sourceScene = state.scenes.find((scene) => scene.id === result.sourceSceneId);
+
+          return (
+            <article className="review-row" key={result.id}>
+              <img alt={result.title} src={result.imageUrl} />
+              <div>
+                <strong>{result.title}</strong>
+                <small>{reviewStatusLabels[result.reviewStatus]} · {getSourceSceneLabel(sourceScene)}</small>
+              </div>
+              {result.reviewStatus === 'submitted' ? (
+                <button
+                  aria-label="通过审核"
+                  className="icon-button"
+                  onClick={() => onApprove(result.id)}
+                  title="通过审核"
+                  type="button"
+                >
+                  <Check aria-hidden="true" size={18} />
+                </button>
+              ) : result.reviewStatus === 'approved' ? (
+                <a
+                  aria-label="下载结果"
+                  className="icon-link"
+                  download={`${result.title}.png`}
+                  href={result.imageUrl}
+                  title="下载结果"
+                >
+                  <Download aria-hidden="true" size={18} />
+                </a>
+              ) : (
+                <span className="status-chip">{reviewStatusLabels[result.reviewStatus]}</span>
+              )}
+            </article>
+          );
+        })}
       </div>
     </>
   );
@@ -295,10 +293,10 @@ function UsageView({ state }: { state: StudioState }) {
         <Kpi icon={Download} label="已导出" tone="green" value="1" />
       </div>
       <div className="usage-ledger">
-        {state.jobs.map((job) => (
+        {state.jobs.map((job, index) => (
           <div className="ledger-row" key={job.id}>
-            <span>{job.id}</span>
-            <strong>{getProfile(job.profileId).label}</strong>
+            <span>任务 {String(index + 1).padStart(2, '0')} · {getProfile(job.profileId).label}</span>
+            <strong>{jobStatusLabels[job.status]}</strong>
             <small>{job.actualCredits || job.reservedCredits} 点</small>
           </div>
         ))}
@@ -384,6 +382,6 @@ export function getSceneStatusLabel(status: Scene['status']) {
   return sceneStatusLabels[status];
 }
 
-export function getOperationLabel(operation: string) {
-  return operationLabels[operation] ?? '图片处理';
+function getSourceSceneLabel(scene: Scene | undefined): string {
+  return scene ? `${getSceneTitle(scene)} · ${scene.skuCode}` : '来源场景不可用';
 }
