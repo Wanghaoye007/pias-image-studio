@@ -1,5 +1,11 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { JobStatus, ReviewStatus, Scene } from '../domain';
+import {
+  AnglePreview,
+  ExpandOverlay,
+  LightOverlay,
+  type LightDirection,
+} from './CanvasOverlays';
 import { getSceneTitle, type JobNodeData, type ResultNodeData, type SceneNodeData } from './graph';
 
 const jobStatusLabels: Record<JobStatus, string> = {
@@ -41,7 +47,10 @@ export function SceneCanvasNode({ data }: NodeProps<Node<SceneNodeData, 'scene'>
   const sceneTitle = getSceneTitle(data.scene);
 
   return (
-    <article className={`canvas-node scene-node ${data.selected ? 'is-selected' : ''}`}>
+    <article
+      className={`canvas-node scene-node ${data.selected ? 'is-selected' : ''}`}
+      data-interaction-mode={data.interactionMode ?? 'node-selected'}
+    >
       <Handle type="target" position={Position.Left} />
       <img src={data.scene.imageUrl} alt={sceneTitle} />
       <div className="canvas-node__content">
@@ -50,8 +59,7 @@ export function SceneCanvasNode({ data }: NodeProps<Node<SceneNodeData, 'scene'>
         <small>{getSceneStatusLabel(data.scene.status)}</small>
         <small>审核：{approvedCount} 已通过 / {submittedCount} 待审核</small>
       </div>
-      {data.selected && data.activeTool === 'light' && <LightControls />}
-      {data.selected && data.activeTool === 'expand' && <ExpansionGrid />}
+      <CanvasToolOverlay data={data} />
       <Handle type="source" position={Position.Right} />
     </article>
   );
@@ -75,7 +83,10 @@ export function ResultCanvasNode({ data }: NodeProps<Node<ResultNodeData, 'resul
   const isApproved = data.result.reviewStatus === 'approved';
 
   return (
-    <article className={`canvas-node result-node ${data.selected ? 'is-selected' : ''}`}>
+    <article
+      className={`canvas-node result-node ${data.selected ? 'is-selected' : ''}`}
+      data-interaction-mode={data.interactionMode ?? 'node-selected'}
+    >
       <Handle type="target" position={Position.Left} />
       <img src={data.result.imageUrl} alt={data.result.title} />
       <div className="canvas-node__content">
@@ -117,30 +128,63 @@ export function ResultCanvasNode({ data }: NodeProps<Node<ResultNodeData, 'resul
           </a>
         )}
       </div>
+      <CanvasToolOverlay data={data} />
       <Handle type="source" position={Position.Right} />
     </article>
   );
 }
 
-function LightControls() {
-  return (
-    <div className="light-controls" aria-label="定向光控制">
-      <span className="light-point" aria-label="定向光控制点" />
-      {Array.from({ length: 8 }, (_, index) => (
-        <span className="light-handle" aria-label={`定向光控制柄 ${index + 1}`} key={index} />
-      ))}
-    </div>
-  );
+function CanvasToolOverlay({ data }: { data: SceneNodeData | ResultNodeData }) {
+  if (!data.selected || !data.activeTool || !data.interactionMode) return null;
+
+  if (data.activeTool === 'light' && data.interactionMode === 'editing-light') {
+    const direction = isLightDirection(data.parameters?.lightDirection)
+      ? data.parameters.lightDirection
+      : 'top-right';
+    return (
+      <LightOverlay
+        direction={direction}
+        onDirectionChange={(value) => data.onParameterChange?.('lightDirection', value)}
+      />
+    );
+  }
+
+  if (data.activeTool === 'expand' && data.interactionMode === 'editing-expand') {
+    return (
+      <ExpandOverlay
+        ratio={data.ratio ?? '1:1'}
+        scale={numberParameter(data.parameters?.expandScale, 72)}
+      />
+    );
+  }
+
+  if (data.activeTool === 'angle' && data.interactionMode === 'editing-angle') {
+    return (
+      <AnglePreview
+        horizontal={numberParameter(data.parameters?.horizontalAngle, 0)}
+        vertical={numberParameter(data.parameters?.verticalAngle, 0)}
+      />
+    );
+  }
+
+  return null;
 }
 
-function ExpansionGrid() {
-  return (
-    <div className="expansion-grid" aria-label="扩图范围网格">
-      {Array.from({ length: 9 }, (_, index) => (
-        <span aria-label={`扩图区域 ${index + 1}`} key={index} />
-      ))}
-    </div>
-  );
+function isLightDirection(value: string | number | undefined): value is LightDirection {
+  return typeof value === 'string' && [
+    'top-left',
+    'top',
+    'top-right',
+    'right',
+    'bottom-right',
+    'bottom',
+    'bottom-left',
+    'left',
+  ].includes(value);
+}
+
+function numberParameter(value: string | number | undefined, fallback: number): number {
+  return typeof value === 'number' ? value : fallback;
 }
 
 export const canvasNodeTypes = {

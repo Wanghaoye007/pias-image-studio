@@ -49,6 +49,7 @@ import { SceneRail } from './SceneRail';
 import { TaskTray } from './TaskTray';
 import { ToolPalette } from './ToolPalette';
 import { buildCanvasGraph, type JobNodeData } from './graph';
+import type { InteractionMode } from './interactionMachine';
 
 type WorkbenchProps = {
   state: StudioState;
@@ -114,6 +115,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   const { fitView, screenToFlowPosition } = useReactFlow();
   const [selectedNodeId, setSelectedNodeId] = useState(`scene:${state.selectedSceneId}`);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(() => (
     typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
@@ -196,21 +198,33 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     setState((current) => submitForReview(current, resultId));
   }, [setState]);
 
+  const handleParameterChange = useCallback((key: string, value: string | number) => {
+    setToolParameters((current) => ({ ...current, [key]: value }));
+  }, []);
+
   const graph = useMemo(() => buildCanvasGraph(
     state,
     selectedNodeId,
     state.selectedTool,
     { onDerive: handleDerive, onSubmitReview: handleSubmitReview },
-  ), [handleDerive, handleSubmitReview, selectedNodeId, state]);
+    {
+      mode: panelOpen ? interactionModeForTool(state.selectedTool) : 'node-selected',
+      parameters: toolParameters,
+      ratio,
+      onParameterChange: handleParameterChange,
+    },
+  ), [handleDerive, handleParameterChange, handleSubmitReview, panelOpen, ratio, selectedNodeId, state, toolParameters]);
 
   const handleToolSelect = (tool: TaskProfileId, trigger: HTMLButtonElement) => {
     toolTriggerRef.current = trigger;
     setState((current) => setSelectedTool(current, tool));
     setOutputCount(getProfile(tool).defaultOutputs);
+    setAssetPickerOpen(false);
     setPanelOpen(true);
   };
 
   const handlePanelClose = useCallback(() => {
+    setAssetPickerOpen(false);
     setPanelOpen(false);
     toolTriggerRef.current?.focus();
   }, []);
@@ -222,6 +236,8 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   };
 
   const handleNodeClick = (_event: React.MouseEvent, node: Node) => {
+    setAssetPickerOpen(false);
+    setPanelOpen(false);
     setSelectedNodeId(node.id);
     const parsed = parseCanvasNodeId(node.id);
     if (!parsed) return;
@@ -385,11 +401,14 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
         <ToolPalette activeTool={state.selectedTool} onSelect={handleToolSelect} />
         {panelOpen && (
           <ContextToolPanel
+            assetPickerOpen={assetPickerOpen}
             availableCredits={state.usage.availableCredits}
             assets={state.assets}
+            onAssetPickerClose={() => setAssetPickerOpen(false)}
+            onAssetPickerOpen={() => setAssetPickerOpen(true)}
             onClose={handlePanelClose}
             onOutputCountChange={setOutputCount}
-            onParameterChange={(key, value) => setToolParameters((current) => ({ ...current, [key]: value }))}
+            onParameterChange={handleParameterChange}
             onPromptChange={setPrompt}
             onReferenceAssetChange={setReferenceAssetId}
             onRatioChange={setRatio}
@@ -481,4 +500,11 @@ function parseCanvasNodeId(nodeId: string): { kind: CanvasNodeKind; id: string }
   const id = nodeId.slice(separatorIndex + 1);
   if (!id || (kind !== 'scene' && kind !== 'job' && kind !== 'result')) return null;
   return { kind, id };
+}
+
+function interactionModeForTool(tool: TaskProfileId): InteractionMode {
+  if (tool === 'light') return 'editing-light';
+  if (tool === 'expand') return 'editing-expand';
+  if (tool === 'angle') return 'editing-angle';
+  return 'configuring';
 }

@@ -1,5 +1,13 @@
 import type { Edge, Node } from '@xyflow/react';
-import { getProfile, type Result, type Scene, type StudioState, type TaskProfileId } from '../domain';
+import {
+  getProfile,
+  type Result,
+  type Scene,
+  type StudioState,
+  type TaskParameters,
+  type TaskProfileId,
+} from '../domain';
+import type { InteractionMode } from './interactionMachine';
 
 const operationLabels: Record<string, string> = {
   Generate: '生成',
@@ -47,6 +55,10 @@ export type SceneNodeData = {
   results: Result[];
   selected: boolean;
   activeTool: TaskProfileId;
+  interactionMode?: InteractionMode;
+  parameters?: TaskParameters;
+  ratio?: string;
+  onParameterChange?: (key: string, value: string | number) => void;
 };
 
 export type JobNodeData = {
@@ -60,6 +72,18 @@ export type ResultNodeData = {
   result: Result;
   selected: boolean;
   actions: CanvasNodeActions;
+  activeTool?: TaskProfileId;
+  interactionMode?: InteractionMode;
+  parameters?: TaskParameters;
+  ratio?: string;
+  onParameterChange?: (key: string, value: string | number) => void;
+};
+
+export type CanvasGraphInteraction = {
+  mode: InteractionMode;
+  parameters: TaskParameters;
+  ratio: string;
+  onParameterChange: (key: string, value: string | number) => void;
 };
 
 export type CanvasGraph = {
@@ -72,6 +96,7 @@ export function buildCanvasGraph(
   selectedNodeId: string,
   activeTool: TaskProfileId,
   actions: CanvasNodeActions = {},
+  interaction?: CanvasGraphInteraction,
 ): CanvasGraph {
   const sceneNodes: Node<SceneNodeData>[] = state.scenes.map((scene) => ({
     id: `scene:${scene.id}`,
@@ -87,6 +112,12 @@ export function buildCanvasGraph(
       results: state.results.filter((result) => scene.resultIds.includes(result.id)),
       selected: selectedNodeId === `scene:${scene.id}`,
       activeTool,
+      ...(interaction ? {
+        interactionMode: interaction.mode,
+        parameters: interaction.parameters,
+        ratio: interaction.ratio,
+        onParameterChange: interaction.onParameterChange,
+      } : {}),
     },
   }));
   const jobNodes: Node<JobNodeData>[] = state.jobs.map((job) => ({
@@ -104,6 +135,13 @@ export function buildCanvasGraph(
       result,
       selected: selectedNodeId === `result:${result.id}`,
       actions,
+      activeTool,
+      ...(interaction ? {
+        interactionMode: interaction.mode,
+        parameters: interaction.parameters,
+        ratio: interaction.ratio,
+        onParameterChange: interaction.onParameterChange,
+      } : {}),
     },
   }));
 

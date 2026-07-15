@@ -211,7 +211,7 @@ describe('workbench canvas', () => {
     expect(getReviewStatusLabel('submitted')).toBe('待审核');
   });
 
-  it('renders selected light controls and an expansion grid for scene nodes', () => {
+  it('renders selected light controls and an expansion grid only in their editing modes', () => {
     const state = initialStudioState();
     const scene = state.scenes[0];
     const { rerender } = render(
@@ -223,6 +223,8 @@ describe('workbench canvas', () => {
             results: [],
             selected: true,
             activeTool: 'light',
+            interactionMode: 'editing-light',
+            parameters: { lightDirection: 'top-right' },
           }}
           id="scene:scene-source"
           type="scene"
@@ -251,6 +253,8 @@ describe('workbench canvas', () => {
             results: [],
             selected: true,
             activeTool: 'expand',
+            interactionMode: 'editing-expand',
+            parameters: { expandScale: 72 },
           }}
           id="scene:scene-source"
           type="scene"
@@ -269,6 +273,37 @@ describe('workbench canvas', () => {
 
     expect(screen.getByLabelText('扩图范围网格')).toBeInTheDocument();
     expect(screen.getAllByLabelText(/扩图区域/)).toHaveLength(9);
+  });
+
+  it('opens a searchable reference-material picker from blend settings', () => {
+    render(<WorkbenchHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '融图' }));
+    fireEvent.click(screen.getByRole('button', { name: '选择参考素材' }));
+
+    const picker = screen.getByRole('dialog', { name: '选择参考素材' });
+    expect(picker).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: '搜索参考素材' })).toBeInTheDocument();
+    expect(within(picker).getByRole('button', { name: /活动参考，PIAS-REF-SEA/ })).toBeInTheDocument();
+  });
+
+  it('synchronizes the light direction overlay with the tool controls', () => {
+    render(<WorkbenchHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '定向光' }));
+    fireEvent.click(screen.getByRole('button', { name: '右上光' }));
+
+    expect(screen.getByLabelText('定向光控制点')).toHaveAttribute('data-direction', 'top-right');
+  });
+
+  it('shows an image boundary and nine-cell grid only while expanding', () => {
+    render(<WorkbenchHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '扩图' }));
+    expect(screen.getByLabelText('扩图构图区域')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭参数面板' }));
+    expect(screen.queryByLabelText('扩图构图区域')).not.toBeInTheDocument();
   });
 
   it('renders accessible result actions, hides locked downloads, and enables real approved downloads', () => {
