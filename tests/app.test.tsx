@@ -178,4 +178,25 @@ describe('PIAS 中文应用框架', () => {
   it('未知审计对象显示通用中文名称', () => {
     expect(getAuditTargetLabel(initialStudioState(), 'missing-object')).toBe('操作对象');
   });
+
+  it('从批准结果创建生产导出后同步用量统计和中文审计', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: '用量' }));
+    expect(screen.getByText('已导出').closest('article')).toHaveTextContent('0');
+
+    fireEvent.click(screen.getByRole('button', { name: '图片工作台' }));
+    const mobilePreview = screen.getByLabelText('移动端结果预览');
+    const approvedResultCard = within(mobilePreview).getByText('生成 2').closest('article')!;
+    fireEvent.click(within(approvedResultCard).getByRole('button', { name: '查看结果详情' }));
+    const inspector = screen.getByRole('complementary', { name: '结果详情' });
+    fireEvent.click(within(inspector).getByRole('button', { name: '配置生产导出' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成生产导出' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '用量' }));
+    expect(screen.getByText('已导出').closest('article')).toHaveTextContent('1');
+
+    fireEvent.click(screen.getByRole('button', { name: '首页' }));
+    expect(screen.getByText('已创建生产导出')).toBeInTheDocument();
+  });
 });

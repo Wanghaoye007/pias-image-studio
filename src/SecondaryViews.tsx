@@ -85,6 +85,13 @@ const auditEventLabels: Record<string, string> = {
   'review.submitted': '已提交审核',
   'review.approved': '审核已通过',
   'review.returned': '审核已退回',
+  'result.favorited': '已收藏结果',
+  'result.unfavorited': '已取消收藏',
+  'result.adopted': '已采用结果',
+  'result.unadopted': '已取消采用',
+  'result.primary_set': '已设为主结果',
+  'result.quality_flagged': '已记录不可用原因',
+  'result.exported': '已创建生产导出',
 };
 
 export function getAuditTargetLabel(state: StudioState, targetId: string): string {
@@ -328,13 +335,14 @@ function ReviewsView({
 
 function UsageView({ state }: { state: StudioState }) {
   const spentPct = Math.round((state.usage.spentCredits / state.usage.monthlyCredits) * 100);
+  const exportCount = state.auditEvents.filter((event) => event.type === 'result.exported').length;
   return (
     <>
       <div className="overview-grid">
         <Kpi icon={Coins} label="每月用量" tone="blue" value={state.usage.monthlyCredits.toString()} />
         <Kpi icon={Gauge} label="已用" tone="red" value={`${spentPct}%`} />
         <Kpi icon={Lock} label="冻结" tone="gold" value={state.usage.frozenCredits.toString()} />
-        <Kpi icon={Download} label="已导出" tone="green" value="1" />
+        <Kpi icon={Download} label="已导出" tone="green" value={exportCount.toString()} />
       </div>
       <div className="usage-ledger">
         {state.jobs.map((job, index) => (

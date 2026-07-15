@@ -3479,7 +3479,10 @@ progress::-moz-progress-bar {
 
   .react-flow__handle.node-create-handle,
   .node-type-picker,
-  .draft-task-node,
+  .draft-task-node {
+    display: none;
+  }
+
   .result-compare-tray,
   .result-compare-dialog {
     display: none;
