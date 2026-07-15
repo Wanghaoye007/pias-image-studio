@@ -609,6 +609,43 @@ describe('workbench canvas', () => {
     expect(screen.getAllByText('PIAS-SK-014')).toHaveLength(2);
   });
 
+  it('opens a node picker from the selected source creation handle and cancels the draft cleanly', async () => {
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    const creationHandle = document.querySelector<HTMLElement>('.node-create-handle');
+    expect(creationHandle).not.toBeNull();
+    fireEvent.click(creationHandle!);
+    const picker = screen.getByRole('dialog', { name: '节点类型选择器' });
+    expect(within(picker).getAllByRole('button')).toHaveLength(9);
+
+    fireEvent.click(within(picker).getByRole('button', { name: '融图' }));
+    expect(screen.getByRole('dialog', { name: '融图参数' })).toBeInTheDocument();
+    expect(screen.getByText('待配置')).toBeInTheDocument();
+    expect(latestState.jobs).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭参数面板' }));
+    expect(screen.queryByText('待配置')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '融图参数' })).not.toBeInTheDocument();
+    expect(latestState.jobs).toHaveLength(0);
+  });
+
+  it('submits a draft task at the creation-handle fallback position', async () => {
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    const creationHandle = document.querySelector<HTMLElement>('.node-create-handle');
+    expect(creationHandle).not.toBeNull();
+    fireEvent.click(creationHandle!);
+    const picker = screen.getByRole('dialog', { name: '节点类型选择器' });
+    fireEvent.click(within(picker).getByRole('button', { name: '生成' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+
+    expect(latestState.jobs).toHaveLength(1);
+    expect(latestState.jobs[0]).toMatchObject({ x: 320, y: 64, profileId: 'generate' });
+    expect(screen.queryByText('待配置')).not.toBeInTheDocument();
+  });
+
   it('binds an asset as a blend reference when it is dropped on an existing image node', () => {
     let latestState = initialStudioState();
     render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);

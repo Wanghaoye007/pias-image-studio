@@ -3,6 +3,7 @@ import {
   buildFocusNodeIds,
   choosePanelPlacement,
   isUserViewportGesture,
+  placeNodePicker,
   shouldApplyAutoFocus,
 } from '../src/workbench/viewportDirector';
 
@@ -42,6 +43,31 @@ describe('viewport director', () => {
       panel,
       16,
     )).toBe('right');
+  });
+
+  it('keeps a node picker at the release point when the center has room', () => {
+    expect(placeNodePicker(
+      { x: 800, y: 400 },
+      viewport,
+      { width: 320, height: 420 },
+      16,
+    )).toEqual({
+      position: { x: 560, y: 352 },
+      panelPlacement: 'right',
+    });
+  });
+
+  it('clamps a node picker inside all four viewport edges', () => {
+    const picker = { width: 320, height: 420 };
+
+    expect(placeNodePicker({ x: 245, y: 300 }, viewport, picker, 16))
+      .toMatchObject({ position: { x: 16, y: 252 }, panelPlacement: 'right' });
+    expect(placeNodePicker({ x: 1420, y: 300 }, viewport, picker, 16))
+      .toMatchObject({ position: { x: 864, y: 252 }, panelPlacement: 'left' });
+    expect(placeNodePicker({ x: 720, y: 49 }, viewport, picker, 16))
+      .toMatchObject({ position: { x: 480, y: 16 } });
+    expect(placeNodePicker({ x: 720, y: 895 }, viewport, picker, 16))
+      .toMatchObject({ position: { x: 480, y: 416 } });
   });
 
   it('keeps source and generated targets in a stable focus request', () => {

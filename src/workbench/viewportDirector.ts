@@ -12,6 +12,16 @@ export type Size = {
   height: number;
 };
 
+export type Point = {
+  x: number;
+  y: number;
+};
+
+export type NodePickerPlacement = {
+  position: Point;
+  panelPlacement: PanelPlacement;
+};
+
 export function choosePanelPlacement(
   anchor: Rect,
   viewport: Rect,
@@ -28,6 +38,26 @@ export function choosePanelPlacement(
   return rightSpace >= leftSpace ? 'right' : 'left';
 }
 
+export function placeNodePicker(
+  releasePoint: Point,
+  viewport: Rect,
+  picker: Size,
+  margin = 16,
+): NodePickerPlacement {
+  const viewportWidth = viewport.right - viewport.left;
+  const viewportHeight = viewport.bottom - viewport.top;
+  const maxX = Math.max(margin, viewportWidth - picker.width - margin);
+  const maxY = Math.max(margin, viewportHeight - picker.height - margin);
+
+  return {
+    position: {
+      x: clamp(releasePoint.x - viewport.left, margin, maxX),
+      y: clamp(releasePoint.y - viewport.top, margin, maxY),
+    },
+    panelPlacement: releasePoint.x > viewport.left + viewportWidth / 2 ? 'left' : 'right',
+  };
+}
+
 export function buildFocusNodeIds(anchorNodeId: string, targetNodeIds: string[]): string[] {
   const targets = [...new Set(targetNodeIds)]
     .filter((nodeId) => nodeId !== anchorNodeId)
@@ -41,4 +71,8 @@ export function shouldApplyAutoFocus(requestRevision: number, userRevision: numb
 
 export function isUserViewportGesture(event: unknown): boolean {
   return event !== null && event !== undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }

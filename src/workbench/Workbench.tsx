@@ -8,6 +8,8 @@ import {
   type AriaLabelConfig,
   type Node,
   type NodeProps,
+  type OnConnectEnd,
+  type OnConnectStart,
 } from '@xyflow/react';
 import { CheckCircle2, Coins, FolderKanban, ListChecks } from 'lucide-react';
 import {
@@ -52,6 +54,8 @@ import {
 import { JobCanvasNode, canvasNodeTypes, getReviewStatusLabel } from './CanvasNodes';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { ContextToolPanel } from './ContextToolPanel';
+import { DraftTaskNode } from './DraftTaskNode';
+import { NodeTypePicker } from './NodeTypePicker';
 import { SceneRail } from './SceneRail';
 import { TaskTray } from './TaskTray';
 import { ToolPalette } from './ToolPalette';
@@ -64,6 +68,7 @@ import {
   buildFocusNodeIds,
   choosePanelPlacement,
   isUserViewportGesture,
+  placeNodePicker,
   shouldApplyAutoFocus,
 } from './viewportDirector';
 
@@ -135,6 +140,7 @@ const reactFlowAriaLabels: Partial<AriaLabelConfig> = {
 
 const workbenchNodeTypes = {
   ...canvasNodeTypes,
+  'draft-task': DraftTaskNode,
   job: InteractiveJobCanvasNode,
 };
 
@@ -281,19 +287,96 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     if (isUserViewportGesture(event)) markUserGesture();
   }, [markUserGesture]);
 
+  const cancelDraftNode = useCallback(() => {
+    dispatchInteraction({ type: 'CANCEL_NODE_CREATION' });
+  }, []);
+
+  const showNodePicker = useCallback((
+    sourceNodeId: string,
+    screenPoint: { x: number; y: number },
+    canvasPosition: { x: number; y: number },
+  ) => {
+    const stageBounds = getUsableStageBounds(canvasStageRef.current);
+    const picker = placeNodePicker(screenPoint, stageBounds, { width: 320, height: 420 }, 16);
+    dispatchInteraction({ type: 'BEGIN_NODE_CONNECTION', sourceNodeId });
+    dispatchInteraction({
+      type: 'SHOW_NODE_PICKER',
+      screenPosition: picker.position,
+      canvasPosition,
+      placement: picker.panelPlacement,
+    });
+  }, []);
+
+  const handleCreateNode = useCallback((sourceNodeId: string) => {
+    markUserGesture();
+    const position = getCreationFallbackPosition(state, sourceNodeId);
+    if (!position) return;
+    const stageBounds = getUsableStageBounds(canvasStageRef.current);
+    const nodeBounds = canvasStageRef.current
+      ?.querySelector<HTMLElement>(`.react-flow__node[data-id="${sourceNodeId}"]`)
+      ?.getBoundingClientRect();
+    const screenPoint = nodeBounds && nodeBounds.width > 0
+      ? { x: nodeBounds.right + 28, y: nodeBounds.top + 28 }
+      : { x: stageBounds.left + 420, y: stageBounds.top + 180 };
+    showNodePicker(sourceNodeId, screenPoint, position);
+  }, [markUserGesture, showNodePicker, state]);
+
+  const handleConnectStart: OnConnectStart = useCallback((_event, params) => {
+    if (!params.nodeId || params.handleId !== 'create' || params.handleType !== 'source') return;
+    const parsed = parseCanvasNodeId(params.nodeId);
+    if (!parsed || parsed.kind === 'job') return;
+    markUserGesture();
+    dispatchInteraction({ type: 'BEGIN_NODE_CONNECTION', sourceNodeId: params.nodeId });
+  }, [markUserGesture]);
+
+  const handleConnectEnd: OnConnectEnd = useCallback((event, connectionState) => {
+    if (!connectionState.fromNode) return;
+    if (connectionState.toNode) {
+      cancelDraftNode();
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element) || !target.classList.contains('react-flow__pane')) {
+      cancelDraftNode();
+      return;
+    }
+
+    const pointer = 'changedTouches' in event ? event.changedTouches[0] : event;
+    const screenPoint = { x: pointer.clientX, y: pointer.clientY };
+    const stageBounds = getUsableStageBounds(canvasStageRef.current);
+    const picker = placeNodePicker(screenPoint, stageBounds, { width: 320, height: 420 }, 16);
+    dispatchInteraction({
+      type: 'SHOW_NODE_PICKER',
+      screenPosition: picker.position,
+      canvasPosition: screenToFlowPosition(screenPoint),
+      placement: picker.panelPlacement,
+    });
+  }, [cancelDraftNode, screenToFlowPosition]);
+
+  const handleDraftToolSelect = useCallback((tool: TaskProfileId) => {
+    setState((current) => setSelectedTool(current, tool));
+    setOutputCount(getProfile(tool).defaultOutputs);
+    setPrompt('');
+    setRatio('1:1');
+    setToolParameters(defaultToolParameters);
+    dispatchInteraction({ type: 'SELECT_DRAFT_TOOL', tool });
+  }, [setState]);
+
   const graph = useMemo(() => buildCanvasGraph(
     state,
     selectedNodeId,
     state.selectedTool,
-    { onDerive: handleDerive, onSubmitReview: handleSubmitReview },
+    { onCreateNode: handleCreateNode, onDerive: handleDerive, onSubmitReview: handleSubmitReview },
     {
       mode: interaction.mode,
       parameters: toolParameters,
       ratio,
       dropTargetNodeId: dragTargetNodeId,
+      draftNode: interaction.draftNode,
+      onCancelDraft: cancelDraftNode,
       onParameterChange: handleParameterChange,
     },
-  ), [dragTargetNodeId, handleDerive, handleParameterChange, handleSubmitReview, interaction.mode, ratio, selectedNodeId, state, toolParameters]);
+  ), [cancelDraftNode, dragTargetNodeId, handleCreateNode, handleDerive, handleParameterChange, handleSubmitReview, interaction.draftNode, interaction.mode, ratio, selectedNodeId, state, toolParameters]);
 
   const handleToolSelect = (tool: TaskProfileId, trigger: HTMLButtonElement) => {
     markUserGesture();
@@ -315,9 +398,9 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   };
 
   const handlePanelClose = useCallback(() => {
-    dispatchInteraction({ type: 'CLOSE_TOOL' });
+    dispatchInteraction({ type: interaction.draftNode ? 'CANCEL_NODE_CREATION' : 'CLOSE_TOOL' });
     toolTriggerRef.current?.focus();
-  }, []);
+  }, [interaction.draftNode]);
 
   const handleSceneSelect = (scene: Scene) => {
     markUserGesture();
@@ -327,6 +410,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   };
 
   const handleNodeClick = (_event: React.MouseEvent, node: Node) => {
+    if (node.id === 'draft:task') return;
     markUserGesture();
     dispatchInteraction({ type: 'SELECT_NODE', nodeId: node.id });
     const parsed = parseCanvasNodeId(node.id);
@@ -490,6 +574,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
 
   const handleRunSelected = useCallback(() => {
     const parsed = parseCanvasNodeId(selectedNodeId);
+    const draftPosition = interaction.draftNode?.canvasPosition;
     const predictedBranchId = parsed?.kind === 'result' ? getNextSceneId(state) : null;
     const predictedJobId = `job-${state.jobs.length + 1}`;
     const focusTargets = [
@@ -544,9 +629,10 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
           ? [referenceAssetId]
           : [],
         sourceResultId,
+        position: draftPosition,
       });
     });
-  }, [outputCount, prompt, ratio, referenceAssetId, selectedNodeId, setState, state.jobs.length, state.scenes.length, toolParameters]);
+  }, [interaction.draftNode, outputCount, prompt, ratio, referenceAssetId, selectedNodeId, setState, state.jobs.length, state.scenes.length, toolParameters]);
 
   useEffect(() => {
     const request = pendingFocusRef.current;
@@ -637,10 +723,15 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
             minZoom={0.3}
             nodes={graph.nodes}
             nodeTypes={workbenchNodeTypes}
+            onConnectEnd={handleConnectEnd}
+            onConnectStart={handleConnectStart}
             onMoveStart={handleMoveStart}
             onNodeClick={handleNodeClick}
             onNodeDragStart={markUserGesture}
             onNodeDragStop={handleNodeDragStop}
+            onPaneClick={() => {
+              if (interaction.draftNode) cancelDraftNode();
+            }}
           >
             <Background color="#353840" gap={24} size={1} />
             <MiniMap pannable zoomable />
@@ -660,6 +751,13 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
           onFit={handleFitAll}
           onRename={handleRequestRename}
         />
+        {interaction.mode === 'choosing-node-type' && interaction.draftNode && (
+          <NodeTypePicker
+            onClose={cancelDraftNode}
+            onSelect={handleDraftToolSelect}
+            position={interaction.draftNode.screenPosition}
+          />
+        )}
         {interaction.panelOpen && (
           <ContextToolPanel
             assetPickerOpen={interaction.assetPickerOpen}
@@ -834,6 +932,31 @@ function getDroppableNodeId(target: EventTarget): string {
   const nodeId = target.closest<HTMLElement>('.react-flow__node')?.dataset.id ?? '';
   const parsed = parseCanvasNodeId(nodeId);
   return parsed && parsed.kind !== 'job' ? nodeId : '';
+}
+
+function getUsableStageBounds(stage: HTMLElement | null) {
+  const bounds = stage?.getBoundingClientRect();
+  if (bounds && bounds.width > 0 && bounds.height > 0) {
+    return {
+      left: bounds.left,
+      right: bounds.right,
+      top: bounds.top,
+      bottom: bounds.bottom,
+    };
+  }
+  return { left: 0, right: 1200, top: 0, bottom: 800 };
+}
+
+function getCreationFallbackPosition(
+  state: StudioState,
+  sourceNodeId: string,
+): { x: number; y: number } | null {
+  const parsed = parseCanvasNodeId(sourceNodeId);
+  if (!parsed || parsed.kind === 'job') return null;
+  const source = parsed.kind === 'scene'
+    ? state.scenes.find((scene) => scene.id === parsed.id)
+    : state.results.find((result) => result.id === parsed.id);
+  return source ? { x: source.x + 320, y: source.y + 24 } : null;
 }
 
 function canDeleteScene(state: StudioState, sceneId: string): boolean {

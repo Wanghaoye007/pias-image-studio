@@ -241,17 +241,17 @@ git commit -m "feat: add node creation controls"
 - Consumes: interaction events, draft graph data, `NodeTypePicker`, and explicit job positions.
 - Produces: valid blank-pane connection completion, edge-aware menu placement, draft cancellation, and submission at the drop coordinate.
 
-- [ ] **Step 1: Write failing placement and workbench tests**
+- [x] **Step 1: Write failing placement and workbench tests**
 
 Add pure placement cases for center and all four edges. Add workbench tests for the click fallback: clicking `拖拽新增节点` opens the picker, choosing `融图` shows a draft node and `融图参数`, closing the panel removes both without changing job count, and submitting creates one job at the draft coordinates.
 
-- [ ] **Step 2: Run focused tests and confirm red**
+- [x] **Step 2: Run focused tests and confirm red**
 
 Run: `npm test -- --run tests/workbench.test.tsx tests/viewportDirector.test.ts`
 
 Expected: FAIL because connection wiring and placement helpers do not exist.
 
-- [ ] **Step 3: Implement Workbench orchestration**
+- [x] **Step 3: Implement Workbench orchestration**
 
 Wire these React Flow props:
 
@@ -265,13 +265,13 @@ onPaneClick={handlePaneClick}
 
 Choosing a tool dispatches `SELECT_DRAFT_TOOL`, resets tool defaults, opens the existing parameter panel, and leaves `StudioState` unchanged. `handleRunSelected` passes `interaction.draftNode.canvasPosition` to `createJob`; closing or changing selection dispatches `CANCEL_NODE_CREATION`.
 
-- [ ] **Step 4: Run focused tests and confirm green**
+- [x] **Step 4: Run focused tests and confirm green**
 
 Run: `npm test -- --run tests/workbench.test.tsx tests/viewportDirector.test.ts`
 
 Expected: all focused tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/workbench/Workbench.tsx src/workbench/viewportDirector.ts tests/workbench.test.tsx tests/viewportDirector.test.ts
