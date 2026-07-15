@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { StrictMode, useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -350,6 +350,17 @@ describe('workbench canvas', () => {
 
     expect(screen.getByRole('complementary', { name: '场景与素材' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /任务队列/ })).toBeInTheDocument();
+  });
+
+  it('shows a compact workbench status bar without non-functional controls', () => {
+    render(<WorkbenchHarness />);
+
+    const statusBar = screen.getByLabelText('工作台状态');
+    expect(statusBar).toHaveTextContent('2026 夏季 SKU 上新');
+    expect(statusBar).toHaveTextContent('已自动保存');
+    expect(statusBar).toHaveTextContent('可用点数 2000');
+    expect(statusBar).toHaveTextContent('任务 0');
+    expect(within(statusBar).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('creates a source node when a library asset is dropped on the canvas', () => {

@@ -9,6 +9,7 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react';
+import { CheckCircle2, Coins, FolderKanban, ListChecks } from 'lucide-react';
 import {
   createContext,
   useCallback,
@@ -226,7 +227,28 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   }), [handleCancel, handleRetry]);
 
   return (
-    <div className="workbench">
+    <div className={`workbench ${railCollapsed ? 'is-rail-collapsed' : ''}`}>
+      <header aria-label="工作台状态" className="workbench-topbar">
+        <div className="workbench-topbar__project">
+          <FolderKanban aria-hidden="true" size={16} />
+          <span>项目</span>
+          <strong title={state.projectName}>{state.projectName}</strong>
+        </div>
+        <div className="workbench-topbar__status">
+          <span className="is-saved">
+            <CheckCircle2 aria-hidden="true" size={15} />
+            已自动保存
+          </span>
+          <span>
+            <Coins aria-hidden="true" size={15} />
+            可用点数 <strong>{state.usage.availableCredits}</strong>
+          </span>
+          <span>
+            <ListChecks aria-hidden="true" size={15} />
+            任务 <strong>{state.jobs.length}</strong>
+          </span>
+        </div>
+      </header>
       <SceneRail
         collapsed={railCollapsed}
         onSelectScene={handleSceneSelect}
