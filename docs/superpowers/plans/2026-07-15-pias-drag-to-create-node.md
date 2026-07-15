@@ -30,7 +30,7 @@
 - Produces: `DraftNodeCreation`, `BEGIN_NODE_CONNECTION`, `SHOW_NODE_PICKER`, `SELECT_DRAFT_TOOL`, and `CANCEL_NODE_CREATION`.
 - Consumed by: `Workbench`, `graph`, `NodeTypePicker`, and `DraftTaskNode` in later tasks.
 
-- [ ] **Step 1: Write failing reducer tests**
+- [x] **Step 1: Write failing reducer tests**
 
 Add tests that assert the reducer stores the source node, exact screen/canvas positions, selected tool, and clears the draft when canceled or when selection changes:
 
@@ -56,13 +56,13 @@ it('opens a node picker at the released canvas position', () => {
 });
 ```
 
-- [ ] **Step 2: Run reducer tests and confirm red**
+- [x] **Step 2: Run reducer tests and confirm red**
 
 Run: `npm test -- --run tests/interactionMachine.test.ts`
 
 Expected: FAIL because the new events and `draftNode` state do not exist.
 
-- [ ] **Step 3: Implement the transient state contract**
+- [x] **Step 3: Implement the transient state contract**
 
 Add the following public shape and reducer transitions:
 
@@ -83,13 +83,13 @@ export type DraftNodeCreation = {
 
 `SELECT_NODE`, `CLEAR_SELECTION`, `CLOSE_TOOL`, `SUBMIT`, `SUBMISSION_SETTLED`, and `RESET` must clear stale draft state where appropriate.
 
-- [ ] **Step 4: Run reducer tests and confirm green**
+- [x] **Step 4: Run reducer tests and confirm green**
 
 Run: `npm test -- --run tests/interactionMachine.test.ts`
 
 Expected: all interaction-machine tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/workbench/interactionMachine.ts tests/interactionMachine.test.ts

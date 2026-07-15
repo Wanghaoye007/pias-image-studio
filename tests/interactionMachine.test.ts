@@ -82,4 +82,74 @@ describe('workbench interaction machine', () => {
       nodeId: 'scene:scene-source',
     })).toEqual(createInitialInteractionState('scene:scene-source'));
   });
+
+  it('opens a node picker at the released canvas position', () => {
+    const connected = reduceWorkbenchInteraction(
+      createInitialInteractionState('scene:scene-source'),
+      { type: 'BEGIN_NODE_CONNECTION', sourceNodeId: 'scene:scene-source' },
+    );
+    const choosing = reduceWorkbenchInteraction(connected, {
+      type: 'SHOW_NODE_PICKER',
+      screenPosition: { x: 720, y: 420 },
+      canvasPosition: { x: 980, y: 560 },
+      placement: 'left',
+    });
+
+    expect(connected).toMatchObject({ mode: 'connecting-node' });
+    expect(choosing).toMatchObject({
+      mode: 'choosing-node-type',
+      draftNode: {
+        sourceNodeId: 'scene:scene-source',
+        screenPosition: { x: 720, y: 420 },
+        canvasPosition: { x: 980, y: 560 },
+        placement: 'left',
+        selectedTool: null,
+      },
+    });
+  });
+
+  it('keeps a transient draft while the selected node type is configured', () => {
+    const connected = reduceWorkbenchInteraction(
+      createInitialInteractionState('result:result-1'),
+      { type: 'BEGIN_NODE_CONNECTION', sourceNodeId: 'result:result-1' },
+    );
+    const choosing = reduceWorkbenchInteraction(connected, {
+      type: 'SHOW_NODE_PICKER',
+      screenPosition: { x: 640, y: 360 },
+      canvasPosition: { x: 840, y: 460 },
+      placement: 'right',
+    });
+    const configuring = reduceWorkbenchInteraction(choosing, {
+      type: 'SELECT_DRAFT_TOOL', tool: 'blend',
+    });
+
+    expect(configuring).toMatchObject({
+      mode: 'configuring-draft-node',
+      activeTool: 'blend',
+      anchorNodeId: 'result:result-1',
+      panelOpen: true,
+      draftNode: { selectedTool: 'blend' },
+    });
+  });
+
+  it('cancels transient node creation without clearing the source selection', () => {
+    const connected = reduceWorkbenchInteraction(
+      createInitialInteractionState('scene:scene-source'),
+      { type: 'BEGIN_NODE_CONNECTION', sourceNodeId: 'scene:scene-source' },
+    );
+
+    expect(reduceWorkbenchInteraction(connected, { type: 'CANCEL_NODE_CREATION' }))
+      .toEqual(createInitialInteractionState('scene:scene-source'));
+  });
+
+  it('clears a stale draft when another node is selected', () => {
+    const connected = reduceWorkbenchInteraction(
+      createInitialInteractionState('scene:scene-source'),
+      { type: 'BEGIN_NODE_CONNECTION', sourceNodeId: 'scene:scene-source' },
+    );
+
+    expect(reduceWorkbenchInteraction(connected, {
+      type: 'SELECT_NODE', nodeId: 'result:result-2',
+    })).toEqual(createInitialInteractionState('result:result-2'));
+  });
 });
