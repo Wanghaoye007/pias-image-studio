@@ -485,7 +485,7 @@ describe('workbench canvas', () => {
     expect(screen.queryByLabelText('扩图构图区域')).not.toBeInTheDocument();
   });
 
-  it('renders accessible result actions, hides locked downloads, and enables real approved downloads', () => {
+  it('renders accessible result decisions and keeps complex delivery out of compact nodes', () => {
     const result: Result = {
       id: 'result-1',
       sourceSceneId: 'scene-source',
@@ -494,11 +494,19 @@ describe('workbench canvas', () => {
       title: '生成 1',
       imageUrl: '/result.png',
       reviewStatus: 'draft',
+      isFavorite: true,
+      isAdopted: true,
+      isPrimary: false,
       x: 0,
       y: 0,
     };
     const onDerive = vi.fn();
     const onSubmitReview = vi.fn();
+    const onToggleFavorite = vi.fn();
+    const onToggleAdoption = vi.fn();
+    const onSetPrimary = vi.fn();
+    const onToggleCompare = vi.fn();
+    const onOpenDetails = vi.fn();
 
     render(
       <ReactFlowProvider>
@@ -507,7 +515,16 @@ describe('workbench canvas', () => {
             kind: 'result',
             result,
             selected: false,
-            actions: { onDerive, onSubmitReview },
+            compareSelected: true,
+            actions: {
+              onDerive,
+              onSubmitReview,
+              onToggleFavorite,
+              onToggleAdoption,
+              onSetPrimary,
+              onToggleCompare,
+              onOpenDetails,
+            },
           }}
           id="result:result-1"
           type="result"
@@ -526,13 +543,29 @@ describe('workbench canvas', () => {
 
     const deriveButton = screen.getByRole('button', { name: '继续创作' });
     const reviewButton = screen.getByRole('button', { name: '提交审核' });
+    const favoriteButton = screen.getByRole('button', { name: '取消收藏' });
+    const adoptionButton = screen.getByRole('button', { name: '取消采用' });
+    const primaryButton = screen.getByRole('button', { name: '设置为主结果' });
+    const compareButton = screen.getByRole('button', { name: '移出对比' });
+    const detailsButton = screen.getByRole('button', { name: '查看结果详情' });
     expect(screen.getByAltText('生成 1')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '下载结果' })).not.toBeInTheDocument();
+    expect(screen.getByText('已采用')).toBeInTheDocument();
 
     deriveButton.click();
     reviewButton.click();
+    favoriteButton.click();
+    adoptionButton.click();
+    primaryButton.click();
+    compareButton.click();
+    detailsButton.click();
     expect(onDerive).toHaveBeenCalledWith(result);
     expect(onSubmitReview).toHaveBeenCalledWith(result.id);
+    expect(onToggleFavorite).toHaveBeenCalledWith(result.id);
+    expect(onToggleAdoption).toHaveBeenCalledWith(result.id);
+    expect(onSetPrimary).toHaveBeenCalledWith(result.id);
+    expect(onToggleCompare).toHaveBeenCalledWith(result.id);
+    expect(onOpenDetails).toHaveBeenCalledWith(result.id);
 
     const approved = { ...result, reviewStatus: 'approved' as const };
     render(
@@ -553,7 +586,31 @@ describe('workbench canvas', () => {
         />
       </ReactFlowProvider>,
     );
-    expect(screen.getByRole('link', { name: '下载结果' })).toHaveAttribute('href', '/result.png');
+    expect(screen.queryByRole('link', { name: '下载结果' })).not.toBeInTheDocument();
+  });
+
+  it('projects selected comparison results into graph node data', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 2,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 2, actualCredits: 30,
+    });
+
+    const graph = buildCanvasGraph(settled, 'result:result-1', 'generate', {}, {
+      mode: 'node-selected',
+      parameters: {},
+      ratio: '1:1',
+      compareResultIds: ['result-1'],
+      onParameterChange: vi.fn(),
+    });
+
+    expect(graph.nodes.find((node) => node.id === 'result:result-1')).toMatchObject({
+      data: { compareSelected: true },
+    });
+    expect(graph.nodes.find((node) => node.id === 'result:result-2')).toMatchObject({
+      data: { compareSelected: false },
+    });
   });
 
   it('opens a Chinese context panel from the floating tool palette', () => {

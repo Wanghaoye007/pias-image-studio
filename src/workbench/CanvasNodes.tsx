@@ -6,7 +6,15 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react';
-import { ImagePlus, Plus } from 'lucide-react';
+import {
+  Check,
+  Columns3,
+  Crown,
+  ImagePlus,
+  Info,
+  Plus,
+  Star,
+} from 'lucide-react';
 import { useEffect, type CSSProperties } from 'react';
 import type { GenerationJob, JobStatus, ReviewStatus, Scene } from '../domain';
 import {
@@ -113,7 +121,8 @@ export function JobCanvasNode({ data }: NodeProps<Node<JobNodeData, 'job'>>) {
 
 export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'result'>>) {
   const canSubmit = data.result.reviewStatus === 'draft' || data.result.reviewStatus === 'returned';
-  const isApproved = data.result.reviewStatus === 'approved';
+  const isAdopted = Boolean(data.result.isAdopted);
+  const isPrimary = Boolean(data.result.isPrimary);
 
   return (
     <article
@@ -122,6 +131,44 @@ export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'r
     >
       <Handle type="target" position={Position.Left} />
       <img src={data.result.imageUrl} alt={data.result.title} />
+      <div aria-label="结果快捷操作" className="result-decision-bar nodrag">
+        <ResultIconAction
+          active={Boolean(data.result.isFavorite)}
+          icon={Star}
+          label={data.result.isFavorite ? '取消收藏' : '收藏结果'}
+          onClick={() => data.actions.onToggleFavorite?.(data.result.id)}
+        />
+        <ResultIconAction
+          active={isAdopted}
+          icon={Check}
+          label={isAdopted ? '取消采用' : '采用结果'}
+          onClick={() => data.actions.onToggleAdoption?.(data.result.id)}
+        />
+        <ResultIconAction
+          active={isPrimary}
+          disabled={!isAdopted || isPrimary}
+          icon={Crown}
+          label={isPrimary ? '当前主结果' : '设置为主结果'}
+          onClick={() => data.actions.onSetPrimary?.(data.result.id)}
+        />
+        <ResultIconAction
+          active={Boolean(data.compareSelected)}
+          icon={Columns3}
+          label={data.compareSelected ? '移出对比' : '加入对比'}
+          onClick={() => data.actions.onToggleCompare?.(data.result.id)}
+        />
+        <ResultIconAction
+          icon={Info}
+          label="查看结果详情"
+          onClick={() => data.actions.onOpenDetails?.(data.result.id)}
+        />
+      </div>
+      {(isAdopted || isPrimary) && (
+        <div className="result-state-badges" aria-label="结果决策状态">
+          {isAdopted && <span>已采用</span>}
+          {isPrimary && <span>主结果</span>}
+        </div>
+      )}
       <div className="canvas-node__content">
         <strong>{data.result.title}</strong>
         <small>{getReviewStatusLabel(data.result.reviewStatus)}</small>
@@ -150,16 +197,6 @@ export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'r
             {data.result.reviewStatus === 'returned' ? '重新提交' : '提交审核'}
           </button>
         )}
-        {isApproved && (
-          <a
-            aria-label="下载结果"
-            download={`${data.result.title}.png`}
-            href={data.result.imageUrl}
-            onClick={(event) => event.stopPropagation()}
-          >
-            下载
-          </a>
-        )}
       </div>
       <CanvasToolOverlay data={data} />
       <CreationHandle
@@ -168,6 +205,37 @@ export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'r
         selected={data.selected}
       />
     </article>
+  );
+}
+
+function ResultIconAction({
+  active = false,
+  disabled = false,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  icon: typeof Star;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-label={label}
+      aria-pressed={active}
+      className={active ? 'is-active' : ''}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      title={label}
+      type="button"
+    >
+      <Icon aria-hidden="true" size={14} />
+    </button>
   );
 }
 

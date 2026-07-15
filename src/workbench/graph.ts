@@ -48,6 +48,11 @@ export type CanvasNodeActions = {
   onDerive?: (result: Result) => void;
   onSubmitReview?: (resultId: string) => void;
   onCreateNode?: (sourceNodeId: string) => void;
+  onToggleFavorite?: (resultId: string) => void;
+  onToggleAdoption?: (resultId: string) => void;
+  onSetPrimary?: (resultId: string) => void;
+  onToggleCompare?: (resultId: string) => void;
+  onOpenDetails?: (resultId: string) => void;
 };
 
 export type SceneNodeData = {
@@ -74,6 +79,7 @@ export type ResultNodeData = {
   kind: 'result';
   result: Result;
   selected: boolean;
+  compareSelected?: boolean;
   actions: CanvasNodeActions;
   activeTool?: TaskProfileId;
   interactionMode?: InteractionMode;
@@ -94,6 +100,7 @@ export type CanvasGraphInteraction = {
   parameters: TaskParameters;
   ratio: string;
   dropTargetNodeId?: string;
+  compareResultIds?: string[];
   draftNode?: DraftNodeCreation | null;
   onCancelDraft?: () => void;
   onParameterChange: (key: string, value: string | number) => void;
@@ -156,6 +163,7 @@ export function buildCanvasGraph(
       kind: 'result',
       result,
       selected: selectedNodeId === `result:${result.id}`,
+      compareSelected: interaction?.compareResultIds?.includes(result.id) ?? false,
       actions,
       activeTool,
       ...(interaction ? {
