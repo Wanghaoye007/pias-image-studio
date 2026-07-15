@@ -34,6 +34,8 @@ export type Scene = {
   y: number;
   imageUrl: string;
   resultIds: string[];
+  sourceAssetId?: string;
+  sourceAssetVersion?: string;
   parentSceneId?: string;
   sourceResultId?: string;
 };
@@ -127,7 +129,7 @@ const resultImages = [
 export function getProfile(profileId: TaskProfileId): TaskProfile {
   const profile = taskProfiles.find((item) => item.id === profileId);
   if (!profile) {
-    throw new Error(`Unknown task profile: ${profileId}`);
+    throw new Error(`未知任务工具：${profileId}`);
   }
   return profile;
 }
@@ -135,8 +137,8 @@ export function getProfile(profileId: TaskProfileId): TaskProfile {
 export function initialStudioState(): StudioState {
   return {
     tenantName: 'PIAS Japan',
-    projectName: '2026 Summer SKU Launch',
-    workspaceName: 'Image Studio',
+    projectName: '2026 夏季 SKU 上新',
+    workspaceName: '图片工作台',
     selectedSceneId: 'scene-source',
     selectedTool: 'generate',
     usage: {
@@ -177,14 +179,16 @@ export function initialStudioState(): StudioState {
     scenes: [
       {
         id: 'scene-source',
-        title: 'Source Scene',
+        title: '源场景',
         skuCode: 'PIAS-SF-001',
-        operation: 'SKU Asset',
+        operation: '商品素材',
         status: 'source',
         x: 0,
         y: 40,
         imageUrl: '/figma_thesea_slides_15_21/slide_15_after_click.png',
         resultIds: [],
+        sourceAssetId: 'asset-main',
+        sourceAssetVersion: 'v3',
       },
     ],
     edges: [],
@@ -201,11 +205,11 @@ export function createJob(
   const profile = getProfile(input.profileId);
   const source = state.scenes.find((scene) => scene.id === input.sceneId);
   if (!source) {
-    throw new Error(`Unknown scene: ${input.sceneId}`);
+    throw new Error(`场景不存在：${input.sceneId}`);
   }
   const reservedCredits = profile.costPerOutput * input.outputCount;
   if (state.usage.availableCredits < reservedCredits) {
-    throw new Error('Insufficient credits');
+    throw new Error('可用额度不足');
   }
 
   const job: GenerationJob = {
@@ -259,13 +263,18 @@ function settleJob(
 ): StudioState {
   const job = state.jobs.find((item) => item.id === jobId);
   if (!job) {
-    throw new Error(`Unknown job: ${jobId}`);
+    throw new Error(`任务不存在：${jobId}`);
+  }
+  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'canceled') {
+    throw new Error('任务已结算，不能重复结算');
   }
 
   return {
     ...state,
     jobs: state.jobs.map((item) =>
-      item.id === jobId ? { ...item, status, ...(errorMessage ? { errorMessage } : {}) } : item,
+      item.id === jobId
+        ? { ...item, status, ...(errorMessage !== undefined ? { errorMessage } : {}) }
+        : item,
     ),
     scenes: state.scenes.map((scene) =>
       scene.id === job.sceneId ? { ...scene, status } : scene,
@@ -277,7 +286,7 @@ function settleJob(
     },
     auditEvents: [
       ...state.auditEvents,
-      audit(`job.${status}`, job.id, 'Image Worker'),
+      audit(`job.${status}`, job.id, '图像处理服务'),
     ],
   };
 }
@@ -296,18 +305,20 @@ export function createSceneFromAsset(
 ): StudioState {
   const asset = state.assets.find((item) => item.id === input.assetId);
   if (!asset) {
-    throw new Error(`Unknown asset: ${input.assetId}`);
+    throw new Error(`素材不存在：${input.assetId}`);
   }
 
   const scene: Scene = {
     id: `scene-${state.scenes.length + 1}`,
     title: asset.product,
     skuCode: asset.skuCode,
-    operation: 'SKU Asset',
+    operation: '商品素材',
     status: 'source',
     ...input.position,
     imageUrl: asset.imageUrl,
     resultIds: [],
+    sourceAssetId: asset.id,
+    sourceAssetVersion: asset.version,
   };
 
   return {
@@ -341,7 +352,16 @@ export function completeJob(
 ): StudioState {
   const job = state.jobs.find((item) => item.id === jobId);
   if (!job) {
-    throw new Error(`Unknown job: ${jobId}`);
+    throw new Error(`任务不存在：${jobId}`);
+  }
+  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'canceled') {
+    throw new Error('任务已结算，不能重复结算');
+  }
+  if (!Number.isInteger(input.successfulOutputs) || input.successfulOutputs < 0 || input.successfulOutputs > job.outputCount) {
+    throw new Error('成功产出数量超出任务范围');
+  }
+  if (!Number.isFinite(input.actualCredits) || input.actualCredits < 0 || input.actualCredits > job.reservedCredits) {
+    throw new Error('实际额度超出预留范围');
   }
 
   const newResults = Array.from({ length: input.successfulOutputs }).map((_, index) => {
@@ -384,7 +404,7 @@ export function completeJob(
     },
     auditEvents: [
       ...state.auditEvents,
-      audit('job.succeeded', job.id, 'Image Worker'),
+      audit('job.succeeded', job.id, '图像处理服务'),
     ],
   };
 }
@@ -396,13 +416,22 @@ export function createDerivedScene(
   const parent = state.scenes.find((scene) => scene.id === input.parentSceneId);
   const sourceResult = state.results.find((result) => result.id === input.sourceResultId);
   if (!parent || !sourceResult) {
-    throw new Error('Parent scene or source result not found');
+    throw new Error('父场景或源结果不存在');
+  }
+  const sourceJob = state.jobs.find((job) => job.id === sourceResult.jobId);
+  if (
+    sourceResult.sourceSceneId !== parent.id
+    || !parent.resultIds.includes(sourceResult.id)
+    || !sourceJob
+    || sourceJob.sceneId !== sourceResult.sourceSceneId
+  ) {
+    throw new Error('源结果与父场景或任务归属不一致');
   }
 
   const sceneId = `scene-${state.scenes.length + 1}`;
   const scene: Scene = {
     id: sceneId,
-    title: `${input.operation} Scene`,
+    title: `${input.operation}场景`,
     skuCode: parent.skuCode,
     operation: input.operation,
     status: 'draft',
@@ -437,10 +466,10 @@ export function createDerivedScene(
 export function submitForReview(state: StudioState, resultId: string): StudioState {
   const result = state.results.find((item) => item.id === resultId);
   if (!result) {
-    throw new Error(`Unknown result: ${resultId}`);
+    throw new Error(`结果不存在：${resultId}`);
   }
   if (result.reviewStatus !== 'draft') {
-    throw new Error('Only draft results can be submitted for review');
+    throw new Error('仅草稿结果可提交审核');
   }
 
   return {
@@ -455,10 +484,10 @@ export function submitForReview(state: StudioState, resultId: string): StudioSta
 export function approveResult(state: StudioState, resultId: string, reviewer: string): StudioState {
   const result = state.results.find((item) => item.id === resultId);
   if (!result) {
-    throw new Error(`Unknown result: ${resultId}`);
+    throw new Error(`结果不存在：${resultId}`);
   }
   if (result.reviewStatus !== 'submitted') {
-    throw new Error('Only submitted results can be approved');
+    throw new Error('仅已提交结果可审批');
   }
 
   return {
