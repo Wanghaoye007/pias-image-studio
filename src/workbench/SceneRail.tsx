@@ -1,6 +1,7 @@
 import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
 import { useMemo, useState, type DragEvent } from 'react';
 import type { Asset, Scene, StudioState } from '../domain';
+import { getSceneTitle } from './graph';
 
 type SceneRailProps = {
   state: StudioState;
@@ -56,20 +57,24 @@ export function SceneRail({
 
           {activeTab === 'scenes' ? (
             <div className="scene-list" role="tabpanel" aria-label="场景列表">
-              {state.scenes.map((scene) => (
-                <button
-                  aria-current={scene.id === state.selectedSceneId ? 'true' : undefined}
-                  aria-label={`${scene.title}，${scene.skuCode}`}
-                  className={scene.id === state.selectedSceneId ? 'is-active' : ''}
-                  key={scene.id}
-                  onClick={() => onSelectScene(scene)}
-                  type="button"
-                >
-                  <img src={scene.imageUrl} alt="" />
-                  <span>{scene.title}</span>
-                  <small>{scene.skuCode}</small>
-                </button>
-              ))}
+              {state.scenes.map((scene) => {
+                const sceneTitle = getSceneTitle(scene);
+
+                return (
+                  <button
+                    aria-current={scene.id === state.selectedSceneId ? 'true' : undefined}
+                    aria-label={`${sceneTitle}，${scene.skuCode}`}
+                    className={scene.id === state.selectedSceneId ? 'is-active' : ''}
+                    key={scene.id}
+                    onClick={() => onSelectScene(scene)}
+                    type="button"
+                  >
+                    <img src={scene.imageUrl} alt="" />
+                    <span>{sceneTitle}</span>
+                    <small>{scene.skuCode}</small>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div className="asset-library" role="tabpanel" aria-label="素材库">

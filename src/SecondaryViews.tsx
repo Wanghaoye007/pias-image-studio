@@ -84,6 +84,21 @@ const auditEventLabels: Record<string, string> = {
   'review.approved': '审核已通过',
 };
 
+export function getAuditTargetLabel(state: StudioState, targetId: string): string {
+  const jobIndex = state.jobs.findIndex((job) => job.id === targetId);
+  if (jobIndex >= 0) {
+    return `任务 ${String(jobIndex + 1).padStart(2, '0')} · ${getProfile(state.jobs[jobIndex].profileId).label}`;
+  }
+
+  const scene = state.scenes.find((item) => item.id === targetId);
+  if (scene) {
+    return `${getSceneTitle(scene)} · ${scene.skuCode}`;
+  }
+
+  const result = state.results.find((item) => item.id === targetId);
+  return result?.title ?? '操作对象';
+}
+
 export function GlobalNav({
   activeNav,
   onNavigate,
@@ -177,7 +192,7 @@ function OperationalDashboard({ state, approvedCount }: { state: StudioState; ap
           <div className="table-row" key={event.id}>
             <span>{auditEventLabels[event.type] ?? '审计事件'}</span>
             <strong>{event.actor}</strong>
-            <small>{event.targetId}</small>
+            <small>{getAuditTargetLabel(state, event.targetId)}</small>
           </div>
         ))}
       </div>

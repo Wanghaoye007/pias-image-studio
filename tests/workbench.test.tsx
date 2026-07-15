@@ -18,6 +18,7 @@ import {
   getReviewStatusLabel,
 } from '../src/workbench/CanvasNodes';
 import { buildCanvasGraph, getOperationLabel } from '../src/workbench/graph';
+import { SceneRail } from '../src/workbench/SceneRail';
 import { Workbench } from '../src/workbench/Workbench';
 
 const reactFlowMocks = vi.hoisted(() => ({
@@ -163,6 +164,38 @@ describe('workbench canvas', () => {
       Remove: '去除',
       Extract: '抠图',
     });
+  });
+
+  it('localizes legacy scene titles in the scene rail and its accessible names', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'generate',
+      outputCount: 1,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1,
+      actualCredits: 15,
+    });
+    const state = createDerivedScene(settled, {
+      parentSceneId: 'scene-source',
+      sourceResultId: settled.results[0].id,
+      operation: 'Directional Light',
+    });
+
+    render(
+      <SceneRail
+        collapsed={false}
+        onSelectScene={vi.fn()}
+        onToggleCollapsed={vi.fn()}
+        state={state}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: '场景' }));
+
+    expect(screen.getByRole('button', { name: '定向光场景，PIAS-SF-001' })).toBeInTheDocument();
+    expect(screen.queryByText('Directional Light场景')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Directional Light场景/ })).not.toBeInTheDocument();
   });
 
   it('provides Chinese labels for canvas node states', () => {
