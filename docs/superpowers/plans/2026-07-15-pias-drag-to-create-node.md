@@ -183,7 +183,7 @@ git commit -m "feat: project draft tasks at connection drops"
 - Consumes: eight `taskProfiles`, `DraftTaskNodeData`, and node action callbacks.
 - Produces: accessible create handles, `NodeTypePicker`, `DraftTaskNode`, and exported `toolIcons`.
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Test that a selected Scene and Result each expose one accessible creation handle, unselected nodes do not expose the large action, the picker renders eight unique options, and choosing one reports the exact tool ID.
 
@@ -194,13 +194,13 @@ fireEvent.click(within(picker).getByRole('button', { name: '融图' }));
 expect(onSelect).toHaveBeenCalledWith('blend');
 ```
 
-- [ ] **Step 2: Run workbench tests and confirm red**
+- [x] **Step 2: Run workbench tests and confirm red**
 
 Run: `npm test -- --run tests/workbench.test.tsx`
 
 Expected: FAIL because the picker, draft node, and large handle are missing.
 
-- [ ] **Step 3: Implement focused presentation components**
+- [x] **Step 3: Implement focused presentation components**
 
 `NodeTypePicker` receives:
 
@@ -214,13 +214,13 @@ type NodeTypePickerProps = {
 
 `DraftTaskNode` renders the tool icon, label, `待配置`, and a cancel icon button. `CanvasNodes` renders a source `Handle` with `id="create"`, keyboard activation, plus icon, `role="button"`, and `aria-label="拖拽新增节点"` only for selected Scene/Result nodes; its unselected form stays an 8px lineage handle.
 
-- [ ] **Step 4: Run workbench tests and confirm green**
+- [x] **Step 4: Run workbench tests and confirm green**
 
 Run: `npm test -- --run tests/workbench.test.tsx`
 
 Expected: component tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/workbench/NodeTypePicker.tsx src/workbench/DraftTaskNode.tsx src/workbench/CanvasNodes.tsx src/workbench/ToolPalette.tsx tests/workbench.test.tsx

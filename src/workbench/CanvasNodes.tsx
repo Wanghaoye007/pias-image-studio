@@ -1,5 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { ImagePlus } from 'lucide-react';
+import { ImagePlus, Plus } from 'lucide-react';
 import type { GenerationJob, JobStatus, ReviewStatus, Scene } from '../domain';
 import {
   AnglePreview,
@@ -48,7 +48,7 @@ export function getSceneStatusLabel(status: Scene['status']): string {
   return sceneStatusLabels[status];
 }
 
-export function SceneCanvasNode({ data }: NodeProps<Node<SceneNodeData, 'scene'>>) {
+export function SceneCanvasNode({ data, id }: NodeProps<Node<SceneNodeData, 'scene'>>) {
   const approvedCount = data.results.filter((result) => result.reviewStatus === 'approved').length;
   const submittedCount = data.results.filter((result) => result.reviewStatus === 'submitted').length;
   const sceneTitle = getSceneTitle(data.scene);
@@ -74,7 +74,11 @@ export function SceneCanvasNode({ data }: NodeProps<Node<SceneNodeData, 'scene'>
         <small>审核：{approvedCount} 已通过 / {submittedCount} 待审核</small>
       </div>
       <CanvasToolOverlay data={data} />
-      <Handle type="source" position={Position.Right} />
+      <CreationHandle
+        nodeId={id}
+        onCreateNode={data.actions?.onCreateNode}
+        selected={data.selected}
+      />
     </article>
   );
 }
@@ -99,7 +103,7 @@ export function JobCanvasNode({ data }: NodeProps<Node<JobNodeData, 'job'>>) {
   );
 }
 
-export function ResultCanvasNode({ data }: NodeProps<Node<ResultNodeData, 'result'>>) {
+export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'result'>>) {
   const canSubmit = data.result.reviewStatus === 'draft' || data.result.reviewStatus === 'returned';
   const isApproved = data.result.reviewStatus === 'approved';
 
@@ -150,8 +154,53 @@ export function ResultCanvasNode({ data }: NodeProps<Node<ResultNodeData, 'resul
         )}
       </div>
       <CanvasToolOverlay data={data} />
-      <Handle type="source" position={Position.Right} />
+      <CreationHandle
+        nodeId={id}
+        onCreateNode={data.actions.onCreateNode}
+        selected={data.selected}
+      />
     </article>
+  );
+}
+
+function CreationHandle({
+  nodeId,
+  onCreateNode,
+  selected,
+}: {
+  nodeId: string;
+  onCreateNode?: (sourceNodeId: string) => void;
+  selected: boolean;
+}) {
+  if (!selected) {
+    return <Handle type="source" position={Position.Right} />;
+  }
+
+  const activate = () => onCreateNode?.(nodeId);
+
+  return (
+    <Handle
+      aria-label="拖拽新增节点"
+      className="node-create-handle nodrag"
+      id="create"
+      onClick={(event) => {
+        event.stopPropagation();
+        activate();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        event.stopPropagation();
+        activate();
+      }}
+      position={Position.Right}
+      role="button"
+      tabIndex={0}
+      title="拖拽新增节点"
+      type="source"
+    >
+      <Plus aria-hidden="true" size={20} strokeWidth={2.4} />
+    </Handle>
   );
 }
 

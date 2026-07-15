@@ -17,7 +17,9 @@ import {
   getJobStatusLabel,
   getReviewStatusLabel,
 } from '../src/workbench/CanvasNodes';
+import { DraftTaskNode } from '../src/workbench/DraftTaskNode';
 import { buildCanvasGraph, getOperationLabel } from '../src/workbench/graph';
+import { NodeTypePicker } from '../src/workbench/NodeTypePicker';
 import { SceneRail } from '../src/workbench/SceneRail';
 import { Workbench } from '../src/workbench/Workbench';
 
@@ -242,6 +244,123 @@ describe('workbench canvas', () => {
     expect(getJobStatusLabel('running')).toBe('生成中');
     expect(getJobStatusLabel('succeeded')).toBe('已完成');
     expect(getReviewStatusLabel('submitted')).toBe('待审核');
+  });
+
+  it('exposes a large creation handle only on selected source-capable nodes', () => {
+    const state = initialStudioState();
+    const onCreateNode = vi.fn();
+    const { rerender } = render(
+      <ReactFlowProvider>
+        <SceneCanvasNode
+          data={{
+            kind: 'scene',
+            scene: state.scenes[0],
+            results: [],
+            selected: true,
+            activeTool: 'generate',
+            actions: { onCreateNode },
+          }}
+          id="scene:scene-source"
+          type="scene"
+          isConnectable
+          zIndex={0}
+          dragging={false}
+          selected={false}
+          selectable
+          deletable
+          draggable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+        />
+      </ReactFlowProvider>,
+    );
+
+    const handle = screen.getByRole('button', { name: '拖拽新增节点' });
+    expect(handle).toHaveClass('node-create-handle');
+    fireEvent.keyDown(handle, { key: 'Enter' });
+    expect(onCreateNode).toHaveBeenCalledWith('scene:scene-source');
+
+    rerender(
+      <ReactFlowProvider>
+        <SceneCanvasNode
+          data={{
+            kind: 'scene',
+            scene: state.scenes[0],
+            results: [],
+            selected: false,
+            activeTool: 'generate',
+            actions: { onCreateNode },
+          }}
+          id="scene:scene-source"
+          type="scene"
+          isConnectable
+          zIndex={0}
+          dragging={false}
+          selected={false}
+          selectable
+          deletable
+          draggable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+        />
+      </ReactFlowProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: '拖拽新增节点' })).not.toBeInTheDocument();
+  });
+
+  it('renders eight node choices and reports the selected tool', () => {
+    const onSelect = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <NodeTypePicker
+        position={{ x: 640, y: 360 }}
+        onClose={onClose}
+        onSelect={onSelect}
+      />,
+    );
+
+    const picker = screen.getByRole('dialog', { name: '节点类型选择器' });
+    expect(within(picker).getAllByRole('button')).toHaveLength(9);
+    expect(within(picker).getByRole('button', { name: '生成' })).toBeInTheDocument();
+    expect(within(picker).getByRole('button', { name: '超分' })).toBeInTheDocument();
+
+    fireEvent.click(within(picker).getByRole('button', { name: '融图' }));
+    expect(onSelect).toHaveBeenCalledWith('blend');
+    fireEvent.click(within(picker).getByRole('button', { name: '关闭节点类型选择器' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders and cancels a transient draft task card', () => {
+    const onCancel = vi.fn();
+    render(
+      <ReactFlowProvider>
+        <DraftTaskNode
+          data={{
+            kind: 'draft-task',
+            tool: 'light',
+            sourceNodeId: 'scene:scene-source',
+            onCancel,
+          }}
+          id="draft:task"
+          type="draft-task"
+          isConnectable
+          zIndex={0}
+          dragging={false}
+          selected={false}
+          selectable={false}
+          deletable={false}
+          draggable={false}
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+        />
+      </ReactFlowProvider>,
+    );
+
+    expect(screen.getByText('定向光')).toBeInTheDocument();
+    expect(screen.getByText('待配置')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '取消新增节点' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('renders selected light controls and an expansion grid only in their editing modes', () => {

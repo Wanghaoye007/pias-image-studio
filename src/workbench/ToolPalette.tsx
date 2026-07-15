@@ -16,7 +16,7 @@ type ToolPaletteProps = {
   onSelect: (tool: TaskProfileId, trigger: HTMLButtonElement) => void;
 };
 
-const toolIcons: Record<TaskProfileId, LucideIcon> = {
+export const toolIcons: Record<TaskProfileId, LucideIcon> = {
   generate: Sparkles,
   blend: Blend,
   angle: View,

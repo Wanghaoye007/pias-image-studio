@@ -47,6 +47,7 @@ export function getSceneTitle(scene: Pick<Scene, 'operation' | 'title'>): string
 export type CanvasNodeActions = {
   onDerive?: (result: Result) => void;
   onSubmitReview?: (resultId: string) => void;
+  onCreateNode?: (sourceNodeId: string) => void;
 };
 
 export type SceneNodeData = {
@@ -54,6 +55,7 @@ export type SceneNodeData = {
   scene: StudioState['scenes'][number];
   results: Result[];
   selected: boolean;
+  actions?: CanvasNodeActions;
   activeTool: TaskProfileId;
   interactionMode?: InteractionMode;
   parameters?: TaskParameters;
@@ -123,6 +125,7 @@ export function buildCanvasGraph(
       },
       results: state.results.filter((result) => scene.resultIds.includes(result.id)),
       selected: selectedNodeId === `scene:${scene.id}`,
+      actions,
       activeTool,
       ...(interaction ? {
         interactionMode: interaction.mode,
