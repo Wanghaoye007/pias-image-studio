@@ -1474,7 +1474,7 @@ progress::-moz-progress-bar {
   right: auto;
   bottom: 16px;
   left: 50%;
-  width: min(520px, calc(100% - 96px));
+  width: min(520px, calc(100% - 144px));
   max-width: none;
   transform: translateX(-50%);
   overflow: hidden;
