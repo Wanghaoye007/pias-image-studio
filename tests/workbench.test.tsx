@@ -1,12 +1,15 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
   completeJob,
   createDerivedScene,
   createJob,
+  failJob,
   initialStudioState,
   type Result,
+  type StudioState,
 } from '../src/domain';
 import {
   ResultCanvasNode,
@@ -15,6 +18,19 @@ import {
   getReviewStatusLabel,
 } from '../src/workbench/CanvasNodes';
 import { buildCanvasGraph } from '../src/workbench/graph';
+import { Workbench } from '../src/workbench/Workbench';
+
+function WorkbenchHarness({ initialState = initialStudioState() }: { initialState?: StudioState }) {
+  const [state, setState] = useState(initialState);
+  return <Workbench state={state} setState={setState} />;
+}
+
+function createDataTransfer(assetId: string): DataTransfer {
+  return {
+    getData: (type: string) => type === 'application/x-pias-asset' ? assetId : '',
+    setData: vi.fn(),
+  } as unknown as DataTransfer;
+}
 
 describe('workbench canvas', () => {
   it('maps scenes, jobs, and results to separate connected canvas nodes', () => {
@@ -185,5 +201,70 @@ describe('workbench canvas', () => {
     reviewButton.click();
     expect(onDerive).toHaveBeenCalledWith(result);
     expect(onSubmitReview).toHaveBeenCalledWith(result.id);
+  });
+
+  it('opens a Chinese context panel from the floating tool palette', () => {
+    render(<WorkbenchHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '融图' }));
+
+    expect(screen.getByRole('dialog', { name: '融图参数' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开始生成' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '融图' })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭参数面板' }));
+    expect(screen.queryByRole('dialog', { name: '融图参数' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '融图' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps the task tray and scene library in the workbench', () => {
+    render(<WorkbenchHarness />);
+
+    expect(screen.getByRole('complementary', { name: '场景与素材' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /任务队列/ })).toBeInTheDocument();
+  });
+
+  it('creates a source node when a library asset is dropped on the canvas', () => {
+    render(<WorkbenchHarness />);
+    const asset = screen.getByRole('button', { name: /PIAS-SK-014/ });
+    const dataTransfer = createDataTransfer('asset-pack');
+
+    fireEvent.dragStart(asset, { dataTransfer });
+    fireEvent.drop(screen.getByLabelText('节点画布'), {
+      clientX: 640,
+      clientY: 360,
+      dataTransfer,
+    });
+
+    expect(screen.getAllByText('PIAS-SK-014')).toHaveLength(2);
+  });
+
+  it('runs a task and exposes cancellation while it is queued', () => {
+    render(<WorkbenchHarness />);
+    fireEvent.click(screen.getByRole('button', { name: '生成' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
+      target: { value: '干净的白色棚拍背景' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+    fireEvent.click(screen.getByRole('button', { name: /任务队列/ }));
+
+    expect(screen.getAllByText('等待中')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: '取消任务' })).toBeInTheDocument();
+  });
+
+  it('allows failed tasks to be retried from the task tray', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'generate',
+      outputCount: 1,
+    });
+    const failed = failJob(queued, queued.jobs[0].id, '图像服务暂时不可用');
+    render(<WorkbenchHarness initialState={failed} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /任务队列/ }));
+    expect(screen.getAllByText('图像服务暂时不可用')).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole('button', { name: '重试任务' })[0]);
+
+    expect(screen.getAllByText('等待中')).toHaveLength(3);
   });
 });
