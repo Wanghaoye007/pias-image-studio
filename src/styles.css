@@ -2199,6 +2199,184 @@ progress::-moz-progress-bar {
   background: #191a1f;
 }
 
+.scene-node__empty {
+  width: 100%;
+  height: 178px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  border-bottom: 1px solid var(--line-soft);
+  color: #7f8490;
+  background: #17191f;
+}
+
+.scene-node__empty span {
+  font-size: 11px;
+}
+
+.react-flow__node.is-asset-drop-target .canvas-node {
+  border-color: #6c9cff;
+  box-shadow: 0 0 0 3px rgb(47 128 255 / 24%), 0 18px 38px rgb(0 0 0 / 34%);
+  transform: translateY(-2px);
+}
+
+.canvas-command-bar {
+  position: absolute;
+  z-index: 24;
+  top: 16px;
+  right: 16px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #1a1b20;
+  box-shadow: 0 14px 32px rgb(0 0 0 / 28%);
+}
+
+.canvas-command-bar > button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #a7aab2;
+  background: transparent;
+}
+
+.canvas-command-bar > button:hover:not(:disabled) {
+  border-color: #454852;
+  color: #f2f3f5;
+  background: #25272d;
+}
+
+.canvas-command-bar > button:disabled {
+  cursor: not-allowed;
+  opacity: .34;
+}
+
+.canvas-command-bar > span {
+  width: 1px;
+  height: 22px;
+  margin: 0 2px;
+  background: var(--line);
+}
+
+.node-command-dialog {
+  position: absolute;
+  z-index: 55;
+  top: 66px;
+  right: 16px;
+  width: 304px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #3b3d45;
+  border-radius: 8px;
+  color: var(--text);
+  background: #1b1c21;
+  box-shadow: 0 22px 54px rgb(0 0 0 / 48%);
+  animation: panel-enter-left 150ms ease-out both;
+}
+
+.node-command-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.node-command-dialog > header strong {
+  font-size: 13px;
+}
+
+.node-command-dialog > header small,
+.node-command-dialog > p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.node-command-dialog > p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.node-command-dialog > label {
+  display: grid;
+  gap: 7px;
+}
+
+.node-command-dialog > label span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.node-command-dialog input {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--canvas);
+}
+
+.node-command-dialog > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.node-command-dialog > footer button {
+  min-width: 70px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--overlay);
+}
+
+.node-command-dialog > footer button.is-primary {
+  border-color: #4b7de0;
+  background: #3577ea;
+}
+
+.node-command-dialog > footer button.is-danger {
+  border-color: #864444;
+  color: #ffd7d7;
+  background: #6f3030;
+}
+
+.canvas-notice {
+  position: absolute;
+  z-index: 70;
+  bottom: 72px;
+  left: 50%;
+  max-width: min(420px, calc(100% - 48px));
+  padding: 9px 13px;
+  border: 1px solid #3f434c;
+  border-radius: 6px;
+  color: #f2f3f5;
+  background: #202228;
+  box-shadow: 0 14px 32px rgb(0 0 0 / 32%);
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+.canvas-notice[data-tone="success"] {
+  border-color: rgb(68 174 132 / 52%);
+}
+
+.canvas-notice[data-tone="warning"] {
+  border-color: rgb(220 161 62 / 60%);
+  color: #ffe5b4;
+}
+
 @keyframes panel-enter-right {
   from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: translateX(0); }
@@ -2219,6 +2397,7 @@ progress::-moz-progress-bar {
   .canvas-node,
   .context-panel,
   .asset-picker,
+  .node-command-dialog,
   .light-overlay,
   .expand-overlay,
   .angle-preview {
@@ -2271,7 +2450,7 @@ progress::-moz-progress-bar {
   }
 
   .canvas-stage .react-flow__minimap {
-    top: 16px;
+    top: 66px;
     right: 16px;
     bottom: auto !important;
     width: 180px;
@@ -2426,6 +2605,8 @@ progress::-moz-progress-bar {
 
   .scene-rail,
   .tool-palette,
+  .canvas-command-bar,
+  .node-command-dialog,
   .context-panel,
   .canvas-stage > .react-flow,
   .canvas-stage .react-flow__controls,

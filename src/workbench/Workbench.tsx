@@ -26,11 +26,16 @@ import {
 import {
   cancelJob,
   completeJob,
+  createBlankScene,
   createDerivedScene,
   createJob,
   createSceneFromAsset,
+  deleteScene,
+  duplicateScene,
+  getNextSceneId,
   getProfile,
   moveCanvasItem,
+  renameScene,
   setSelectedScene,
   setSelectedTool,
   submitForReview,
@@ -45,6 +50,7 @@ import {
   type TaskProfileId,
 } from '../domain';
 import { JobCanvasNode, canvasNodeTypes, getReviewStatusLabel } from './CanvasNodes';
+import { CanvasCommandBar } from './CanvasCommandBar';
 import { ContextToolPanel } from './ContextToolPanel';
 import { SceneRail } from './SceneRail';
 import { TaskTray } from './TaskTray';
@@ -72,6 +78,9 @@ type JobActions = {
   onCancel: (jobId: string) => void;
   onRetry: (job: GenerationJob) => void;
 };
+
+type CanvasNotice = { message: string; tone: 'success' | 'warning' };
+type NodeDialog = 'rename' | 'delete' | null;
 
 const terminalStatuses = new Set(['succeeded', 'failed', 'canceled']);
 const JobActionsContext = createContext<JobActions>({ onCancel: () => undefined, onRetry: () => undefined });
@@ -145,6 +154,12 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     createInitialInteractionState,
   );
   const selectedNodeId = interaction.selectedNodeIds.at(-1) ?? '';
+  const commandScene = useMemo(() => {
+    const parsed = parseCanvasNodeId(selectedNodeId);
+    return parsed?.kind === 'scene'
+      ? state.scenes.find((scene) => scene.id === parsed.id)
+      : undefined;
+  }, [selectedNodeId, state.scenes]);
   const [railCollapsed, setRailCollapsed] = useState(() => (
     typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
@@ -157,6 +172,10 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   const [referenceAssetId, setReferenceAssetId] = useState(
     state.assets.find((asset) => asset.id === 'asset-scene')?.id ?? state.assets[0]?.id ?? '',
   );
+  const [dragTargetNodeId, setDragTargetNodeId] = useState('');
+  const [nodeDialog, setNodeDialog] = useState<NodeDialog>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [canvasNotice, setCanvasNotice] = useState<CanvasNotice | null>(null);
   const scheduledJobTimers = useRef(new Map<string, number[]>());
   const toolTriggerRef = useRef<HTMLButtonElement | null>(null);
   const canvasStageRef = useRef<HTMLElement | null>(null);
@@ -170,6 +189,16 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     });
     scheduledJobTimers.current.clear();
   }, []);
+
+  useEffect(() => {
+    if (!canvasNotice) return undefined;
+    const timeoutId = window.setTimeout(() => setCanvasNotice(null), 2600);
+    return () => window.clearTimeout(timeoutId);
+  }, [canvasNotice]);
+
+  useEffect(() => {
+    setNodeDialog(null);
+  }, [selectedNodeId]);
 
   const scheduleJob = useCallback((jobId: string, successfulOutputs: number, actualCredits: number) => {
     if (scheduledJobTimers.current.has(jobId)) return;
@@ -227,14 +256,14 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
 
   const handleDerive = useCallback((result: Result) => {
     userRevisionRef.current += 1;
-    const nextSceneId = `scene-${state.scenes.length + 1}`;
+    const nextSceneId = getNextSceneId(state);
     setState((current) => createDerivedScene(current, {
       parentSceneId: result.sourceSceneId,
       sourceResultId: result.id,
       operation: getProfile(current.selectedTool).label,
     }));
     dispatchInteraction({ type: 'SELECT_NODE', nodeId: `scene:${nextSceneId}` });
-  }, [setState, state.scenes.length]);
+  }, [setState, state.scenes]);
 
   const handleSubmitReview = useCallback((resultId: string) => {
     setState((current) => submitForReview(current, resultId));
@@ -261,9 +290,10 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
       mode: interaction.mode,
       parameters: toolParameters,
       ratio,
+      dropTargetNodeId: dragTargetNodeId,
       onParameterChange: handleParameterChange,
     },
-  ), [handleDerive, handleParameterChange, handleSubmitReview, interaction.mode, ratio, selectedNodeId, state, toolParameters]);
+  ), [dragTargetNodeId, handleDerive, handleParameterChange, handleSubmitReview, interaction.mode, ratio, selectedNodeId, state, toolParameters]);
 
   const handleToolSelect = (tool: TaskProfileId, trigger: HTMLButtonElement) => {
     markUserGesture();
@@ -322,29 +352,145 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     }));
   };
 
+  const selectCreatedScene = useCallback((sceneId: string) => {
+    pendingFocusRef.current = {
+      nodeIds: [`scene:${sceneId}`],
+      revision: userRevisionRef.current,
+    };
+    dispatchInteraction({ type: 'SELECT_NODE', nodeId: `scene:${sceneId}` });
+  }, []);
+
+  const handleCreateBlankScene = useCallback(() => {
+    markUserGesture();
+    const stageBounds = canvasStageRef.current?.getBoundingClientRect();
+    const screenPoint = stageBounds
+      ? { x: stageBounds.left + stageBounds.width * 0.52, y: stageBounds.top + stageBounds.height * 0.48 }
+      : { x: 520, y: 320 };
+    const position = screenToFlowPosition(screenPoint);
+    const nextSceneId = getNextSceneId(state);
+    setState((current) => createBlankScene(current, { position }));
+    selectCreatedScene(nextSceneId);
+    setCanvasNotice({ message: '已创建空白场景', tone: 'success' });
+  }, [markUserGesture, screenToFlowPosition, selectCreatedScene, setState, state.scenes]);
+
+  const handleDuplicateScene = useCallback(() => {
+    if (!commandScene) return;
+    markUserGesture();
+    const nextSceneId = getNextSceneId(state);
+    setState((current) => duplicateScene(current, commandScene.id));
+    selectCreatedScene(nextSceneId);
+    setCanvasNotice({ message: `已复制${getSceneTitleForNotice(commandScene)}`, tone: 'success' });
+  }, [commandScene, markUserGesture, selectCreatedScene, setState, state.scenes]);
+
+  const handleRequestRename = useCallback(() => {
+    if (!commandScene) return;
+    setRenameDraft(commandScene.title);
+    setNodeDialog('rename');
+  }, [commandScene]);
+
+  const handleConfirmRename = useCallback(() => {
+    if (!commandScene || !renameDraft.trim()) return;
+    const nextTitle = renameDraft.trim();
+    setState((current) => renameScene(current, commandScene.id, nextTitle));
+    setNodeDialog(null);
+    setCanvasNotice({ message: `已重命名为${nextTitle}`, tone: 'success' });
+  }, [commandScene, renameDraft, setState]);
+
+  const handleRequestDelete = useCallback(() => {
+    if (!commandScene) return;
+    if (!canDeleteScene(state, commandScene.id)) {
+      setCanvasNotice({ message: '该节点已有任务或下游内容，不能删除', tone: 'warning' });
+      return;
+    }
+    setNodeDialog('delete');
+  }, [commandScene, state]);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (!commandScene) return;
+    const deletedTitle = getSceneTitleForNotice(commandScene);
+    const fallbackScene = state.scenes.find((scene) => scene.id !== commandScene.id);
+    setState((current) => deleteScene(current, commandScene.id));
+    setNodeDialog(null);
+    if (fallbackScene) {
+      dispatchInteraction({ type: 'SELECT_NODE', nodeId: `scene:${fallbackScene.id}` });
+    }
+    setCanvasNotice({ message: `已删除${deletedTitle}`, tone: 'success' });
+  }, [commandScene, setState, state.scenes]);
+
+  const handleFitAll = useCallback(() => {
+    markUserGesture();
+    void fitView({ duration: 280, padding: 0.14 });
+  }, [fitView, markUserGesture]);
+
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    const targetNodeId = getDroppableNodeId(event.target);
+    setDragTargetNodeId((current) => current === targetNodeId ? current : targetNodeId);
+    event.dataTransfer.dropEffect = targetNodeId ? 'link' : 'copy';
+  };
+
   const handleDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     const assetId = event.dataTransfer.getData('application/x-pias-asset');
     if (!assetId) return;
+    const asset = state.assets.find((item) => item.id === assetId);
+    if (!asset) return;
+    const targetNodeId = getDroppableNodeId(event.target);
+    setDragTargetNodeId('');
+
+    if (targetNodeId) {
+      const parsed = parseCanvasNodeId(targetNodeId);
+      if (parsed && parsed.kind !== 'job') {
+        const targetSceneId = parsed.kind === 'scene'
+          ? parsed.id
+          : state.results.find((result) => result.id === parsed.id)?.sourceSceneId;
+        if (targetSceneId) {
+          markUserGesture();
+          setReferenceAssetId(assetId);
+          setOutputCount(getProfile('blend').defaultOutputs);
+          setPrompt('');
+          toolTriggerRef.current = canvasStageRef.current
+            ?.querySelector<HTMLButtonElement>('.tool-palette button[aria-label="融图"]') ?? null;
+          setState((current) => setSelectedTool(setSelectedScene(current, targetSceneId), 'blend'));
+          dispatchInteraction({ type: 'SELECT_NODE', nodeId: targetNodeId });
+          dispatchInteraction({ type: 'OPEN_TOOL', tool: 'blend' });
+
+          const stageBounds = canvasStageRef.current?.getBoundingClientRect();
+          const nodeBounds = (event.target as Element).closest<HTMLElement>('.react-flow__node')
+            ?.getBoundingClientRect();
+          if (stageBounds && nodeBounds) {
+            dispatchInteraction({
+              type: 'SET_PANEL_PLACEMENT',
+              placement: choosePanelPlacement(nodeBounds, stageBounds, { width: 336, height: 600 }, 16),
+            });
+          }
+          setCanvasNotice({ message: `已绑定${asset.product}，可直接开始融图`, tone: 'success' });
+          return;
+        }
+      }
+    }
+
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    const nextSceneId = `scene-${state.scenes.length + 1}`;
+    const nextSceneId = getNextSceneId(state);
     setState((current) => createSceneFromAsset(current, { assetId, position }));
-    dispatchInteraction({ type: 'SELECT_NODE', nodeId: `scene:${nextSceneId}` });
+    selectCreatedScene(nextSceneId);
+    setCanvasNotice({ message: `已添加${asset.product}节点`, tone: 'success' });
   };
 
   const handleAssetAdd = useCallback((asset: Asset) => {
-    const nextSceneId = `scene-${state.scenes.length + 1}`;
+    const nextSceneId = getNextSceneId(state);
     const lane = state.scenes.length;
     setState((current) => createSceneFromAsset(current, {
       assetId: asset.id,
       position: { x: 80 + (lane % 3) * 300, y: 420 + Math.floor(lane / 3) * 300 },
     }));
-    dispatchInteraction({ type: 'SELECT_NODE', nodeId: `scene:${nextSceneId}` });
-  }, [setState, state.scenes.length]);
+    selectCreatedScene(nextSceneId);
+    setCanvasNotice({ message: `已添加${asset.product}节点`, tone: 'success' });
+  }, [selectCreatedScene, setState, state.scenes]);
 
   const handleRunSelected = useCallback(() => {
     const parsed = parseCanvasNodeId(selectedNodeId);
-    const predictedBranchId = parsed?.kind === 'result' ? `scene-${state.scenes.length + 1}` : null;
+    const predictedBranchId = parsed?.kind === 'result' ? getNextSceneId(state) : null;
     const predictedJobId = `job-${state.jobs.length + 1}`;
     const focusTargets = [
       ...(predictedBranchId ? [`scene:${predictedBranchId}`] : []),
@@ -472,10 +618,13 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
       <main
         aria-label="节点画布"
         className="canvas-stage"
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'copy';
+        onDragLeave={(event) => {
+          const relatedTarget = event.relatedTarget;
+          if (!(relatedTarget instanceof Element) || !event.currentTarget.contains(relatedTarget)) {
+            setDragTargetNodeId('');
+          }
         }}
+        onDragOver={handleDragOver}
         onDrop={handleDrop}
         ref={canvasStageRef}
       >
@@ -503,6 +652,14 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
           results={state.results}
         />
         <ToolPalette activeTool={state.selectedTool} onSelect={handleToolSelect} />
+        <CanvasCommandBar
+          hasSelectedScene={Boolean(commandScene)}
+          onCreate={handleCreateBlankScene}
+          onDelete={handleRequestDelete}
+          onDuplicate={handleDuplicateScene}
+          onFit={handleFitAll}
+          onRename={handleRequestRename}
+        />
         {interaction.panelOpen && (
           <ContextToolPanel
             assetPickerOpen={interaction.assetPickerOpen}
@@ -526,6 +683,70 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
             ratio={ratio}
             tool={state.selectedTool}
           />
+        )}
+        {nodeDialog === 'rename' && commandScene && (
+          <section aria-label="重命名场景" className="node-command-dialog" role="dialog">
+            <header>
+              <strong>重命名场景</strong>
+              <small>{commandScene.skuCode}</small>
+            </header>
+            <label>
+              <span>场景名称</span>
+              <input
+                aria-label="场景名称"
+                autoFocus
+                maxLength={40}
+                onChange={(event) => setRenameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') handleConfirmRename();
+                  if (event.key === 'Escape') setNodeDialog(null);
+                }}
+                value={renameDraft}
+              />
+            </label>
+            <footer>
+              <button aria-label="取消重命名" onClick={() => setNodeDialog(null)} type="button">取消</button>
+              <button
+                aria-label="保存场景名称"
+                className="is-primary"
+                disabled={!renameDraft.trim()}
+                onClick={handleConfirmRename}
+                type="button"
+              >
+                保存
+              </button>
+            </footer>
+          </section>
+        )}
+        {nodeDialog === 'delete' && commandScene && (
+          <section aria-label="删除场景" className="node-command-dialog" role="dialog">
+            <header>
+              <strong>删除场景</strong>
+              <small>{commandScene.skuCode}</small>
+            </header>
+            <p>将从当前画布移除“{commandScene.title}”。此节点尚未产生任务或下游结果。</p>
+            <footer>
+              <button aria-label="取消删除" onClick={() => setNodeDialog(null)} type="button">取消</button>
+              <button
+                aria-label="确认删除场景"
+                className="is-danger"
+                onClick={handleConfirmDelete}
+                type="button"
+              >
+                删除
+              </button>
+            </footer>
+          </section>
+        )}
+        {canvasNotice && (
+          <div
+            aria-label="画布操作反馈"
+            className="canvas-notice"
+            data-tone={canvasNotice.tone}
+            role="status"
+          >
+            {canvasNotice.message}
+          </div>
         )}
         <TaskTray jobs={state.jobs} onCancel={handleCancel} onRetry={handleRetry} />
       </main>
@@ -606,4 +827,25 @@ function parseCanvasNodeId(nodeId: string): { kind: CanvasNodeKind; id: string }
   const id = nodeId.slice(separatorIndex + 1);
   if (!id || (kind !== 'scene' && kind !== 'job' && kind !== 'result')) return null;
   return { kind, id };
+}
+
+function getDroppableNodeId(target: EventTarget): string {
+  if (!(target instanceof Element)) return '';
+  const nodeId = target.closest<HTMLElement>('.react-flow__node')?.dataset.id ?? '';
+  const parsed = parseCanvasNodeId(nodeId);
+  return parsed && parsed.kind !== 'job' ? nodeId : '';
+}
+
+function canDeleteScene(state: StudioState, sceneId: string): boolean {
+  const scene = state.scenes.find((item) => item.id === sceneId);
+  return Boolean(scene)
+    && scene!.resultIds.length === 0
+    && !state.jobs.some((job) => job.sceneId === sceneId)
+    && !state.results.some((result) => result.sourceSceneId === sceneId)
+    && !state.scenes.some((item) => item.parentSceneId === sceneId)
+    && !state.edges.some((edge) => edge.target === sceneId);
+}
+
+function getSceneTitleForNotice(scene: Scene): string {
+  return scene.title;
 }

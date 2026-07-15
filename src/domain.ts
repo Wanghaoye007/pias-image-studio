@@ -371,7 +371,7 @@ export function createSceneFromAsset(
   }
 
   const scene: Scene = {
-    id: `scene-${state.scenes.length + 1}`,
+    id: getNextSceneId(state),
     title: asset.product,
     skuCode: asset.skuCode,
     operation: '商品素材',
@@ -391,6 +391,98 @@ export function createSceneFromAsset(
       ...state.auditEvents,
       audit('scene.created_from_asset', scene.id, 'Mika Tanaka'),
     ],
+  };
+}
+
+export function createBlankScene(
+  state: StudioState,
+  input: { position: CanvasPosition },
+): StudioState {
+  const scene: Scene = {
+    id: getNextSceneId(state),
+    title: '未命名场景',
+    skuCode: '未绑定 SKU',
+    operation: '空白场景',
+    status: 'draft',
+    ...input.position,
+    imageUrl: '',
+    resultIds: [],
+  };
+
+  return {
+    ...state,
+    selectedSceneId: scene.id,
+    scenes: [...state.scenes, scene],
+    auditEvents: [...state.auditEvents, audit('scene.created_blank', scene.id, 'Mika Tanaka')],
+  };
+}
+
+export function duplicateScene(state: StudioState, sceneId: string): StudioState {
+  const source = state.scenes.find((scene) => scene.id === sceneId);
+  if (!source) {
+    throw new Error(`场景不存在：${sceneId}`);
+  }
+
+  const scene: Scene = {
+    id: getNextSceneId(state),
+    title: `${source.title} 副本`,
+    skuCode: source.skuCode,
+    operation: source.operation,
+    status: 'draft',
+    x: source.x + 48,
+    y: source.y + 48,
+    imageUrl: source.imageUrl,
+    resultIds: [],
+    ...(source.sourceAssetId ? { sourceAssetId: source.sourceAssetId } : {}),
+    ...(source.sourceAssetVersion ? { sourceAssetVersion: source.sourceAssetVersion } : {}),
+  };
+
+  return {
+    ...state,
+    selectedSceneId: scene.id,
+    scenes: [...state.scenes, scene],
+    auditEvents: [...state.auditEvents, audit('scene.duplicated', scene.id, 'Mika Tanaka')],
+  };
+}
+
+export function renameScene(state: StudioState, sceneId: string, title: string): StudioState {
+  const normalizedTitle = title.trim();
+  if (!normalizedTitle) {
+    throw new Error('场景名称不能为空');
+  }
+  if (!state.scenes.some((scene) => scene.id === sceneId)) {
+    throw new Error(`场景不存在：${sceneId}`);
+  }
+
+  return {
+    ...state,
+    scenes: state.scenes.map((scene) => scene.id === sceneId
+      ? { ...scene, title: normalizedTitle }
+      : scene),
+    auditEvents: [...state.auditEvents, audit('scene.renamed', sceneId, 'Mika Tanaka')],
+  };
+}
+
+export function deleteScene(state: StudioState, sceneId: string): StudioState {
+  const scene = state.scenes.find((item) => item.id === sceneId);
+  if (!scene) {
+    throw new Error(`场景不存在：${sceneId}`);
+  }
+  const hasDownstreamContent = scene.resultIds.length > 0
+    || state.jobs.some((job) => job.sceneId === sceneId)
+    || state.results.some((result) => result.sourceSceneId === sceneId)
+    || state.scenes.some((item) => item.parentSceneId === sceneId)
+    || state.edges.some((edge) => edge.target === sceneId);
+  if (hasDownstreamContent) {
+    throw new Error('该场景已有任务或下游内容，暂不能删除');
+  }
+
+  const scenes = state.scenes.filter((item) => item.id !== sceneId);
+  return {
+    ...state,
+    selectedSceneId: state.selectedSceneId === sceneId ? scenes[0]?.id ?? '' : state.selectedSceneId,
+    scenes,
+    auditEvents: [...state.auditEvents, audit('scene.deleted', sceneId, 'Mika Tanaka')],
   };
 }
 
@@ -501,7 +593,7 @@ export function createDerivedScene(
   const parentJobCount = state.jobs.filter((job) => job.sceneId === parent.id).length;
   const parentBranchCount = state.scenes.filter((scene) => scene.parentSceneId === parent.id).length;
 
-  const sceneId = `scene-${state.scenes.length + 1}`;
+  const sceneId = getNextSceneId(state);
   const scene: Scene = {
     id: sceneId,
     title: `${input.operation}场景`,
@@ -632,4 +724,23 @@ function audit(type: string, targetId: string, actor: string): AuditEvent {
     targetId,
     at: new Date().toISOString(),
   };
+}
+
+export function getNextSceneId(state: StudioState): string {
+  const historicalIds = new Set([
+    ...state.scenes.map((scene) => scene.id),
+    ...state.jobs.map((job) => job.sceneId),
+    ...state.results.map((result) => result.sourceSceneId),
+    ...state.auditEvents.map((event) => event.targetId),
+    ...state.edges.flatMap((edge) => [edge.source, edge.target]),
+  ].filter((id) => id.startsWith('scene-')));
+  return nextEntityId('scene', [...historicalIds]);
+}
+
+function nextEntityId(prefix: string, ids: string[]): string {
+  const highest = ids.reduce((max, id) => {
+    const match = id.match(new RegExp(`^${prefix}-(\\d+)$`));
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, ids.length);
+  return `${prefix}-${highest + 1}`;
 }

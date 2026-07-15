@@ -460,6 +460,66 @@ describe('workbench canvas', () => {
     expect(screen.getAllByText('PIAS-SK-014')).toHaveLength(2);
   });
 
+  it('binds an asset as a blend reference when it is dropped on an existing image node', () => {
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+    const asset = screen.getByRole('button', { name: /护肤套装，PIAS-SK-014/ });
+    const sourceImage = screen.getByAltText('源场景');
+    const dataTransfer = createDataTransfer('asset-pack');
+
+    fireEvent.dragStart(asset, { dataTransfer });
+    fireEvent.dragOver(sourceImage, { dataTransfer });
+    fireEvent.drop(sourceImage, {
+      clientX: 240,
+      clientY: 180,
+      dataTransfer,
+    });
+
+    expect(latestState.scenes).toHaveLength(1);
+    expect(latestState.selectedTool).toBe('blend');
+    const panel = screen.getByRole('dialog', { name: '融图参数' });
+    expect(within(panel).getByRole('button', { name: '选择参考素材' })).toHaveTextContent('护肤套装');
+    expect(screen.getByRole('status', { name: '画布操作反馈' })).toHaveTextContent('已绑定护肤套装');
+  });
+
+  it('creates, duplicates, renames, and deletes unused scenes from the canvas command bar', () => {
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '新建空白场景' }));
+    expect(latestState.scenes.at(-1)).toMatchObject({ title: '未命名场景', imageUrl: '' });
+
+    fireEvent.click(screen.getByRole('button', { name: '复制选中节点' }));
+    expect(latestState.scenes.at(-1)).toMatchObject({ title: '未命名场景 副本' });
+
+    fireEvent.click(screen.getByRole('button', { name: '重命名选中节点' }));
+    const renameDialog = screen.getByRole('dialog', { name: '重命名场景' });
+    fireEvent.change(within(renameDialog).getByRole('textbox', { name: '场景名称' }), {
+      target: { value: '主视觉备选' },
+    });
+    fireEvent.click(within(renameDialog).getByRole('button', { name: '保存场景名称' }));
+    expect(latestState.scenes.at(-1)?.title).toBe('主视觉备选');
+
+    fireEvent.click(screen.getByRole('button', { name: '删除选中节点' }));
+    const deleteDialog = screen.getByRole('dialog', { name: '删除场景' });
+    fireEvent.click(within(deleteDialog).getByRole('button', { name: '确认删除场景' }));
+
+    expect(latestState.scenes.map((scene) => scene.title)).toEqual(['源场景', '未命名场景']);
+    expect(screen.getByRole('status', { name: '画布操作反馈' })).toHaveTextContent('已删除主视觉备选');
+  });
+
+  it('closes a node command dialog when the selected scene changes', () => {
+    render(<WorkbenchHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '新建空白场景' }));
+    fireEvent.click(screen.getByRole('button', { name: '重命名选中节点' }));
+    expect(screen.getByRole('dialog', { name: '重命名场景' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByAltText('源场景'));
+
+    expect(screen.queryByRole('dialog', { name: '重命名场景' })).not.toBeInTheDocument();
+  });
+
   it('fits the selected scene node instead of estimating a fixed center', () => {
     reactFlowMocks.fitView.mockClear();
     render(<WorkbenchHarness />);

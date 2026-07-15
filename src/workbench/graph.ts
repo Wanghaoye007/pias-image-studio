@@ -84,6 +84,7 @@ export type CanvasGraphInteraction = {
   mode: InteractionMode;
   parameters: TaskParameters;
   ratio: string;
+  dropTargetNodeId?: string;
   onParameterChange: (key: string, value: string | number) => void;
 };
 
@@ -103,6 +104,7 @@ export function buildCanvasGraph(
     id: `scene:${scene.id}`,
     type: 'scene',
     position: { x: scene.x, y: scene.y },
+    className: interaction?.dropTargetNodeId === `scene:${scene.id}` ? 'is-asset-drop-target' : undefined,
     data: {
       kind: 'scene',
       scene: {
@@ -125,6 +127,7 @@ export function buildCanvasGraph(
     id: `job:${job.id}`,
     type: 'job',
     position: { x: job.x, y: job.y },
+    className: interaction?.dropTargetNodeId === `job:${job.id}` ? 'is-asset-drop-target' : undefined,
     data: {
       kind: 'job',
       job,
@@ -136,6 +139,7 @@ export function buildCanvasGraph(
     id: `result:${result.id}`,
     type: 'result',
     position: { x: result.x, y: result.y },
+    className: interaction?.dropTargetNodeId === `result:${result.id}` ? 'is-asset-drop-target' : undefined,
     data: {
       kind: 'result',
       result,

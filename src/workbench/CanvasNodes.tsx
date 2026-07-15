@@ -1,4 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import { ImagePlus } from 'lucide-react';
 import type { GenerationJob, JobStatus, ReviewStatus, Scene } from '../domain';
 import {
   AnglePreview,
@@ -58,7 +59,14 @@ export function SceneCanvasNode({ data }: NodeProps<Node<SceneNodeData, 'scene'>
       data-interaction-mode={data.interactionMode ?? 'node-selected'}
     >
       <Handle type="target" position={Position.Left} />
-      <img src={data.scene.imageUrl} alt={sceneTitle} />
+      {data.scene.imageUrl ? (
+        <img src={data.scene.imageUrl} alt={sceneTitle} />
+      ) : (
+        <div aria-label="空白场景" className="scene-node__empty">
+          <ImagePlus aria-hidden="true" size={28} />
+          <span>拖入素材</span>
+        </div>
+      )}
       <div className="canvas-node__content">
         <strong>{sceneTitle}</strong>
         <span>{data.scene.skuCode}</span>

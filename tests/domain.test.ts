@@ -3,13 +3,17 @@ import {
   approveResult,
   cancelJob,
   completeJob,
+  createBlankScene,
   createDerivedScene,
   createJob,
   createSceneFromAsset,
+  deleteScene,
+  duplicateScene,
   failJob,
   getProfile,
   initialStudioState,
   moveCanvasItem,
+  renameScene,
   returnResult,
   submitForReview,
   updateJobProgress,
@@ -418,6 +422,75 @@ describe('Image Studio domain flow', () => {
       sourceAssetId: 'asset-pack',
       sourceAssetVersion: 'v1',
     });
+  });
+
+  it('creates an empty draft scene at the requested canvas position', () => {
+    const next = createBlankScene(initialStudioState(), {
+      position: { x: 540, y: 320 },
+    });
+
+    expect(next.scenes.at(-1)).toMatchObject({
+      id: 'scene-2',
+      title: '未命名场景',
+      skuCode: '未绑定 SKU',
+      operation: '空白场景',
+      status: 'draft',
+      x: 540,
+      y: 320,
+      imageUrl: '',
+      resultIds: [],
+    });
+    expect(next.selectedSceneId).toBe('scene-2');
+  });
+
+  it('duplicates a scene as an independent draft without copying jobs, results, or lineage', () => {
+    const state = initialStudioState();
+    const next = duplicateScene(state, 'scene-source');
+
+    expect(next.scenes.at(-1)).toMatchObject({
+      id: 'scene-2',
+      title: '源场景 副本',
+      status: 'draft',
+      x: 48,
+      y: 88,
+      imageUrl: state.scenes[0].imageUrl,
+      resultIds: [],
+      sourceAssetId: 'asset-main',
+    });
+    expect(next.scenes.at(-1)).not.toHaveProperty('parentSceneId');
+    expect(next.scenes.at(-1)).not.toHaveProperty('sourceResultId');
+    expect(next.jobs).toHaveLength(0);
+    expect(next.results).toHaveLength(0);
+    expect(next.edges).toHaveLength(0);
+  });
+
+  it('renames a scene with trimmed Chinese text and rejects an empty title', () => {
+    const renamed = renameScene(initialStudioState(), 'scene-source', '  夏季主视觉  ');
+
+    expect(renamed.scenes[0].title).toBe('夏季主视觉');
+    expect(() => renameScene(renamed, 'scene-source', '   ')).toThrow('场景名称不能为空');
+  });
+
+  it('deletes only an unused scene and protects scenes with jobs or downstream content', () => {
+    const withBlank = createBlankScene(initialStudioState(), { position: { x: 420, y: 260 } });
+    const deleted = deleteScene(withBlank, 'scene-2');
+
+    expect(deleted.scenes.map((scene) => scene.id)).toEqual(['scene-source']);
+    expect(deleted.selectedSceneId).toBe('scene-source');
+
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    expect(() => deleteScene(queued, 'scene-source')).toThrow('已有任务或下游内容');
+  });
+
+  it('does not reuse a deleted scene id recorded by the audit trail', () => {
+    const withBlank = createBlankScene(initialStudioState(), { position: { x: 420, y: 260 } });
+    const deleted = deleteScene(withBlank, 'scene-2');
+    const recreated = createBlankScene(deleted, { position: { x: 520, y: 320 } });
+
+    expect(recreated.scenes.at(-1)?.id).toBe('scene-3');
+    expect(recreated.auditEvents.map((event) => event.targetId)).toContain('scene-2');
   });
 
   it('stores the Chinese failure reason on a failed job', () => {
