@@ -160,20 +160,22 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
         </label>
       )}
 
-      <div className="credit-estimate">
-        <span>预计消耗</span>
-        <strong>{estimate} 点</strong>
-      </div>
-      {estimate > props.availableCredits && <p role="alert">可用额度不足</p>}
-      <button
-        aria-label="开始生成"
-        className="primary-action"
-        disabled={cannotRun}
-        onClick={props.onRun}
-        type="button"
-      >
-        {props.isSubmitting ? '正在提交' : actionLabel(props.tool)}
-      </button>
+      <footer className="context-panel__footer">
+        <div className="credit-estimate">
+          <span>预计消耗</span>
+          <strong>{estimate} 点</strong>
+        </div>
+        {estimate > props.availableCredits && <p role="alert">可用额度不足</p>}
+        <button
+          aria-label="开始生成"
+          className="primary-action"
+          disabled={cannotRun}
+          onClick={props.onRun}
+          type="button"
+        >
+          {props.isSubmitting ? '正在提交' : actionLabel(props.tool)}
+        </button>
+      </footer>
 
       {props.assetPickerOpen && (
         <AssetPicker

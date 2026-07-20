@@ -1,0 +1,171 @@
+:root {
+  color-scheme: dark;
+  font-family: "Manrope Variable", "Noto Sans SC Variable", "Noto Sans SC", sans-serif;
+  color: #f2f4f7;
+  background: #080a0d;
+
+  --neutral-950: #07090c;
+  --neutral-900: #0b0e12;
+  --neutral-850: #10141a;
+  --neutral-800: #151a21;
+  --neutral-750: #1b212a;
+  --neutral-700: #242b35;
+  --neutral-650: #303946;
+  --neutral-500: #687384;
+  --neutral-400: #9099a8;
+  --neutral-300: #b9c0cc;
+  --neutral-100: #f2f4f7;
+
+  --canvas-0: #080a0d;
+  --canvas-1: #0d1014;
+  --surface-content: rgb(21 26 33 / 98%);
+  --surface-content-soft: rgb(27 33 42 / 92%);
+  --surface-input: rgb(18 23 29 / 92%);
+  --surface-hover: #1b212a;
+  --surface-selected: #242b35;
+  --surface-chrome: rgb(16 20 26 / 82%);
+  --surface-raised: rgb(27 33 42 / 84%);
+  --surface-glass: rgb(20 25 32 / 66%);
+  --surface-modal: rgb(20 25 32 / 95%);
+
+  --text-primary: #f2f4f7;
+  --text-secondary: #b9c0cc;
+  --text-tertiary: #9099a8;
+  --text-disabled: #687384;
+
+  --stroke-subtle: rgb(255 255 255 / 6%);
+  --stroke-default: rgb(255 255 255 / 10%);
+  --stroke-strong: rgb(255 255 255 / 16%);
+  --stroke-focus: rgb(101 160 255 / 78%);
+
+  --color-primary-foreground: #65a0ff;
+  --color-primary-solid: #2866d8;
+  --color-primary-solid-hover: #225cc6;
+  --color-primary-subtle: rgb(76 141 255 / 14%);
+  --color-success-foreground: #43c594;
+  --color-success-solid: #1e7657;
+  --color-success-solid-hover: #1a704f;
+  --color-success-subtle: rgb(67 197 148 / 14%);
+  --color-warning-foreground: #f0b45a;
+  --color-warning-solid: #9a5b0b;
+  --color-warning-solid-hover: #8e5207;
+  --color-warning-subtle: rgb(240 180 90 / 14%);
+  --color-danger-foreground: #f06a6a;
+  --color-danger-solid: #b7474b;
+  --color-danger-solid-hover: #a73d42;
+  --color-danger-subtle: rgb(240 106 106 / 14%);
+  --color-info-foreground: #72b6c9;
+  --color-info-subtle: rgb(114 182 201 / 12%);
+
+  --scrim-soft: rgb(3 5 8 / 36%);
+  --scrim-modal: rgb(3 5 8 / 68%);
+
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-control: 10px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  --shadow-contact: 0 6px 16px rgb(0 0 0 / 20%);
+  --shadow-raised: 0 12px 30px rgb(0 0 0 / 24%);
+  --shadow-floating: 0 18px 52px rgb(0 0 0 / 36%);
+  --shadow-modal: 0 28px 80px rgb(0 0 0 / 48%);
+  --highlight-inset: inset 0 1px rgb(255 255 255 / 6%);
+  --ring-selected: 0 0 0 3px rgb(76 141 255 / 18%);
+  --ring-focus: 0 0 0 2px rgb(76 141 255 / 52%);
+
+  --blur-chrome: 14px;
+  --blur-panel: 20px;
+  --blur-modal: 24px;
+
+  --duration-instant: 80ms;
+  --duration-fast: 100ms;
+  --duration-control: 140ms;
+  --duration-menu: 180ms;
+  --duration-panel: 220ms;
+  --duration-result: 280ms;
+  --duration-canvas: 320ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-in-out: cubic-bezier(.45, 0, .2, 1);
+
+  --type-caption: 11px;
+  --type-label: 12px;
+  --type-body-sm: 13px;
+  --type-body: 14px;
+  --type-title-sm: 15px;
+  --type-title: 18px;
+  --type-heading: 24px;
+  --type-display: 32px;
+
+  /* Legacy aliases retained while components migrate to semantic tokens. */
+  --canvas: var(--canvas-0);
+  --panel: var(--neutral-850);
+  --overlay: var(--neutral-750);
+  --node: var(--neutral-800);
+  --line: var(--stroke-default);
+  --line-soft: var(--stroke-subtle);
+  --text: var(--text-primary);
+  --muted: var(--text-tertiary);
+  --blue: var(--color-primary-solid);
+  --green: var(--color-success-foreground);
+  --warning: var(--color-warning-foreground);
+  --danger: var(--color-danger-foreground);
+}
+
+html,
+body,
+#root {
+  background: var(--canvas-0);
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: "Manrope Variable", "Noto Sans SC Variable", "Noto Sans SC", sans-serif;
+  font-variation-settings: "wght" 450;
+  letter-spacing: 0;
+}
+
+body {
+  color: var(--text-primary);
+  font-size: var(--type-body-sm);
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+strong,
+h1,
+h2,
+h3 {
+  font-variation-settings: "wght" 600;
+}
+
+small,
+.metric strong,
+.kpi-card strong,
+.workbench-topbar strong,
+.task-tray strong,
+.result-inspector dd {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  color: var(--text-primary);
+  background: rgb(76 141 255 / 36%);
+}
