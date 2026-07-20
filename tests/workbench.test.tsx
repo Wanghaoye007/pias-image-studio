@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode, useEffect, useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
   approveResult,
@@ -20,6 +20,7 @@ import {
   getReviewStatusLabel,
 } from '../src/workbench/CanvasNodes';
 import { DraftTaskNode } from '../src/workbench/DraftTaskNode';
+import { RemoveMaskOverlay } from '../src/workbench/CanvasOverlays';
 import { buildCanvasGraph, getOperationLabel } from '../src/workbench/graph';
 import { NodeTypePicker } from '../src/workbench/NodeTypePicker';
 import { ResultCompare } from '../src/workbench/ResultCompare';
@@ -28,7 +29,9 @@ import { Workbench } from '../src/workbench/Workbench';
 
 const reactFlowMocks = vi.hoisted(() => ({
   fitView: vi.fn(() => Promise.resolve(true)),
+  getViewport: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
   screenToFlowPosition: vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y })),
+  setViewport: vi.fn(() => Promise.resolve(true)),
   updateNodeInternals: vi.fn(),
 }));
 
@@ -37,10 +40,32 @@ const deliveryMocks = vi.hoisted(() => ({
   downloadWatermarkedPreview: vi.fn(() => Promise.resolve('result-preview.png')),
 }));
 
+const falClientMocks = vi.hoisted(() => ({
+  runFalImageJob: vi.fn(async (
+    _input: unknown,
+    options: {
+      onExecution?: (execution: { requestId: string; modelId: string }) => void;
+      onProgress?: (progress: number) => void;
+      signal?: AbortSignal;
+    },
+  ) => {
+    options.onExecution?.({ requestId: 'req-default', modelId: 'model-default' });
+    options.onProgress?.(55);
+    return {
+      images: [{ url: 'https://fal.media/default.png', width: 1024, height: 1024 }],
+      seed: 7,
+      modelId: 'model-default',
+      childRequestIds: ['req-child-default'],
+    };
+  }),
+}));
+
 vi.mock('../src/exportDelivery', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/exportDelivery')>()),
   ...deliveryMocks,
 }));
+
+vi.mock('../src/fal/falImageClient', () => falClientMocks);
 
 vi.mock('@xyflow/react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();
@@ -50,7 +75,9 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     useUpdateNodeInternals: () => reactFlowMocks.updateNodeInternals,
     useReactFlow: () => ({
       fitView: reactFlowMocks.fitView,
+      getViewport: reactFlowMocks.getViewport,
       screenToFlowPosition: reactFlowMocks.screenToFlowPosition,
+      setViewport: reactFlowMocks.setViewport,
       zoomIn: vi.fn(),
       zoomOut: vi.fn(),
     }),
@@ -97,6 +124,19 @@ function createDataTransfer(assetId: string): DataTransfer {
 }
 
 describe('workbench canvas', () => {
+  beforeEach(() => {
+    falClientMocks.runFalImageJob.mockReset();
+    falClientMocks.runFalImageJob.mockImplementation(async (_input, options) => {
+      options.onExecution?.({ requestId: 'req-default', modelId: 'model-default' });
+      options.onProgress?.(55);
+      return {
+        images: [{ url: 'https://fal.media/default.png', width: 1024, height: 1024 }],
+        seed: 7,
+        modelId: 'model-default',
+        childRequestIds: ['req-child-default'],
+      };
+    });
+  });
   it('maps scenes, jobs, and results to separate connected canvas nodes', () => {
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source',
@@ -224,7 +264,7 @@ describe('workbench canvas', () => {
       Generate: '生成',
       Blend: '融图',
       'Directional Light': '定向光',
-      'Quick Angle': '快速视角',
+      'Quick Angle': '多角度',
       Expand: '扩图',
       Upscale: '超分',
       Remove: '去除',
@@ -463,7 +503,146 @@ describe('workbench canvas', () => {
     );
 
     expect(screen.getByLabelText('扩图范围网格')).toBeInTheDocument();
-    expect(screen.getAllByLabelText(/扩图区域/)).toHaveLength(9);
+    expect(screen.getAllByLabelText(/扩图锚点/)).toHaveLength(9);
+  });
+
+  it('selects a nine-cell expansion anchor from the image overlay', () => {
+    const state = initialStudioState();
+    const onParameterChange = vi.fn();
+    render(
+      <ReactFlowProvider>
+        <SceneCanvasNode
+          data={{
+            kind: 'scene',
+            scene: state.scenes[0],
+            results: [],
+            selected: true,
+            activeTool: 'expand',
+            interactionMode: 'editing-expand',
+            parameters: { expandScale: 72, expandAnchor: 'center' },
+            onParameterChange,
+          }}
+          id="scene:scene-source"
+          type="scene"
+          isConnectable
+          zIndex={0}
+          dragging={false}
+          selected={false}
+          selectable
+          deletable
+          draggable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+        />
+      </ReactFlowProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '扩图锚点 右下' }));
+    expect(onParameterChange).toHaveBeenCalledWith('expandAnchor', 'bottom-right');
+  });
+
+  it('draws a binary remove mask and emits a Fal-ready data URL', () => {
+    const context = {
+      fillStyle: '',
+      strokeStyle: '',
+      lineCap: '',
+      lineJoin: '',
+      lineWidth: 0,
+      fillRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+    };
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(context as unknown as CanvasRenderingContext2D);
+    const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/png;base64,TUFTSw==');
+    const onMaskChange = vi.fn();
+
+    render(<RemoveMaskOverlay brushSize={42} onMaskChange={onMaskChange} />);
+    const canvas = screen.getByLabelText('去除蒙版画布');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, width: 256, height: 256, right: 256, bottom: 256,
+      x: 0, y: 0, toJSON: () => ({}),
+    });
+    fireEvent.pointerDown(canvas, { clientX: 64, clientY: 64, pointerId: 1, buttons: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 96, clientY: 96, pointerId: 1, buttons: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 96, clientY: 96, pointerId: 1 });
+
+    expect(context.fillRect).toHaveBeenCalledWith(0, 0, 1024, 1024);
+    expect(context.strokeStyle).toBe('#ffffff');
+    expect(onMaskChange).toHaveBeenCalledWith('data:image/png;base64,TUFTSw==');
+    getContext.mockRestore();
+    toDataURL.mockRestore();
+  });
+
+  it('matches the remove mask bitmap to a non-square source image', () => {
+    const context = {
+      fillStyle: '',
+      fillRect: vi.fn(),
+    };
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(context as unknown as CanvasRenderingContext2D);
+
+    render(
+      <article className="canvas-node">
+        <img alt="横版源图" src="source.png" />
+        <RemoveMaskOverlay brushSize={42} />
+      </article>,
+    );
+    const sourceImage = screen.getByAltText('横版源图');
+    Object.defineProperties(sourceImage, {
+      naturalWidth: { configurable: true, value: 1600 },
+      naturalHeight: { configurable: true, value: 900 },
+    });
+    fireEvent.load(sourceImage);
+
+    const canvas = screen.getByLabelText('去除蒙版画布');
+    expect(canvas).toHaveAttribute('width', '1600');
+    expect(canvas).toHaveAttribute('height', '900');
+    expect(context.fillRect).toHaveBeenLastCalledWith(0, 0, 1600, 900);
+    getContext.mockRestore();
+  });
+
+  it('submits the painted remove mask through the unified Fal client', async () => {
+    const context = {
+      fillStyle: '', strokeStyle: '', lineCap: '', lineJoin: '', lineWidth: 0,
+      fillRect: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(context as unknown as CanvasRenderingContext2D);
+    const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/png;base64,V09SS0JF TkNI'.replace(' ', ''));
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '去除' }));
+    const runButton = screen.getByRole('button', { name: '开始生成' });
+    expect(runButton).toBeDisabled();
+    const canvas = screen.getByLabelText('去除蒙版画布');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, width: 256, height: 256, right: 256, bottom: 256,
+      x: 0, y: 0, toJSON: () => ({}),
+    });
+    fireEvent.pointerDown(canvas, { clientX: 80, clientY: 80, pointerId: 1, buttons: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 96, clientY: 96, pointerId: 1 });
+    expect(runButton).toBeEnabled();
+    fireEvent.click(runButton);
+
+    await waitFor(() => expect(falClientMocks.runFalImageJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profileId: 'remove',
+        outputCount: 1,
+        maskImageUrl: 'data:image/png;base64,V09SS0JFTkNI',
+      }),
+      expect.any(Object),
+    ));
+    expect(latestState.jobs[0].inputSnapshot.maskImageUrl)
+      .toBe('data:image/png;base64,V09SS0JFTkNI');
+    getContext.mockRestore();
+    toDataURL.mockRestore();
   });
 
   it('opens a searchable reference-material picker from blend settings', () => {
@@ -476,6 +655,135 @@ describe('workbench canvas', () => {
     expect(picker).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索参考素材' })).toBeInTheDocument();
     expect(within(picker).getByRole('button', { name: /活动参考，PIAS-REF-SEA/ })).toBeInTheDocument();
+  });
+
+  it('shows Fal-native controls and snapshots a single multiple-angles node', () => {
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '多角度' }));
+
+    const panel = screen.getByRole('dialog', { name: '多角度参数' });
+    expect(panel).toBeInTheDocument();
+    expect(screen.queryByRole('toolbar', { name: '节点命令' })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('textbox', { name: '创作描述' })).not.toBeInTheDocument();
+    expect(within(panel).getByText('模型会推断不可见区域，结果需人工复核')).toBeInTheDocument();
+    expect(within(panel).getByRole('slider', { name: '水平旋转' })).toHaveAttribute('min', '-180');
+    expect(within(panel).getByRole('slider', { name: '镜头推进' })).toHaveAttribute('max', '10');
+    expect(within(panel).getByRole('slider', { name: '垂直视角' })).toHaveAttribute('step', '0.1');
+
+    fireEvent.change(within(panel).getByRole('slider', { name: '水平旋转' }), {
+      target: { value: '-45' },
+    });
+    fireEvent.change(within(panel).getByRole('slider', { name: '镜头推进' }), {
+      target: { value: '3' },
+    });
+    fireEvent.change(within(panel).getByRole('slider', { name: '垂直视角' }), {
+      target: { value: '-0.5' },
+    });
+    fireEvent.click(within(panel).getByRole('checkbox', { name: '广角镜头' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '1' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '开始生成' }));
+
+    expect(latestState.jobs).toHaveLength(1);
+    expect(latestState.jobs[0]).toMatchObject({
+      profileId: 'angle',
+      outputCount: 1,
+      inputSnapshot: {
+        prompt: '',
+        parameters: {
+          horizontalAngle: -45,
+          moveForward: 3,
+          verticalView: -0.5,
+          wideAngle: true,
+        },
+      },
+    });
+    expect(latestState.jobs[0].inputSnapshot.parameters).not.toHaveProperty('distance');
+    expect(latestState.jobs[0].inputSnapshot.parameters).not.toHaveProperty('verticalAngle');
+  });
+
+  it('runs a non-angle image job through Fal and settles the real image once', async () => {
+    falClientMocks.runFalImageJob.mockImplementationOnce(async (_input, options) => {
+      options.onExecution?.({ requestId: 'req-live-1', modelId: 'fal-ai/bria/product-shot' });
+      options.onProgress?.(55);
+      options.onProgress?.(94);
+      return {
+        images: [{ url: 'https://fal.media/live-generate.png', width: 1024, height: 1280 }],
+        seed: 91,
+        modelId: 'fal-ai/bria/product-shot',
+        childRequestIds: ['req-child-1'],
+      };
+    });
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '生成' }));
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+
+    await waitFor(() => expect(latestState.jobs[0]?.status).toBe('succeeded'));
+    expect(falClientMocks.runFalImageJob).toHaveBeenCalledTimes(1);
+    expect(falClientMocks.runFalImageJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profileId: 'generate',
+        imageUrls: ['/demo-assets/pias-product-source.png'],
+        outputCount: 1,
+        parameters: { sceneTemplate: '日光展台', quality: '精细' },
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(latestState.jobs[0]).toMatchObject({
+      status: 'succeeded',
+      externalExecution: { requestId: 'req-live-1', modelId: 'fal-ai/bria/product-shot' },
+    });
+    expect(latestState.results).toEqual([
+      expect.objectContaining({
+        imageUrl: 'https://fal.media/live-generate.png',
+        width: 1024,
+        height: 1280,
+        generationMetadata: expect.objectContaining({ requestId: 'req-live-1', seed: 91 }),
+      }),
+    ]);
+  });
+
+  it('fails a rejected Fal image job and releases its reserve', async () => {
+    falClientMocks.runFalImageJob.mockRejectedValueOnce(new Error('Fal 服务暂时不可用'));
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '多角度' }));
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+
+    await waitFor(() => expect(latestState.jobs[0]?.status).toBe('failed'));
+    expect(latestState.jobs[0].errorMessage).toBe('Fal 服务暂时不可用');
+    expect(latestState.results).toHaveLength(0);
+    expect(latestState.usage).toMatchObject({ frozenCredits: 0, spentCredits: 0 });
+  });
+
+  it('aborts a running Fal image request when the local task is canceled', async () => {
+    falClientMocks.runFalImageJob.mockImplementationOnce((_input, options) => (
+      new Promise((_resolve, reject) => {
+        options.onExecution?.({ requestId: 'req-cancel-1', modelId: 'fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles' });
+        options.signal?.addEventListener('abort', () => {
+          reject(new DOMException('任务已取消', 'AbortError'));
+        }, { once: true });
+      })
+    ));
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '多角度' }));
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+    await waitFor(() => expect(latestState.jobs[0]?.externalExecution?.requestId).toBe('req-cancel-1'));
+    fireEvent.click(screen.getByRole('button', { name: /任务队列/ }));
+    fireEvent.click(screen.getByRole('button', { name: '取消任务' }));
+
+    await waitFor(() => expect(latestState.jobs[0]?.status).toBe('canceled'));
+    expect(latestState.results).toHaveLength(0);
+    expect(latestState.usage.frozenCredits).toBe(0);
   });
 
   it('synchronizes the light direction overlay with the tool controls', () => {
@@ -767,6 +1075,20 @@ describe('workbench canvas', () => {
     expect(screen.getByRole('button', { name: '融图' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('brings the selected node into view when an image-surface tool opens', () => {
+    reactFlowMocks.fitView.mockClear();
+    render(<WorkbenchHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '扩图' }));
+
+    expect(reactFlowMocks.fitView).toHaveBeenCalledWith({
+      duration: 260,
+      maxZoom: 1,
+      nodes: [{ id: 'scene:scene-source' }],
+      padding: { top: '64px', right: '376px', bottom: '64px', left: '24px' },
+    });
+  });
+
   it('moves keyboard focus into the parameter dialog and returns it to its tool trigger on Escape', () => {
     render(<WorkbenchHarness />);
     const toolButton = screen.getByRole('button', { name: '融图' });
@@ -932,6 +1254,7 @@ describe('workbench canvas', () => {
   });
 
   it('runs a task and exposes cancellation while it is queued', () => {
+    falClientMocks.runFalImageJob.mockImplementationOnce(() => new Promise(() => undefined));
     render(<WorkbenchHarness />);
     fireEvent.click(screen.getByRole('button', { name: '生成' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
@@ -957,31 +1280,32 @@ describe('workbench canvas', () => {
   });
 
   it('moves through queue, generation, detail, and completion stages', async () => {
-    vi.useFakeTimers();
+    let advanceToDetail: (() => void) | undefined;
+    let completeRequest: (() => void) | undefined;
+    falClientMocks.runFalImageJob.mockImplementationOnce((_input, options) => (
+      new Promise((resolve) => {
+        options.onExecution?.({ requestId: 'req-stages', modelId: 'fal-ai/bria/product-shot' });
+        options.onProgress?.(36);
+        advanceToDetail = () => options.onProgress?.(78);
+        completeRequest = () => resolve({
+          images: [{ url: 'https://fal.media/stages.png', width: 1024, height: 1024 }],
+          seed: 17,
+          modelId: 'fal-ai/bria/product-shot',
+          childRequestIds: ['req-stages-child'],
+        });
+      })
+    ));
 
-    try {
-      render(<WorkbenchHarness />);
-      fireEvent.click(screen.getByRole('button', { name: '生成' }));
-      fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
-      expect(screen.getAllByText('等待调度').length).toBeGreaterThan(0);
+    render(<WorkbenchHarness />);
+    fireEvent.click(screen.getByRole('button', { name: '生成' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+    await waitFor(() => expect(screen.getAllByText('正在生成').length).toBeGreaterThan(0));
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(900);
-      });
-      expect(screen.getAllByText('正在生成').length).toBeGreaterThan(0);
+    await act(async () => advanceToDetail?.());
+    expect(screen.getAllByText('优化细节').length).toBeGreaterThan(0);
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2700);
-      });
-      expect(screen.getAllByText('优化细节').length).toBeGreaterThan(0);
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2800);
-      });
-      expect(screen.getAllByText('已完成').length).toBeGreaterThan(0);
-    } finally {
-      vi.useRealTimers();
-    }
+    await act(async () => completeRequest?.());
+    await waitFor(() => expect(screen.getAllByText('已完成').length).toBeGreaterThan(0));
   });
 
   it('creates a derived branch and snapshots inputs when a tool runs from a selected result', () => {
@@ -998,9 +1322,6 @@ describe('workbench canvas', () => {
     fireEvent.click(screen.getByRole('button', { name: '定向光' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
       target: { value: '右上方柔光，保留瓶身标签' },
-    });
-    fireEvent.change(screen.getByRole('combobox', { name: '画面比例' }), {
-      target: { value: '4:5' },
     });
     fireEvent.change(screen.getByRole('slider', { name: '光线强度' }), {
       target: { value: '72' },
@@ -1021,7 +1342,7 @@ describe('workbench canvas', () => {
         inputNodeId: settled.results[0].id,
         sourceResultId: settled.results[0].id,
         prompt: '右上方柔光，保留瓶身标签',
-        ratio: '4:5',
+        ratio: '1:1',
         parameters: { lightIntensity: 72 },
       },
     });
@@ -1111,6 +1432,7 @@ describe('workbench canvas', () => {
   });
 
   it('allows failed tasks to be retried from the task tray', () => {
+    falClientMocks.runFalImageJob.mockImplementationOnce(() => new Promise(() => undefined));
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source',
       profileId: 'generate',

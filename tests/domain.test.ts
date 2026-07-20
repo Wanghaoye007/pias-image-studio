@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  attachExternalJob,
   approveResult,
   buildExportFilename,
   buildResultManifest,
   cancelJob,
   completeJob,
+  completeJobWithResults,
   createBlankScene,
   createDerivedScene,
   createJob,
@@ -25,6 +27,7 @@ import {
   toggleResultFavorite,
   updateJobProgress,
 } from '../src/domain';
+import { FAL_MULTIPLE_ANGLES_MODEL } from '../src/fal/multipleAngles';
 
 describe('Image Studio domain flow', () => {
   it('freezes estimated usage when a generation job is accepted', () => {
@@ -52,6 +55,29 @@ describe('Image Studio domain flow', () => {
     });
     expect(next.usage.availableCredits).toBe(1928);
     expect(next.usage.frozenCredits).toBe(72);
+  });
+
+  it('keeps a remove mask in the job snapshot without copying it into result metadata', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'remove',
+      outputCount: 1,
+      maskImageUrl: 'data:image/png;base64,TUFTSw==',
+      parameters: { brushSize: 42 },
+    });
+    expect(queued.jobs[0].inputSnapshot.maskImageUrl).toBe('data:image/png;base64,TUFTSw==');
+
+    const attached = attachExternalJob(queued, queued.jobs[0].id, {
+      provider: 'fal',
+      modelId: 'fal-ai/bria/eraser',
+      requestId: 'fal-local-remove',
+    });
+    const settled = completeJobWithResults(attached, attached.jobs[0].id, {
+      actualCredits: 12,
+      images: [{ url: 'https://fal.media/removed.png', width: 512, height: 512 }],
+    });
+    expect(settled.results[0].generationMetadata?.parameters).toEqual({ brushSize: 42 });
+    expect(settled.results[0].generationMetadata?.parameters).not.toHaveProperty('maskImageUrl');
   });
 
   it('settles actual usage, creates results, and releases unused reserve on completion', () => {
@@ -401,7 +427,7 @@ describe('Image Studio domain flow', () => {
   it('defines Chinese labels for every workbench tool', () => {
     expect(getProfile('generate').label).toBe('生成');
     expect(getProfile('blend').label).toBe('融图');
-    expect(getProfile('angle').label).toBe('快速视角');
+    expect(getProfile('angle').label).toBe('多角度');
     expect(getProfile('remove').label).toBe('去除');
     expect(getProfile('extract').label).toBe('抠图');
     expect(getProfile('light').label).toBe('定向光');
@@ -675,5 +701,92 @@ describe('Image Studio domain flow', () => {
       reviewStatus: 'approved',
     })]);
     expect(() => buildResultManifest(settled, ['result-1'])).toThrow('清单只能包含审核通过结果');
+  });
+
+  it('attaches a Fal request and settles a real multiple-angles image', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'angle',
+      outputCount: 1,
+      ratio: '4:5',
+      parameters: {
+        horizontalAngle: 45,
+        moveForward: 2,
+        verticalView: 0,
+        wideAngle: false,
+      },
+    });
+    const attached = attachExternalJob(queued, queued.jobs[0].id, {
+      provider: 'fal',
+      modelId: FAL_MULTIPLE_ANGLES_MODEL,
+      requestId: 'req-1',
+    });
+    const settled = completeJobWithResults(attached, attached.jobs[0].id, {
+      actualCredits: 22,
+      seed: 123,
+      images: [{
+        url: 'https://fal.media/result.png',
+        width: 1024,
+        height: 1280,
+      }],
+    });
+
+    expect(attached.jobs[0].externalExecution).toEqual({
+      provider: 'fal',
+      modelId: FAL_MULTIPLE_ANGLES_MODEL,
+      requestId: 'req-1',
+    });
+    expect(settled.results[0]).toMatchObject({
+      title: '多角度 1',
+      imageUrl: 'https://fal.media/result.png',
+      width: 1024,
+      height: 1280,
+      generationMetadata: {
+        provider: 'fal',
+        modelId: FAL_MULTIPLE_ANGLES_MODEL,
+        requestId: 'req-1',
+        seed: 123,
+        parameters: {
+          horizontalAngle: 45,
+          moveForward: 2,
+          verticalView: 0,
+          wideAngle: false,
+        },
+      },
+    });
+    expect(settled.jobs[0]).toMatchObject({ status: 'succeeded', progress: 100, actualCredits: 22 });
+    expect(settled.usage).toMatchObject({ frozenCredits: 0, spentCredits: 22 });
+    expect(settled.auditEvents.at(-1)).toMatchObject({
+      type: 'job.succeeded',
+      details: {
+        provider: 'fal',
+        modelId: FAL_MULTIPLE_ANGLES_MODEL,
+        requestId: 'req-1',
+      },
+    });
+  });
+
+  it('rejects missing request metadata, empty Fal results, and repeated external settlement', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'angle', outputCount: 1,
+    });
+    expect(() => attachExternalJob(queued, queued.jobs[0].id, {
+      provider: 'fal', modelId: '', requestId: 'req-1',
+    })).toThrow('外部模型');
+    expect(() => completeJobWithResults(queued, queued.jobs[0].id, {
+      actualCredits: 0, images: [],
+    })).toThrow('可用结果');
+
+    const attached = attachExternalJob(queued, queued.jobs[0].id, {
+      provider: 'fal', modelId: FAL_MULTIPLE_ANGLES_MODEL, requestId: 'req-1',
+    });
+    const settled = completeJobWithResults(attached, attached.jobs[0].id, {
+      actualCredits: 22,
+      images: [{ url: 'https://fal.media/result.png' }],
+    });
+    expect(() => completeJobWithResults(settled, settled.jobs[0].id, {
+      actualCredits: 22,
+      images: [{ url: 'https://fal.media/duplicate.png' }],
+    })).toThrow('重复');
   });
 });

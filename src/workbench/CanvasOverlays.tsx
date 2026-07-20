@@ -1,4 +1,10 @@
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 
 export type LightDirection =
   | 'top-left'
@@ -105,12 +111,21 @@ export function LightOverlay({
 export function ExpandOverlay({
   ratio,
   scale,
+  anchor,
+  onAnchorChange,
 }: {
   ratio: string;
   scale: number;
+  anchor: ExpandAnchor;
+  onAnchorChange?: (anchor: ExpandAnchor) => void;
 }) {
+  const selected = expandAnchors.find((item) => item.id === anchor) ?? expandAnchors[4];
   const style = {
     '--expand-scale': `${Math.min(100, Math.max(36, scale))}%`,
+    '--expand-x': `${selected.x}%`,
+    '--expand-y': `${selected.y}%`,
+    '--expand-shift-x': `${-selected.x}%`,
+    '--expand-shift-y': `${-selected.y}%`,
   } as CSSProperties;
 
   return (
@@ -118,16 +133,139 @@ export function ExpandOverlay({
       aria-label="扩图构图区域"
       className="expand-overlay nodrag"
       data-overlay="expand"
+      data-anchor={selected.id}
       data-ratio={ratio}
       data-scale={scale}
       style={style}
     >
       <span aria-hidden="true" className="expand-overlay__original" />
       <div aria-label="扩图范围网格" className="expand-overlay__grid">
-        {Array.from({ length: 9 }, (_, index) => (
-          <span aria-label={`扩图区域 ${index + 1}`} key={index} />
+        {expandAnchors.map((item) => (
+          <button
+            aria-label={`扩图锚点 ${item.label}`}
+            aria-pressed={item.id === selected.id}
+            key={item.id}
+            onClick={() => onAnchorChange?.(item.id)}
+            type="button"
+          />
         ))}
       </div>
+    </div>
+  );
+}
+
+export type ExpandAnchor =
+  | 'top-left' | 'top' | 'top-right'
+  | 'left' | 'center' | 'right'
+  | 'bottom-left' | 'bottom' | 'bottom-right';
+
+const expandAnchors: Array<{ id: ExpandAnchor; label: string; x: number; y: number }> = [
+  { id: 'top-left', label: '左上', x: 0, y: 0 },
+  { id: 'top', label: '上方', x: 50, y: 0 },
+  { id: 'top-right', label: '右上', x: 100, y: 0 },
+  { id: 'left', label: '左侧', x: 0, y: 50 },
+  { id: 'center', label: '居中', x: 50, y: 50 },
+  { id: 'right', label: '右侧', x: 100, y: 50 },
+  { id: 'bottom-left', label: '左下', x: 0, y: 100 },
+  { id: 'bottom', label: '下方', x: 50, y: 100 },
+  { id: 'bottom-right', label: '右下', x: 100, y: 100 },
+];
+
+export function RemoveMaskOverlay({
+  brushSize,
+  maskImageUrl,
+  onMaskChange,
+}: {
+  brushSize: number;
+  maskImageUrl?: string;
+  onMaskChange?: (maskImageUrl: string) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawingRef = useRef(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const [sourceSize, setSourceSize] = useState({ width: 1024, height: 1024 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const sourceImage = canvas?.closest('.canvas-node')?.querySelector<HTMLImageElement>(':scope > img');
+    if (!sourceImage) return;
+    const syncSize = () => {
+      if (sourceImage.naturalWidth > 0 && sourceImage.naturalHeight > 0) {
+        setSourceSize({ width: sourceImage.naturalWidth, height: sourceImage.naturalHeight });
+      }
+    };
+    syncSize();
+    sourceImage.addEventListener('load', syncSize);
+    return () => sourceImage.removeEventListener('load', syncSize);
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    context.fillStyle = '#000000';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    if (!maskImageUrl) return;
+    const image = new Image();
+    image.onload = () => context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    image.src = maskImageUrl;
+  }, [maskImageUrl, sourceSize.height, sourceSize.width]);
+
+  const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return null;
+    return {
+      x: (event.clientX - bounds.left) * canvas.width / bounds.width,
+      y: (event.clientY - bounds.top) * canvas.height / bounds.height,
+    };
+  };
+
+  const drawTo = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget;
+    const context = canvas.getContext('2d');
+    const point = pointFromEvent(event);
+    if (!context || !point) return;
+    const previous = lastPointRef.current ?? point;
+    context.strokeStyle = '#ffffff';
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.lineWidth = Math.max(8, brushSize) * 4;
+    context.beginPath();
+    context.moveTo(previous.x, previous.y);
+    context.lineTo(point.x, point.y);
+    context.stroke();
+    lastPointRef.current = point;
+  };
+
+  return (
+    <div aria-label="去除蒙版编辑" className="remove-mask-overlay nodrag" data-overlay="remove">
+      <canvas
+        aria-label="去除蒙版画布"
+        height={sourceSize.height}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          drawingRef.current = true;
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+          lastPointRef.current = pointFromEvent(event);
+          drawTo(event);
+        }}
+        onPointerMove={(event) => {
+          if (!drawingRef.current) return;
+          event.stopPropagation();
+          drawTo(event);
+        }}
+        onPointerUp={(event) => {
+          if (!drawingRef.current) return;
+          event.stopPropagation();
+          drawTo(event);
+          drawingRef.current = false;
+          lastPointRef.current = null;
+          onMaskChange?.(event.currentTarget.toDataURL('image/png'));
+        }}
+        ref={canvasRef}
+        width={sourceSize.width}
+      />
     </div>
   );
 }
@@ -141,7 +279,7 @@ export function AnglePreview({
 }) {
   const style = {
     '--angle-horizontal': `${horizontal}deg`,
-    '--angle-elevation': `${Math.max(-30, Math.min(45, vertical))}%`,
+    '--angle-elevation': `${Math.max(-1, Math.min(1, vertical)) * 34}%`,
   } as CSSProperties;
 
   return (

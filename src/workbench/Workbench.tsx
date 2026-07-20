@@ -26,15 +26,17 @@ import {
   type SetStateAction,
 } from 'react';
 import {
+  attachExternalJob,
   buildExportFilename,
   cancelJob,
-  completeJob,
+  completeJobWithResults,
   createBlankScene,
   createDerivedScene,
   createJob,
   createSceneFromAsset,
   deleteScene,
   duplicateScene,
+  failJob,
   getNextSceneId,
   getProfile,
   moveCanvasItem,
@@ -59,6 +61,7 @@ import {
   type TaskParameters,
   type TaskProfileId,
 } from '../domain';
+import { runFalImageJob } from '../fal/falImageClient';
 import {
   downloadProductionDelivery,
   downloadWatermarkedPreview,
@@ -111,27 +114,27 @@ const defaultToolParameters: TaskParameters = {
   lightIntensity: 60,
   lightDirection: 'top-right',
   lightTemperature: 5200,
-  blendStrength: 50,
+  productPlacement: 'bottom_center',
   horizontalAngle: 0,
-  verticalAngle: 0,
-  distance: 50,
-  expandDirection: '四周',
+  moveForward: 0,
+  verticalView: 0,
+  wideAngle: false,
+  expandAnchor: 'center',
   expandScale: 72,
   upscaleSize: '2048',
   detailLevel: 60,
   brushSize: 42,
-  edgePrecision: 72,
 };
 
 function parametersForTool(tool: TaskProfileId, parameters: TaskParameters): TaskParameters {
   const parameterKeys: Record<TaskProfileId, string[]> = {
     generate: ['sceneTemplate', 'quality'],
-    blend: ['blendStrength'],
-    angle: ['horizontalAngle', 'verticalAngle', 'distance'],
+    blend: ['productPlacement'],
+    angle: ['horizontalAngle', 'moveForward', 'verticalView', 'wideAngle'],
     light: ['lightDirection', 'lightIntensity', 'lightTemperature'],
     remove: ['brushSize'],
-    extract: ['edgePrecision'],
-    expand: ['expandDirection', 'expandScale'],
+    extract: [],
+    expand: ['expandAnchor', 'expandScale'],
     upscale: ['upscaleSize', 'detailLevel'],
   };
   return Object.fromEntries(parameterKeys[tool]
@@ -168,7 +171,7 @@ export function Workbench(props: WorkbenchProps) {
 }
 
 function WorkbenchContent({ state, setState }: WorkbenchProps) {
-  const { fitView, screenToFlowPosition } = useReactFlow();
+  const { fitView, getViewport, screenToFlowPosition, setViewport } = useReactFlow();
   const [interaction, dispatchInteraction] = useReducer(
     reduceWorkbenchInteraction,
     `scene:${state.selectedSceneId}`,
@@ -191,6 +194,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   const [outputCount, setOutputCount] = useState(getProfile(state.selectedTool).defaultOutputs);
   const [ratio, setRatio] = useState('1:1');
   const [toolParameters, setToolParameters] = useState<TaskParameters>(defaultToolParameters);
+  const [removeMaskImageUrl, setRemoveMaskImageUrl] = useState('');
   const [referenceAssetId, setReferenceAssetId] = useState(
     state.assets.find((asset) => asset.id === 'asset-scene')?.id ?? state.assets[0]?.id ?? '',
   );
@@ -202,18 +206,24 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   const [compareOpen, setCompareOpen] = useState(false);
   const [inspectedResultId, setInspectedResultId] = useState<string | null>(null);
   const [exportResultId, setExportResultId] = useState<string | null>(null);
-  const scheduledJobTimers = useRef(new Map<string, number[]>());
+  const falJobControllers = useRef(new Map<string, AbortController>());
+  const falExecutorMounted = useRef(true);
   const toolTriggerRef = useRef<HTMLButtonElement | null>(null);
   const canvasStageRef = useRef<HTMLElement | null>(null);
   const userRevisionRef = useRef(0);
   const pendingFocusRef = useRef<{ nodeIds: string[]; revision: number } | null>(null);
   const completedFocusRef = useRef<{ jobId: string; revision: number } | null>(null);
 
-  useEffect(() => () => {
-    scheduledJobTimers.current.forEach((timeoutIds) => {
-      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
-    });
-    scheduledJobTimers.current.clear();
+  useEffect(() => {
+    falExecutorMounted.current = true;
+    return () => {
+      falExecutorMounted.current = false;
+      queueMicrotask(() => {
+        if (falExecutorMounted.current) return;
+        falJobControllers.current.forEach((controller) => controller.abort());
+        falJobControllers.current.clear();
+      });
+    };
   }, []);
 
   useEffect(() => {
@@ -230,44 +240,92 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     setNodeDialog(null);
   }, [selectedNodeId]);
 
-  const scheduleJob = useCallback((jobId: string, successfulOutputs: number, actualCredits: number) => {
-    if (scheduledJobTimers.current.has(jobId)) return;
-
-    const timeoutIds: number[] = [];
-    const requestRevision = userRevisionRef.current;
-    scheduledJobTimers.current.set(jobId, timeoutIds);
-    timeoutIds.push(window.setTimeout(() => {
-      setState((current) => updateJobProgress(current, jobId, 36));
-    }, 900));
-    timeoutIds.push(window.setTimeout(() => {
-      setState((current) => updateJobProgress(current, jobId, 78));
-    }, 3600));
-    timeoutIds.push(window.setTimeout(() => {
-      setState((current) => updateJobProgress(current, jobId, 94));
-    }, 5400));
-    timeoutIds.push(window.setTimeout(() => {
-      completedFocusRef.current = { jobId, revision: requestRevision };
-      setState((current) => {
-        const job = current.jobs.find((item) => item.id === jobId);
-        if (!job || terminalStatuses.has(job.status)) return current;
-        return completeJob(current, jobId, { successfulOutputs, actualCredits });
-      });
-      scheduledJobTimers.current.delete(jobId);
-    }, 6400));
-  }, [setState]);
-
   useEffect(() => {
     state.jobs.forEach((job) => {
       if (job.status !== 'queued' && job.status !== 'running') return;
-      scheduleJob(job.id, job.outputCount, job.reservedCredits);
+      if (falJobControllers.current.has(job.id)) return;
+
+      const scene = state.scenes.find((item) => item.id === job.sceneId);
+      const imageUrl = scene?.imageUrl;
+      if (!imageUrl) {
+        setState((current) => {
+          const currentJob = current.jobs.find((item) => item.id === job.id);
+          return !currentJob || terminalStatuses.has(currentJob.status)
+            ? current
+            : failJob(current, job.id, '无法读取任务输入图片');
+        });
+        return;
+      }
+
+      const referenceUrls = job.inputSnapshot.referenceAssetIds
+        .map((assetId) => state.assets.find((asset) => asset.id === assetId)?.imageUrl)
+        .filter((url): url is string => Boolean(url));
+      const sourceResult = scene?.sourceResultId
+        ? state.results.find((result) => result.id === scene.sourceResultId)
+        : undefined;
+
+      const controller = new AbortController();
+      falJobControllers.current.set(job.id, controller);
+      void runFalImageJob({
+        profileId: job.profileId,
+        imageUrls: [imageUrl, ...referenceUrls],
+        prompt: job.inputSnapshot.prompt,
+        ratio: job.inputSnapshot.ratio,
+        outputCount: job.outputCount,
+        parameters: job.inputSnapshot.parameters,
+        ...(job.inputSnapshot.maskImageUrl
+          ? { maskImageUrl: job.inputSnapshot.maskImageUrl }
+          : {}),
+        sourceWidth: sourceResult?.width ?? 512,
+        sourceHeight: sourceResult?.height ?? 512,
+      }, {
+        signal: controller.signal,
+        onExecution: ({ requestId, modelId }) => {
+          setState((current) => {
+            const currentJob = current.jobs.find((item) => item.id === job.id);
+            if (!currentJob || terminalStatuses.has(currentJob.status)) return current;
+            return attachExternalJob(current, job.id, {
+              provider: 'fal',
+              modelId,
+              requestId,
+            });
+          });
+        },
+        onProgress: (progress) => {
+          setState((current) => updateJobProgress(current, job.id, progress));
+        },
+      }).then((result) => {
+        completedFocusRef.current = { jobId: job.id, revision: userRevisionRef.current };
+        setState((current) => {
+          const currentJob = current.jobs.find((item) => item.id === job.id);
+          if (!currentJob || terminalStatuses.has(currentJob.status)) return current;
+          return completeJobWithResults(current, job.id, {
+            images: result.images,
+            actualCredits: currentJob.reservedCredits,
+            ...(result.seed !== undefined ? { seed: result.seed } : {}),
+          });
+        });
+      }).catch((error: unknown) => {
+        setState((current) => {
+          const currentJob = current.jobs.find((item) => item.id === job.id);
+          if (!currentJob || terminalStatuses.has(currentJob.status)) return current;
+          const message = error instanceof Error && error.name !== 'AbortError'
+            ? error.message
+            : `${getProfile(job.profileId).label}任务已取消`;
+          return failJob(current, job.id, message);
+        });
+      }).finally(() => {
+        falJobControllers.current.delete(job.id);
+      });
     });
-  }, [scheduleJob, state.jobs]);
+  }, [setState, state.assets, state.jobs, state.results, state.scenes]);
 
   const runJob = useCallback((input: RunJobInput) => {
     setState((current) => createJob(current, input));
   }, [setState]);
 
   const handleCancel = useCallback((jobId: string) => {
+    falJobControllers.current.get(jobId)?.abort();
     setState((current) => {
       const job = current.jobs.find((item) => item.id === jobId);
       if (!job || terminalStatuses.has(job.status)) return current;
@@ -333,7 +391,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     setCanvasNotice({ message: '不可用原因已记录，不会用于模型训练', tone: 'success' });
   }, [setState]);
 
-  const handleParameterChange = useCallback((key: string, value: string | number) => {
+  const handleParameterChange = useCallback((key: string, value: string | number | boolean) => {
     setToolParameters((current) => ({ ...current, [key]: value }));
   }, []);
 
@@ -416,6 +474,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     setPrompt('');
     setRatio('1:1');
     setToolParameters(defaultToolParameters);
+    setRemoveMaskImageUrl('');
     dispatchInteraction({ type: 'SELECT_DRAFT_TOOL', tool });
   }, []);
 
@@ -437,29 +496,51 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
       mode: interaction.mode,
       parameters: toolParameters,
       ratio,
+      maskImageUrl: removeMaskImageUrl,
       dropTargetNodeId: dragTargetNodeId,
       compareResultIds,
       draftNode: interaction.draftNode,
       onCancelDraft: cancelDraftNode,
       onParameterChange: handleParameterChange,
+      onMaskChange: setRemoveMaskImageUrl,
     },
-  ), [activeTool, cancelDraftNode, compareResultIds, dragTargetNodeId, handleCreateNode, handleDerive, handleOpenDetails, handleParameterChange, handleSetPrimary, handleSubmitReview, handleToggleAdoption, handleToggleCompare, handleToggleFavorite, interaction.draftNode, interaction.mode, ratio, selectedNodeId, state, toolParameters]);
+  ), [activeTool, cancelDraftNode, compareResultIds, dragTargetNodeId, handleCreateNode, handleDerive, handleOpenDetails, handleParameterChange, handleSetPrimary, handleSubmitReview, handleToggleAdoption, handleToggleCompare, handleToggleFavorite, interaction.draftNode, interaction.mode, ratio, removeMaskImageUrl, selectedNodeId, state, toolParameters]);
 
   const handleToolSelect = (tool: TaskProfileId, trigger: HTMLButtonElement) => {
     markUserGesture();
     toolTriggerRef.current = trigger;
     setState((current) => setSelectedTool(current, tool));
     setOutputCount(getProfile(tool).defaultOutputs);
+    setRemoveMaskImageUrl('');
     dispatchInteraction({ type: 'OPEN_TOOL', tool });
 
     const stageBounds = canvasStageRef.current?.getBoundingClientRect();
     const nodeElement = Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node'))
       .find((element) => element.dataset.id === selectedNodeId);
     const nodeBounds = nodeElement?.getBoundingClientRect();
+    let panelPlacement = interaction.panelPlacement;
     if (stageBounds && nodeBounds) {
+      panelPlacement = choosePanelPlacement(nodeBounds, stageBounds, { width: 336, height: 600 }, 16);
       dispatchInteraction({
         type: 'SET_PANEL_PLACEMENT',
-        placement: choosePanelPlacement(nodeBounds, stageBounds, { width: 336, height: 600 }, 16),
+        placement: panelPlacement,
+      });
+    }
+    if (selectedNodeId) {
+      void fitView({
+        duration: 260,
+        maxZoom: 1,
+        nodes: [{ id: selectedNodeId }],
+        padding: panelPlacement === 'left'
+          ? { top: '64px', right: '24px', bottom: '64px', left: '376px' }
+          : { top: '64px', right: '376px', bottom: '64px', left: '24px' },
+      }).then((didFit) => {
+        if (!didFit) return;
+        const viewport = getViewport();
+        void setViewport({
+          ...viewport,
+          x: viewport.x + (panelPlacement === 'left' ? 72 : -72),
+        }, { duration: 120 });
       });
     }
   };
@@ -694,6 +775,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
         prompt,
         ratio,
         parameters: parametersForTool(runTool, toolParameters),
+        maskImageUrl: runTool === 'remove' ? removeMaskImageUrl : undefined,
         referenceAssetIds: runTool === 'blend' && referenceAssetId
           ? [referenceAssetId]
           : [],
@@ -701,7 +783,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
         position: draftPosition,
       });
     });
-  }, [interaction.activeTool, interaction.draftNode, outputCount, prompt, ratio, referenceAssetId, selectedNodeId, setState, state.jobs.length, state.scenes.length, state.selectedTool, toolParameters]);
+  }, [interaction.activeTool, interaction.draftNode, outputCount, prompt, ratio, referenceAssetId, removeMaskImageUrl, selectedNodeId, setState, state.jobs.length, state.scenes.length, state.selectedTool, toolParameters]);
 
   useEffect(() => {
     const request = pendingFocusRef.current;
@@ -854,14 +936,16 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
           results={state.results}
         />
         <ToolPalette activeTool={activeTool} onSelect={handleToolSelect} />
-        <CanvasCommandBar
-          hasSelectedScene={Boolean(commandScene)}
-          onCreate={handleCreateBlankScene}
-          onDelete={handleRequestDelete}
-          onDuplicate={handleDuplicateScene}
-          onFit={handleFitAll}
-          onRename={handleRequestRename}
-        />
+        {!interaction.panelOpen && (
+          <CanvasCommandBar
+            hasSelectedScene={Boolean(commandScene)}
+            onCreate={handleCreateBlankScene}
+            onDelete={handleRequestDelete}
+            onDuplicate={handleDuplicateScene}
+            onFit={handleFitAll}
+            onRename={handleRequestRename}
+          />
+        )}
         {interaction.mode === 'choosing-node-type' && interaction.draftNode && (
           <NodeTypePicker
             onClose={cancelDraftNode}
@@ -880,11 +964,13 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
             onClose={handlePanelClose}
             onOutputCountChange={setOutputCount}
             onParameterChange={handleParameterChange}
+            onClearRemoveMask={() => setRemoveMaskImageUrl('')}
             onPromptChange={setPrompt}
             onReferenceAssetChange={setReferenceAssetId}
             onRatioChange={setRatio}
             onRun={handleRunSelected}
             outputCount={outputCount}
+            hasRemoveMask={Boolean(removeMaskImageUrl)}
             parameters={toolParameters}
             placement={interaction.panelPlacement}
             prompt={prompt}

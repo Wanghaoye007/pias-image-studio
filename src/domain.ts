@@ -23,7 +23,7 @@ export type ExportSpec = {
 export type CanvasNodeKind = 'scene' | 'job' | 'result';
 export type CanvasPosition = { x: number; y: number };
 export type JobInputKind = 'scene' | 'result';
-export type TaskParameters = Record<string, string | number>;
+export type TaskParameters = Record<string, string | number | boolean>;
 export type TaskProfileId =
   | 'generate' | 'blend' | 'angle' | 'light'
   | 'remove' | 'extract' | 'expand' | 'upscale';
@@ -80,7 +80,14 @@ export type GenerationJob = {
   x: number;
   y: number;
   inputSnapshot: JobInputSnapshot;
+  externalExecution?: ExternalExecution;
   errorMessage?: string;
+};
+
+export type ExternalExecution = {
+  provider: 'fal';
+  modelId: string;
+  requestId: string;
 };
 
 export type JobInputSnapshot = {
@@ -90,6 +97,7 @@ export type JobInputSnapshot = {
   ratio: string;
   parameters: TaskParameters;
   referenceAssetIds: string[];
+  maskImageUrl?: string;
   sourceAssetId?: string;
   sourceAssetVersion?: string;
   sourceResultId?: string;
@@ -117,6 +125,12 @@ export type Result = {
   width?: number;
   height?: number;
   createdAt?: string;
+  generationMetadata?: ResultGenerationMetadata;
+};
+
+export type ResultGenerationMetadata = ExternalExecution & {
+  seed?: number;
+  parameters: TaskParameters;
 };
 
 export type ResultManifestEntry = {
@@ -165,10 +179,10 @@ export type StudioState = {
 export const taskProfiles: TaskProfile[] = [
   { id: 'generate', label: '生成', description: '生成', labelJa: '生成', costPerOutput: 15, defaultOutputs: 4, accent: '#2f6fed' },
   { id: 'blend', label: '融图', description: '融图', labelJa: '融图', costPerOutput: 18, defaultOutputs: 4, accent: '#0b8a74' },
-  { id: 'angle', label: '快速视角', description: '快速视角', labelJa: '快速视角', costPerOutput: 22, defaultOutputs: 4, accent: '#7a5c2e' },
+  { id: 'angle', label: '多角度', description: '多角度', labelJa: '多角度', costPerOutput: 22, defaultOutputs: 4, accent: '#7a5c2e' },
   { id: 'light', label: '定向光', description: '定向光', labelJa: '定向光', costPerOutput: 14, defaultOutputs: 4, accent: '#d58a00' },
-  { id: 'remove', label: '去除', description: '去除', labelJa: '去除', costPerOutput: 12, defaultOutputs: 4, accent: '#bd3f3f' },
-  { id: 'extract', label: '抠图', description: '抠图', labelJa: '抠图', costPerOutput: 12, defaultOutputs: 4, accent: '#39525f' },
+  { id: 'remove', label: '去除', description: '去除', labelJa: '去除', costPerOutput: 12, defaultOutputs: 1, accent: '#bd3f3f' },
+  { id: 'extract', label: '抠图', description: '抠图', labelJa: '抠图', costPerOutput: 12, defaultOutputs: 1, accent: '#39525f' },
   { id: 'expand', label: '扩图', description: '扩图', labelJa: '扩图', costPerOutput: 12, defaultOutputs: 4, accent: '#bd3f3f' },
   { id: 'upscale', label: '超分', description: '超分', labelJa: '超分', costPerOutput: 12, defaultOutputs: 1, accent: '#39525f' },
 ];
@@ -265,6 +279,7 @@ export function createJob(
     ratio?: string;
     parameters?: TaskParameters;
     referenceAssetIds?: string[];
+    maskImageUrl?: string;
     sourceResultId?: string;
     position?: CanvasPosition;
   },
@@ -321,6 +336,7 @@ export function createJob(
       ratio: input.ratio ?? '1:1',
       parameters: { ...(input.parameters ?? {}) },
       referenceAssetIds,
+      ...(input.maskImageUrl ? { maskImageUrl: input.maskImageUrl } : {}),
       ...(source.sourceAssetId ? { sourceAssetId: source.sourceAssetId } : {}),
       ...(source.sourceAssetVersion ? { sourceAssetVersion: source.sourceAssetVersion } : {}),
       ...(input.sourceResultId ? { sourceResultId: input.sourceResultId } : {}),
@@ -542,29 +558,49 @@ export function updateJobProgress(state: StudioState, jobId: string, progress: n
   };
 }
 
-export function completeJob(
+export function attachExternalJob(
   state: StudioState,
   jobId: string,
-  input: { successfulOutputs: number; actualCredits: number },
+  externalExecution: ExternalExecution,
 ): StudioState {
   const job = state.jobs.find((item) => item.id === jobId);
-  if (!job) {
-    throw new Error(`任务不存在：${jobId}`);
-  }
+  if (!job) throw new Error(`任务不存在：${jobId}`);
   if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'canceled') {
-    throw new Error('任务已结算，不能重复结算');
+    throw new Error('任务已结算，不能挂载外部请求');
   }
-  if (!Number.isInteger(input.successfulOutputs) || input.successfulOutputs < 0 || input.successfulOutputs > job.outputCount) {
-    throw new Error('成功产出数量超出任务范围');
-  }
-  if (!Number.isFinite(input.actualCredits) || input.actualCredits < 0 || input.actualCredits > job.reservedCredits) {
-    throw new Error('实际额度超出预留范围');
-  }
-  if (input.successfulOutputs === 0) {
-    return failJob(state, jobId, '任务未生成可用结果');
+  if (!externalExecution.modelId.trim()) throw new Error('外部模型 ID 不能为空');
+  if (!externalExecution.requestId.trim()) throw new Error('外部请求 ID 不能为空');
+  if (job.externalExecution) {
+    if (
+      job.externalExecution.provider === externalExecution.provider
+      && job.externalExecution.modelId === externalExecution.modelId
+      && job.externalExecution.requestId === externalExecution.requestId
+    ) return state;
+    throw new Error('任务已挂载其他外部请求');
   }
 
-  const newResults = Array.from({ length: input.successfulOutputs }).map((_, index) => {
+  return {
+    ...state,
+    jobs: state.jobs.map((item) => item.id === jobId
+      ? { ...item, externalExecution: { ...externalExecution } }
+      : item),
+  };
+}
+
+type SuccessfulResultInput = {
+  imageUrl: string;
+  width: number;
+  height: number;
+  generationMetadata?: ResultGenerationMetadata;
+};
+
+function settleSuccessfulJob(
+  state: StudioState,
+  job: GenerationJob,
+  actualCredits: number,
+  outputs: SuccessfulResultInput[],
+): StudioState {
+  const newResults: Result[] = outputs.map((output, index) => {
     const id = `result-${state.results.length + index + 1}`;
     return {
       id,
@@ -572,22 +608,25 @@ export function completeJob(
       jobId: job.id,
       assetId: `generated-${id}`,
       title: `${getProfile(job.profileId).label} ${index + 1}`,
-      imageUrl: resultImages[(state.results.length + index) % resultImages.length],
-      reviewStatus: 'draft' as ReviewStatus,
+      imageUrl: output.imageUrl,
+      reviewStatus: 'draft',
       isFavorite: false,
       isAdopted: false,
       isPrimary: false,
-      width: 2048,
-      height: 2048,
+      width: output.width,
+      height: output.height,
       createdAt: new Date().toISOString(),
       x: job.x + 280 + index * 220,
       y: job.y,
+      ...(output.generationMetadata
+        ? { generationMetadata: output.generationMetadata }
+        : {}),
     };
   });
 
   const jobs = state.jobs.map((item) =>
-    item.id === jobId
-      ? { ...item, status: 'succeeded' as const, progress: 100, actualCredits: input.actualCredits }
+    item.id === job.id
+      ? { ...item, status: 'succeeded' as const, progress: 100, actualCredits }
       : item,
   );
   const scenes = refreshSceneStatuses(
@@ -598,6 +637,13 @@ export function completeJob(
     ),
     jobs,
   );
+  const externalDetails = job.externalExecution
+    ? {
+        provider: job.externalExecution.provider,
+        modelId: job.externalExecution.modelId,
+        requestId: job.externalExecution.requestId,
+      }
+    : undefined;
 
   return {
     ...state,
@@ -606,15 +652,90 @@ export function completeJob(
     results: [...state.results, ...newResults],
     usage: {
       ...state.usage,
-      availableCredits: state.usage.availableCredits + job.reservedCredits - input.actualCredits,
+      availableCredits: state.usage.availableCredits + job.reservedCredits - actualCredits,
       frozenCredits: Math.max(0, state.usage.frozenCredits - job.reservedCredits),
-      spentCredits: state.usage.spentCredits + input.actualCredits,
+      spentCredits: state.usage.spentCredits + actualCredits,
     },
     auditEvents: [
       ...state.auditEvents,
-      audit('job.succeeded', job.id, '图像处理服务'),
+      audit('job.succeeded', job.id, '图像处理服务', externalDetails),
     ],
   };
+}
+
+function getCompletableJob(
+  state: StudioState,
+  jobId: string,
+  successfulOutputs: number,
+  actualCredits: number,
+): GenerationJob {
+  const job = state.jobs.find((item) => item.id === jobId);
+  if (!job) throw new Error(`任务不存在：${jobId}`);
+  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'canceled') {
+    throw new Error('任务已结算，不能重复结算');
+  }
+  if (!Number.isInteger(successfulOutputs) || successfulOutputs < 0 || successfulOutputs > job.outputCount) {
+    throw new Error('成功产出数量超出任务范围');
+  }
+  if (!Number.isFinite(actualCredits) || actualCredits < 0 || actualCredits > job.reservedCredits) {
+    throw new Error('实际额度超出预留范围');
+  }
+  return job;
+}
+
+export function completeJobWithResults(
+  state: StudioState,
+  jobId: string,
+  input: {
+    images: Array<{ url: string; width?: number; height?: number }>;
+    actualCredits: number;
+    seed?: number;
+  },
+): StudioState {
+  if (input.images.length === 0 || input.images.some((image) => !image.url.trim())) {
+    throw new Error('任务未生成可用结果');
+  }
+  const job = getCompletableJob(state, jobId, input.images.length, input.actualCredits);
+  if (!job.externalExecution) throw new Error('任务缺少外部请求信息');
+
+  const generationMetadata: ResultGenerationMetadata = {
+    ...job.externalExecution,
+    ...(input.seed !== undefined ? { seed: input.seed } : {}),
+    parameters: { ...job.inputSnapshot.parameters },
+  };
+  return settleSuccessfulJob(
+    state,
+    job,
+    input.actualCredits,
+    input.images.map((image) => ({
+      imageUrl: image.url.trim(),
+      width: image.width && image.width > 0 ? image.width : 1024,
+      height: image.height && image.height > 0 ? image.height : 1024,
+      generationMetadata: { ...generationMetadata, parameters: { ...generationMetadata.parameters } },
+    })),
+  );
+}
+
+export function completeJob(
+  state: StudioState,
+  jobId: string,
+  input: { successfulOutputs: number; actualCredits: number },
+): StudioState {
+  const job = getCompletableJob(state, jobId, input.successfulOutputs, input.actualCredits);
+  if (input.successfulOutputs === 0) {
+    return failJob(state, jobId, '任务未生成可用结果');
+  }
+
+  return settleSuccessfulJob(
+    state,
+    job,
+    input.actualCredits,
+    Array.from({ length: input.successfulOutputs }).map((_, index) => ({
+      imageUrl: resultImages[(state.results.length + index) % resultImages.length],
+      width: 2048,
+      height: 2048,
+    })),
+  );
 }
 
 export function createDerivedScene(

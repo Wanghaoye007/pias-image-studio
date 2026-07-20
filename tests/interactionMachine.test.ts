@@ -19,13 +19,15 @@ describe('workbench interaction machine', () => {
     });
   });
 
-  it('maps expand and angle tools to image-surface editing modes', () => {
+  it('maps expand, angle, and remove tools to image-surface editing modes', () => {
     const initial = createInitialInteractionState('result:result-1');
 
     expect(reduceWorkbenchInteraction(initial, { type: 'OPEN_TOOL', tool: 'expand' }).mode)
       .toBe('editing-expand');
     expect(reduceWorkbenchInteraction(initial, { type: 'OPEN_TOOL', tool: 'angle' }).mode)
       .toBe('editing-angle');
+    expect(reduceWorkbenchInteraction(initial, { type: 'OPEN_TOOL', tool: 'remove' }).mode)
+      .toBe('editing-remove');
   });
 
   it('returns from the asset picker to the blend configuration', () => {

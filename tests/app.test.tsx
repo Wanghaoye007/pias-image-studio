@@ -1,9 +1,7 @@
 import { StrictMode } from 'react';
-// Vitest executes this source-level CSS assertion in Node; production code stays browser-only.
-// @ts-expect-error The project intentionally does not ship Node types.
 import { readFileSync } from 'node:fs';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { getAuditTargetLabel } from '../src/SecondaryViews';
 import { initialStudioState } from '../src/domain';
@@ -13,14 +11,31 @@ const deliveryMocks = vi.hoisted(() => ({
   downloadWatermarkedPreview: vi.fn(() => Promise.resolve('result-preview.png')),
 }));
 
+const falClientMocks = vi.hoisted(() => ({
+  runFalImageJob: vi.fn(),
+}));
+
 vi.mock('../src/exportDelivery', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/exportDelivery')>()),
   ...deliveryMocks,
 }));
 
-declare const process: { cwd: () => string };
+vi.mock('../src/fal/falImageClient', () => falClientMocks);
 
 describe('PIAS 中文应用框架', () => {
+  beforeEach(() => {
+    falClientMocks.runFalImageJob.mockReset();
+    falClientMocks.runFalImageJob.mockImplementation(async (_input, options) => {
+      options.onExecution?.({ requestId: 'req-app-default', modelId: 'fal-ai/bria/product-shot' });
+      options.onProgress?.(55);
+      return {
+        images: [{ url: 'https://fal.media/app-default.png', width: 1024, height: 1024 }],
+        seed: 21,
+        modelId: 'fal-ai/bria/product-shot',
+        childRequestIds: ['req-app-child-default'],
+      };
+    });
+  });
   it('参数面板方向与画布落点语义保持一致', () => {
     const styles = readFileSync(`${process.cwd()}/src/styles.css`, 'utf8');
 
@@ -59,9 +74,21 @@ describe('PIAS 中文应用框架', () => {
   });
 
   it('实际状态流转只显示中文状态，不泄露内部枚举', async () => {
-    vi.useFakeTimers();
+    let startRequest: (() => void) | undefined;
+    let completeRequest: (() => void) | undefined;
+    falClientMocks.runFalImageJob.mockImplementationOnce((_input, options) => new Promise((resolve) => {
+      startRequest = () => {
+        options.onExecution?.({ requestId: 'req-app-status', modelId: 'fal-ai/bria/product-shot' });
+        options.onProgress?.(36);
+      };
+      completeRequest = () => resolve({
+        images: [{ url: 'https://fal.media/app-status.png', width: 1024, height: 1024 }],
+        seed: 31,
+        modelId: 'fal-ai/bria/product-shot',
+        childRequestIds: ['req-app-status-child'],
+      });
+    }));
 
-    try {
       render(
         <StrictMode>
           <App />
@@ -85,29 +112,34 @@ describe('PIAS 中文应用框架', () => {
       expect(screen.getAllByText('等待中')).toHaveLength(1);
       expect(screen.getAllByText('等待调度')).toHaveLength(2);
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(900);
-      });
+      await act(async () => startRequest?.());
       expect(screen.getAllByText('生成中')).toHaveLength(1);
       expect(screen.getAllByText('正在生成')).toHaveLength(2);
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(5500);
-      });
+      await act(async () => completeRequest?.());
 
-      expect(screen.queryAllByText('已完成')).not.toHaveLength(0);
+      await waitFor(() => expect(screen.queryAllByText('已完成')).not.toHaveLength(0));
       ['queued', 'running', 'succeeded', 'failed', 'canceled', 'draft', 'submitted', 'approved', 'returned'].forEach((status) => {
         expect(screen.queryByText(status, { exact: true })).not.toBeInTheDocument();
       });
-    } finally {
-      vi.useRealTimers();
-    }
   });
 
   it('在任务运行中切换页面后仍会完成结算并释放冻结额度', async () => {
-    vi.useFakeTimers();
+    let startRequest: (() => void) | undefined;
+    let completeRequest: (() => void) | undefined;
+    falClientMocks.runFalImageJob.mockImplementationOnce((_input, options) => new Promise((resolve) => {
+      startRequest = () => {
+        options.onExecution?.({ requestId: 'req-app-navigation', modelId: 'fal-ai/bria/product-shot' });
+        options.onProgress?.(36);
+      };
+      completeRequest = () => resolve({
+        images: [{ url: 'https://fal.media/app-navigation.png', width: 1024, height: 1024 }],
+        seed: 41,
+        modelId: 'fal-ai/bria/product-shot',
+        childRequestIds: ['req-app-navigation-child'],
+      });
+    }));
 
-    try {
       render(<App />);
       fireEvent.click(screen.getByRole('button', { name: '生成' }));
       fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
@@ -115,23 +147,18 @@ describe('PIAS 中文应用框架', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(900);
-      });
+      await act(async () => startRequest?.());
       fireEvent.click(screen.getByRole('button', { name: '用量' }));
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(5500);
-      });
+      await act(async () => completeRequest?.());
 
       const summary = screen.getByLabelText('工作区摘要');
-      expect(within(summary).getByText('冻结').closest('.metric')).toHaveTextContent('0');
-      expect(screen.getByText('任务 02 · 生成').closest('.ledger-row')).toHaveTextContent('已完成');
+      await waitFor(() => {
+        expect(within(summary).getByText('冻结').closest('.metric')).toHaveTextContent('0');
+        expect(screen.getByText('任务 02 · 生成').closest('.ledger-row')).toHaveTextContent('已完成');
+      });
       fireEvent.click(screen.getByRole('button', { name: '图片工作台' }));
       expect(screen.getByLabelText('节点画布')).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
   });
 
   it('审核员可以退回结果并显示退回原因', () => {

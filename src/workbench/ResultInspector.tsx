@@ -27,16 +27,16 @@ const parameterLabels: Record<string, string> = {
   lightIntensity: '光照强度',
   lightDirection: '光照方向',
   lightTemperature: '色温',
-  blendStrength: '融合强度',
-  horizontalAngle: '水平角度',
-  verticalAngle: '垂直角度',
-  distance: '镜头距离',
-  expandDirection: '扩展方向',
+  productPlacement: '商品位置',
+  horizontalAngle: '水平旋转',
+  moveForward: '镜头推进',
+  verticalView: '垂直视角',
+  wideAngle: '广角镜头',
+  expandAnchor: '原图锚点',
   expandScale: '扩展比例',
   upscaleSize: '目标尺寸',
   detailLevel: '细节强度',
   brushSize: '笔刷大小',
-  edgePrecision: '边缘精度',
 };
 
 type ResultInspectorProps = {
@@ -132,6 +132,15 @@ export function ResultInspector({
             <div><dt>目标比例</dt><dd>{job.inputSnapshot.ratio}</dd></div>
             <div><dt>任务状态</dt><dd>已完成</dd></div>
             <div><dt>消耗点数</dt><dd>{job.actualCredits}</dd></div>
+            {result.generationMetadata && (
+              <>
+                <div><dt>模型</dt><dd>{result.generationMetadata.modelId}</dd></div>
+                <div><dt>请求 ID</dt><dd>{result.generationMetadata.requestId}</dd></div>
+                {result.generationMetadata.seed !== undefined && (
+                  <div><dt>Seed</dt><dd>{result.generationMetadata.seed}</dd></div>
+                )}
+              </>
+            )}
           </dl>
           {parameters.length > 0 && (
             <div className="result-inspector__parameters">

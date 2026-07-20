@@ -21,6 +21,8 @@ import {
   AnglePreview,
   ExpandOverlay,
   LightOverlay,
+  RemoveMaskOverlay,
+  type ExpandAnchor,
   type LightDirection,
 } from './CanvasOverlays';
 import { getSceneTitle, type JobNodeData, type ResultNodeData, type SceneNodeData } from './graph';
@@ -311,6 +313,10 @@ function CanvasToolOverlay({ data }: { data: SceneNodeData | ResultNodeData }) {
   if (data.activeTool === 'expand' && data.interactionMode === 'editing-expand') {
     return (
       <ExpandOverlay
+        anchor={isExpandAnchor(data.parameters?.expandAnchor)
+          ? data.parameters.expandAnchor
+          : 'center'}
+        onAnchorChange={(value) => data.onParameterChange?.('expandAnchor', value)}
         ratio={data.ratio ?? '1:1'}
         scale={numberParameter(data.parameters?.expandScale, 72)}
       />
@@ -321,7 +327,17 @@ function CanvasToolOverlay({ data }: { data: SceneNodeData | ResultNodeData }) {
     return (
       <AnglePreview
         horizontal={numberParameter(data.parameters?.horizontalAngle, 0)}
-        vertical={numberParameter(data.parameters?.verticalAngle, 0)}
+        vertical={numberParameter(data.parameters?.verticalView, 0)}
+      />
+    );
+  }
+
+  if (data.activeTool === 'remove' && data.interactionMode === 'editing-remove') {
+    return (
+      <RemoveMaskOverlay
+        brushSize={numberParameter(data.parameters?.brushSize, 42)}
+        maskImageUrl={data.maskImageUrl}
+        onMaskChange={data.onMaskChange}
       />
     );
   }
@@ -329,7 +345,15 @@ function CanvasToolOverlay({ data }: { data: SceneNodeData | ResultNodeData }) {
   return null;
 }
 
-function isLightDirection(value: string | number | undefined): value is LightDirection {
+function isExpandAnchor(value: unknown): value is ExpandAnchor {
+  return typeof value === 'string' && [
+    'top-left', 'top', 'top-right',
+    'left', 'center', 'right',
+    'bottom-left', 'bottom', 'bottom-right',
+  ].includes(value);
+}
+
+function isLightDirection(value: unknown): value is LightDirection {
   return typeof value === 'string' && [
     'top-left',
     'top',
@@ -342,7 +366,7 @@ function isLightDirection(value: string | number | undefined): value is LightDir
   ].includes(value);
 }
 
-function numberParameter(value: string | number | undefined, fallback: number): number {
+function numberParameter(value: unknown, fallback: number): number {
   return typeof value === 'number' ? value : fallback;
 }
 

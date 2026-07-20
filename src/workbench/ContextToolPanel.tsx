@@ -1,4 +1,4 @@
-import { Search, X } from 'lucide-react';
+import { RotateCcw, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getProfile, type Asset, type TaskParameters, type TaskProfileId } from '../domain';
 
@@ -11,13 +11,15 @@ type ContextToolPanelProps = {
   assets: Asset[];
   parameters: TaskParameters;
   referenceAssetId: string;
+  hasRemoveMask?: boolean;
   assetPickerOpen?: boolean;
   isSubmitting?: boolean;
   placement?: 'left' | 'right';
   onPromptChange: (prompt: string) => void;
   onOutputCountChange: (count: number) => void;
   onRatioChange: (ratio: string) => void;
-  onParameterChange: (key: string, value: string | number) => void;
+  onParameterChange: (key: string, value: string | number | boolean) => void;
+  onClearRemoveMask?: () => void;
   onReferenceAssetChange: (assetId: string) => void;
   onAssetPickerOpen?: () => void;
   onAssetPickerClose?: () => void;
@@ -39,9 +41,8 @@ const lightDirections = [
 export function ContextToolPanel(props: ContextToolPanelProps) {
   const profile = getProfile(props.tool);
   const estimate = profile.costPerOutput * props.outputCount;
-  const requiresPrompt = props.tool === 'remove';
   const cannotRun = props.isSubmitting
-    || (requiresPrompt && !props.prompt.trim())
+    || (props.tool === 'remove' && !props.hasRemoveMask)
     || estimate > props.availableCredits
     || (props.tool === 'blend' && !props.referenceAssetId);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -87,18 +88,44 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
         tool={props.tool}
       />
 
-      <label className="context-panel__field">
-        <span>{props.tool === 'remove' ? '移除内容' : '补充描述（可选）'}</span>
-        <textarea
-          aria-label="创作描述"
-          onChange={(event) => props.onPromptChange(event.target.value)}
-          placeholder={promptPlaceholder(props.tool)}
-          ref={promptRef}
-          value={props.prompt}
-        />
-      </label>
+      {props.tool === 'remove' && (
+        <div className="remove-mask-status" data-ready={props.hasRemoveMask ? 'true' : 'false'}>
+          <span>{props.hasRemoveMask ? '蒙版已就绪' : '在图片上涂抹要移除的区域'}</span>
+          {props.hasRemoveMask && (
+            <button
+              aria-label="清除去除蒙版"
+              onClick={props.onClearRemoveMask}
+              title="清除蒙版"
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" size={15} />
+            </button>
+          )}
+        </div>
+      )}
 
-      {props.tool !== 'upscale' && (
+      {['generate', 'blend', 'light', 'expand'].includes(props.tool) && (
+        <label className="context-panel__field">
+          <span>补充描述（可选）</span>
+          <textarea
+            aria-label="创作描述"
+            onChange={(event) => props.onPromptChange(event.target.value)}
+            placeholder={promptPlaceholder(props.tool)}
+            ref={promptRef}
+            value={props.prompt}
+          />
+        </label>
+      )}
+
+      {props.tool === 'angle' && (
+        <p className="angle-risk" role="note">模型会推断不可见区域，结果需人工复核</p>
+      )}
+
+      {props.tool === 'light' && (
+        <p className="angle-risk" role="note">实验能力：生成后请重点复核商品文字、颜色与材质</p>
+      )}
+
+      {!['remove', 'extract', 'upscale'].includes(props.tool) && (
         <fieldset className="segmented segmented--counts">
           <legend>输出数量</legend>
           {[1, 2, 4].map((count) => (
@@ -115,7 +142,7 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
         </fieldset>
       )}
 
-      {props.tool !== 'upscale' && (
+      {['generate', 'blend', 'angle', 'expand'].includes(props.tool) && (
         <label className="context-panel__field context-panel__field--inline">
           <span>画面比例</span>
           <select
@@ -126,7 +153,9 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
             <option value="1:1">1:1</option>
             <option value="4:5">4:5</option>
             <option value="3:4">3:4</option>
+            <option value="4:3">4:3</option>
             <option value="16:9">16:9</option>
+            <option value="9:16">9:16</option>
           </select>
         </label>
       )}
@@ -246,7 +275,7 @@ function ToolSpecificControls({
 }: {
   tool: TaskProfileId;
   parameters: TaskParameters;
-  onParameterChange: (key: string, value: string | number) => void;
+  onParameterChange: (key: string, value: string | number | boolean) => void;
 }) {
   if (tool === 'generate') {
     return (
@@ -276,10 +305,18 @@ function ToolSpecificControls({
 
   if (tool === 'blend') {
     return (
-      <RangeControl
-        label="融合强度"
-        onChange={(value) => onParameterChange('blendStrength', value)}
-        value={numberValue(parameters.blendStrength, 50)}
+      <SegmentedOptions
+        label="商品位置"
+        onChange={(value) => onParameterChange('productPlacement', value)}
+        options={[
+          { label: '左侧', value: 'left_center' },
+          { label: '居中', value: 'center_vertical' },
+          { label: '右侧', value: 'right_center' },
+          { label: '左下', value: 'bottom_left' },
+          { label: '下方', value: 'bottom_center' },
+          { label: '右下', value: 'bottom_right' },
+        ]}
+        value={String(parameters.productPlacement ?? 'bottom_center')}
       />
     );
   }
@@ -316,7 +353,7 @@ function ToolSpecificControls({
     return (
       <>
         <RangeControl
-          label="水平角度"
+          label="水平旋转"
           max={180}
           min={-180}
           onChange={(value) => onParameterChange('horizontalAngle', value)}
@@ -324,17 +361,24 @@ function ToolSpecificControls({
           value={numberValue(parameters.horizontalAngle, 0)}
         />
         <RangeControl
-          label="俯仰角度"
-          max={45}
-          min={-30}
-          onChange={(value) => onParameterChange('verticalAngle', value)}
-          suffix="°"
-          value={numberValue(parameters.verticalAngle, 0)}
+          label="镜头推进"
+          max={10}
+          min={0}
+          onChange={(value) => onParameterChange('moveForward', value)}
+          value={numberValue(parameters.moveForward, 0)}
         />
         <RangeControl
-          label="观察距离"
-          onChange={(value) => onParameterChange('distance', value)}
-          value={numberValue(parameters.distance, 50)}
+          label="垂直视角"
+          max={1}
+          min={-1}
+          onChange={(value) => onParameterChange('verticalView', value)}
+          step={0.1}
+          value={numberValue(parameters.verticalView, 0)}
+        />
+        <BooleanControl
+          checked={Boolean(parameters.wideAngle)}
+          label="广角镜头"
+          onChange={(value) => onParameterChange('wideAngle', value)}
         />
       </>
     );
@@ -344,14 +388,21 @@ function ToolSpecificControls({
     return (
       <>
         <SegmentedOptions
-          label="扩图方向"
-          onChange={(value) => onParameterChange('expandDirection', value)}
+          className="segmented--anchors"
+          label="原图锚点"
+          onChange={(value) => onParameterChange('expandAnchor', value)}
           options={[
-            { label: '四周', value: '四周' },
-            { label: '横向', value: '横向' },
-            { label: '纵向', value: '纵向' },
+            { label: '左上', value: 'top-left' },
+            { label: '上', value: 'top' },
+            { label: '右上', value: 'top-right' },
+            { label: '左', value: 'left' },
+            { label: '中', value: 'center' },
+            { label: '右', value: 'right' },
+            { label: '左下', value: 'bottom-left' },
+            { label: '下', value: 'bottom' },
+            { label: '右下', value: 'bottom-right' },
           ]}
-          value={String(parameters.expandDirection ?? '四周')}
+          value={String(parameters.expandAnchor ?? 'center')}
         />
         <RangeControl
           label="原图缩放"
@@ -397,12 +448,28 @@ function ToolSpecificControls({
     );
   }
 
+  return null;
+}
+
+function BooleanControl({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
   return (
-    <RangeControl
-      label="边缘精度"
-      onChange={(value) => onParameterChange('edgePrecision', value)}
-      value={numberValue(parameters.edgePrecision, 72)}
-    />
+    <label className="toggle-control">
+      <span>{label}</span>
+      <input
+        aria-label={label}
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+    </label>
   );
 }
 
@@ -470,12 +537,11 @@ function RangeControl({
   );
 }
 
-function numberValue(value: string | number | undefined, fallback: number): number {
+function numberValue(value: unknown, fallback: number): number {
   return typeof value === 'number' ? value : fallback;
 }
 
 function promptPlaceholder(tool: TaskProfileId): string {
-  if (tool === 'remove') return '描述需要移除的物体';
   if (tool === 'blend') return '例如：保留瓶身文字与材质';
   if (tool === 'light') return '例如：柔和商业棚拍光';
   return '可补充构图、材质或品牌要求';

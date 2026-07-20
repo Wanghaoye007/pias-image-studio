@@ -11,6 +11,7 @@ export type InteractionMode =
   | 'editing-light'
   | 'editing-expand'
   | 'editing-angle'
+  | 'editing-remove'
   | 'submitting';
 
 export type PanelPlacement = 'left' | 'right';
@@ -213,5 +214,6 @@ function editingMode(tool: TaskProfileId): InteractionMode {
   if (tool === 'light') return 'editing-light';
   if (tool === 'expand') return 'editing-expand';
   if (tool === 'angle') return 'editing-angle';
+  if (tool === 'remove') return 'editing-remove';
   return 'configuring';
 }
