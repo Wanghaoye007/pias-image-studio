@@ -16,11 +16,11 @@
     {
       "id": "DATA-001",
       "category": "data",
-      "severity": "P0",
+      "severity": "P1",
       "required": true,
-      "status": "fail",
-      "summary": "业务主数据缺少服务端持久化，刷新页面会回到固定演示状态",
-      "evidence": "src/App.tsx:15; src/App.tsx:33"
+      "status": "partial",
+      "summary": "已确认写入的状态支持刷新和单机服务重启恢复；生产数据库、备份、多实例及关闭前未确认写入保护尚未实现",
+      "evidence": "src/studio/studioStatePersistence.ts; src/studio/studioStatePlugin.ts; tests/studioStatePersistence.test.ts; tests/app.test.tsx; docs/acceptance/evidence/pias-persistence-2026-07-21.png"
     },
     {
       "id": "AUTH-001",
@@ -64,8 +64,8 @@
       "severity": "P1",
       "required": true,
       "status": "partial",
-      "summary": "Fal 请求映射可落盘，但完整任务、结果、审核和用量状态不可恢复",
-      "evidence": "src/fal/falJobPersistence.ts; src/App.tsx:15"
+      "summary": "完整 StudioState 与 Fal 请求映射可在单机恢复，但缺少持久队列、Worker 接管和多实例恢复",
+      "evidence": "src/studio/studioStatePersistence.ts; src/fal/falJobPersistence.ts; docs/acceptance/evidence/pias-persistence-2026-07-21.png"
     },
     {
       "id": "REVERSE-001",

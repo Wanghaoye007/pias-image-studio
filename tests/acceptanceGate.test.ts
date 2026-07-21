@@ -33,7 +33,7 @@ describe('acceptance gate', () => {
     const result = evaluateAcceptance(manifest);
 
     expect(result.conclusion).toBe('red');
-    expect(result.unresolved.filter((item) => item.severity === 'P0')).toHaveLength(3);
+    expect(result.unresolved.filter((item) => item.severity === 'P0')).toHaveLength(2);
   });
 
   it('returns red for any unresolved P0', () => {
