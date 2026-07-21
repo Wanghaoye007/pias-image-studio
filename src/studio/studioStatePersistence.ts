@@ -1,0 +1,127 @@
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import type { StudioState } from '../domain';
+import { parseStudioState, StudioStateValidationError } from './studioStateSchema';
+
+export type PersistedStudioSnapshot = {
+  schemaVersion: 1;
+  revision: number;
+  updatedAt: string;
+  state: StudioState;
+};
+
+export type StudioStatePersistence = {
+  load(): Promise<PersistedStudioSnapshot | null>;
+  save(expectedRevision: number, state: StudioState): Promise<PersistedStudioSnapshot>;
+};
+
+export class StudioStateConflictError extends Error {
+  constructor(
+    readonly expectedRevision: number,
+    readonly actualRevision: number,
+  ) {
+    super(`工作台状态版本冲突：期望 ${expectedRevision}，实际 ${actualRevision}`);
+    this.name = 'StudioStateConflictError';
+  }
+}
+
+export class StudioStateStorageError extends Error {
+  constructor(message = '工作台状态存储不可用', options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'StudioStateStorageError';
+  }
+}
+
+export function createFileStudioStatePersistence(
+  filePath = process.env.PIAS_STUDIO_STATE_FILE
+    || '/tmp/pias-image-studio/studio-state.json',
+): StudioStatePersistence {
+  let writeQueue: Promise<void> = Promise.resolve();
+
+  const load = async (): Promise<PersistedStudioSnapshot | null> => {
+    try {
+      return await readSnapshot(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      if (error instanceof StudioStateStorageError) throw error;
+      throw new StudioStateStorageError('无法读取已保存的工作台状态', { cause: error });
+    }
+  };
+
+  const save = (expectedRevision: number, state: StudioState): Promise<PersistedStudioSnapshot> => {
+    const operation = writeQueue.then(async () => {
+      const current = await load();
+      const actualRevision = current?.revision ?? 0;
+      if (actualRevision !== expectedRevision) {
+        throw new StudioStateConflictError(expectedRevision, actualRevision);
+      }
+
+      const validatedState = structuredClone(parseStudioState(state));
+      const snapshot: PersistedStudioSnapshot = {
+        schemaVersion: 1,
+        revision: actualRevision + 1,
+        updatedAt: new Date().toISOString(),
+        state: validatedState,
+      };
+      const temporaryPath = `${filePath}.${process.pid}.${snapshot.revision}.tmp`;
+
+      try {
+        await mkdir(dirname(filePath), { recursive: true });
+        await writeFile(temporaryPath, JSON.stringify(snapshot), { encoding: 'utf8', mode: 0o600 });
+        await rename(temporaryPath, filePath);
+      } catch (error) {
+        await rm(temporaryPath, { force: true }).catch(() => undefined);
+        throw new StudioStateStorageError('无法保存工作台状态', { cause: error });
+      }
+
+      return snapshot;
+    });
+
+    writeQueue = operation.then(() => undefined, () => undefined);
+    return operation;
+  };
+
+  return { load, save };
+}
+
+async function readSnapshot(filePath: string): Promise<PersistedStudioSnapshot> {
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(filePath, 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw error;
+    throw new StudioStateStorageError('已保存的工作台状态文件损坏', { cause: error });
+  }
+
+  try {
+    const snapshot = asRecord(value, 'snapshot');
+    if (snapshot.schemaVersion !== 1) {
+      throw new StudioStateStorageError('工作台状态版本不受支持');
+    }
+    if (!Number.isInteger(snapshot.revision) || (snapshot.revision as number) < 1) {
+      throw new StudioStateStorageError('工作台状态 revision 无效');
+    }
+    if (typeof snapshot.updatedAt !== 'string' || !snapshot.updatedAt) {
+      throw new StudioStateStorageError('工作台状态更新时间无效');
+    }
+    return {
+      schemaVersion: 1,
+      revision: snapshot.revision as number,
+      updatedAt: snapshot.updatedAt,
+      state: parseStudioState(snapshot.state),
+    };
+  } catch (error) {
+    if (error instanceof StudioStateStorageError) throw error;
+    if (error instanceof StudioStateValidationError) {
+      throw new StudioStateStorageError(`已保存的工作台状态无效：${error.message}`, { cause: error });
+    }
+    throw new StudioStateStorageError('已保存的工作台状态无效', { cause: error });
+  }
+}
+
+function asRecord(value: unknown, path: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new StudioStateStorageError(`${path} 必须是对象`);
+  }
+  return value as Record<string, unknown>;
+}
