@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDirectionalLightInvocations,
   buildFalWorkflowPlan,
   normalizeFalResult,
   type FalToolRequest,
@@ -99,7 +100,7 @@ describe('Fal 图片工具适配器', () => {
     }));
   });
 
-  it('把斜向主光写入精确编辑指令并按输出数扇出', () => {
+  it('先把斜向主光交给结构化指令端点解析，再记录最终出图数量', () => {
     const plan = buildFalWorkflowPlan(request({
       profileId: 'light',
       outputCount: 4,
@@ -112,16 +113,22 @@ describe('Fal 图片工具适配器', () => {
     }));
 
     expect(plan.modelId).toBe('bria/fibo-edit/edit');
-    expect(plan.invocations).toHaveLength(4);
-    expect(plan.invocations[0].input).toEqual(expect.objectContaining({
-      image_url: 'source-image',
-      instruction: expect.stringMatching(/top-left.*70%.*4300K/i),
-      seed: 5555,
+    expect(plan.invocations).toHaveLength(1);
+    expect(plan.invocations[0]).toEqual({
+      modelId: 'bria/fibo-edit/edit/structured_instruction',
+      input: expect.objectContaining({
+        image_url: 'source-image',
+        instruction: expect.stringMatching(/top-left.*70%.*4300K/i),
+        seed: 5555,
+      }),
+    });
+    expect(plan.directionalLight).toEqual(expect.objectContaining({
+      sourceImageUrl: 'source-image',
+      outputCount: 4,
     }));
-    expect(plan.invocations[3].input).toEqual(expect.objectContaining({ seed: 5558 }));
   });
 
-  it('把前方主光与轮廓光映射到可控聚光光型', () => {
+  it('把前方主光与轮廓光写成可验证的受光面和阴影指令', () => {
     const plan = buildFalWorkflowPlan(request({
       profileId: 'light',
       parameters: {
@@ -133,14 +140,15 @@ describe('Fal 图片工具适配器', () => {
       },
     }));
 
-    expect(plan.invocations[0].input).toEqual({
+    expect(plan.modelId).toBe('bria/fibo-edit/edit');
+    expect(plan.invocations[0].input).toEqual(expect.objectContaining({
       image_url: 'source-image',
-      light_direction: 'front',
-      light_type: 'spotlight on subject',
-    });
+      instruction: expect.stringMatching(/front-facing surfaces.*shadows behind.*rim light/i),
+      seed: 5555,
+    }));
   });
 
-  it('把色温与亮度档位映射为 Relight 支持的光型', () => {
+  it('把亮度和色温原值写入方向编辑指令', () => {
     const warm = buildFalWorkflowPlan(request({
       profileId: 'light',
       parameters: { lightDirection: 'front', lightIntensity: 80, lightTemperature: 3200 },
@@ -150,26 +158,63 @@ describe('Fal 图片工具适配器', () => {
       parameters: { lightDirection: 'top', lightIntensity: 50, lightTemperature: 7000 },
     }));
 
-    expect(warm.invocations[0].input).toEqual(expect.objectContaining({
-      light_direction: 'front',
-      light_type: 'low-angle sunlight',
-    }));
-    expect(cool.invocations[0].input).toEqual(expect.objectContaining({
-      light_direction: 'top-down',
-      light_type: 'blue hour light',
-    }));
+    expect(warm.invocations[0].input.instruction).toMatch(/80%.*3200K/i);
+    expect(cool.invocations[0].input.instruction).toMatch(/50%.*7000K/i);
+    expect(cool.invocations[0].input.instruction).toMatch(/top-facing surfaces.*shadows directly below/i);
   });
 
-  it('左、右和后方光保留独立方向语义', () => {
-    const directions = ['left', 'right', 'back'];
-    directions.forEach((lightDirection) => {
+  it('十个方向都使用独立的受光面与反向阴影语义', () => {
+    const directions = {
+      'top-left': /upper-left.*lower-right/i,
+      top: /top-facing surfaces.*directly below/i,
+      'top-right': /upper-right.*lower-left/i,
+      right: /right-facing surfaces.*toward the left/i,
+      'bottom-right': /lower-right.*upper-left/i,
+      bottom: /lower surfaces.*upward/i,
+      'bottom-left': /lower-left.*upper-right/i,
+      left: /left-facing surfaces.*toward the right/i,
+      front: /front-facing surfaces.*behind/i,
+      back: /rim.*front face.*darker/i,
+    };
+    Object.entries(directions).forEach(([lightDirection, instructionPattern]) => {
       const plan = buildFalWorkflowPlan(request({
         profileId: 'light',
         parameters: { lightDirection, lightIntensity: 60, lightTemperature: 5200 },
       }));
       expect(plan.modelId).toBe('bria/fibo-edit/edit');
-      expect(plan.invocations[0].input.instruction).toMatch(new RegExp(lightDirection));
+      expect(plan.invocations[0].input.instruction).toMatch(instructionPattern);
+      expect(plan.invocations[0].modelId).toBe('bria/fibo-edit/edit/structured_instruction');
     });
+  });
+
+  it('用完整结构化结果构建最终方向光出图，并禁止凭空生成文字和改动构图', () => {
+    const plan = buildFalWorkflowPlan(request({
+      profileId: 'light',
+      outputCount: 2,
+      parameters: { lightDirection: 'left', lightIntensity: 80, lightTemperature: 5200 },
+    }));
+    const structuredInstruction = {
+      objects: [{ description: 'blank cosmetic bottle' }],
+      lighting: { direction: 'camera-left', shadows: 'toward camera-right' },
+      text_render: [],
+    };
+
+    expect(buildDirectionalLightInvocations(plan, structuredInstruction)).toEqual([
+      {
+        modelId: 'bria/fibo-edit/edit',
+        input: expect.objectContaining({
+          image_url: 'source-image',
+          structured_instruction: structuredInstruction,
+          seed: 5555,
+          guidance_scale: 5,
+          negative_prompt: expect.stringMatching(/invented text.*changed composition/i),
+        }),
+      },
+      {
+        modelId: 'bria/fibo-edit/edit',
+        input: expect.objectContaining({ seed: 5556 }),
+      },
+    ]);
   });
 
   it('去除节点要求笔刷蒙版并固定单结果', () => {

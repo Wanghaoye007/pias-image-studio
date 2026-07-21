@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { TaskProfileId } from '../domain';
 import { readFalKey } from './falCredentials';
 import {
+  buildDirectionalLightInvocations,
   buildFalWorkflowPlan,
   buildNextUpscaleInvocation,
   normalizeFalResult,
@@ -58,6 +59,7 @@ export type PersistedFalJob = {
   plan: FalWorkflowPlan;
   children: LocalFalChild[];
   nextUpscaleFactorIndex: number;
+  directionalLightFinalStarted?: boolean;
   canceled: boolean;
 };
 
@@ -131,6 +133,9 @@ function persistenceSnapshot(job: LocalFalJob): PersistedFalJob {
       ...job.plan,
       invocations: [],
       ...(job.plan.upscaleFactors ? { upscaleFactors: [...job.plan.upscaleFactors] } : {}),
+      ...(job.plan.directionalLight
+        ? { directionalLight: { ...job.plan.directionalLight, sourceImageUrl: '' } }
+        : {}),
     },
     children: job.children.map((child) => ({ ...child })),
   };
@@ -242,6 +247,7 @@ export function createFalQueueService(options: {
         plan,
         children,
         nextUpscaleFactorIndex: 1,
+        directionalLightFinalStarted: false,
         canceled: false,
       });
       await persist();
@@ -255,7 +261,9 @@ export function createFalQueueService(options: {
       if (job.canceled) return { status: 'completed', logs: [], progress: 94 };
       const currentChildren = job.profileId === 'upscale'
         ? job.children.slice(-1)
-        : job.children;
+        : job.profileId === 'light' && job.directionalLightFinalStarted
+          ? job.children.slice(1)
+          : job.children;
       const logs: string[] = [];
 
       try {
@@ -270,6 +278,56 @@ export function createFalQueueService(options: {
         }
 
         const currentComplete = currentChildren.every((child) => child.status === 'completed');
+        if (
+          job.profileId === 'light'
+          && Boolean(job.plan.directionalLight)
+          && currentComplete
+          && !job.directionalLightFinalStarted
+        ) {
+          const structureChild = currentChildren[0];
+          const upstream = await options.adapter.result(structureChild.modelId, {
+            requestId: structureChild.requestId,
+          });
+          if (!upstream.data || typeof upstream.data !== 'object') {
+            throw new FalServiceError(
+              '定向光结构解析未生成可用结果',
+              'FAL_EMPTY_LIGHT_STRUCTURE',
+              502,
+            );
+          }
+
+          let invocations;
+          try {
+            invocations = buildDirectionalLightInvocations(
+              job.plan,
+              upstream.data as Record<string, unknown>,
+            );
+          } catch (error) {
+            throw new FalServiceError(
+              error instanceof Error ? error.message : '定向光源图已失效，请重试任务',
+              'FAL_LIGHT_RETRY_REQUIRED',
+              409,
+            );
+          }
+
+          const finalChildren: LocalFalChild[] = [];
+          try {
+            for (const invocation of invocations) {
+              finalChildren.push(await submitInvocation(invocation.modelId, invocation.input));
+            }
+          } catch {
+            await Promise.allSettled(finalChildren.map((child) => options.adapter.cancel(
+              child.modelId,
+              { requestId: child.requestId },
+            )));
+            throw new FalServiceError('定向光出图提交失败，请重试', 'FAL_LIGHT_SUBMIT_FAILED', 502);
+          }
+          job.children.push(...finalChildren);
+          job.directionalLightFinalStarted = true;
+          await persist();
+          return { status: 'queued', logs, progress: 35 };
+        }
+
         const factors = job.plan.upscaleFactors ?? [];
         if (
           job.profileId === 'upscale'
@@ -323,7 +381,9 @@ export function createFalQueueService(options: {
       const job = requireJob(jobs, requestId);
       const resultChildren = job.profileId === 'upscale'
         ? job.children.slice(-1)
-        : job.children;
+        : job.profileId === 'light' && job.directionalLightFinalStarted
+          ? job.children.slice(1)
+          : job.children;
       const settled = await Promise.allSettled(resultChildren.map(async (child) => {
         const upstream = await options.adapter.result(child.modelId, { requestId: child.requestId });
         return normalizeFalResult(upstream.data);

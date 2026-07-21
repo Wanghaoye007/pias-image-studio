@@ -6,8 +6,8 @@ import {
 } from './multipleAngles';
 
 export const FAL_PRODUCT_SHOT_MODEL = 'fal-ai/bria/product-shot';
-export const FAL_DIRECTIONAL_LIGHT_MODEL = 'bria/fibo-edit/relight';
 export const FAL_DIRECTIONAL_LIGHT_EDIT_MODEL = 'bria/fibo-edit/edit';
+export const FAL_DIRECTIONAL_LIGHT_STRUCTURE_MODEL = 'bria/fibo-edit/edit/structured_instruction';
 export const FAL_ERASER_MODEL = 'fal-ai/bria/eraser';
 export const FAL_BACKGROUND_REMOVE_MODEL = 'fal-ai/bria/background/remove';
 export const FAL_EXPAND_MODEL = 'fal-ai/bria/expand';
@@ -34,6 +34,10 @@ export type FalWorkflowPlan = {
   modelId: string;
   invocations: FalInvocation[];
   upscaleFactors?: number[];
+  directionalLight?: {
+    sourceImageUrl: string;
+    outputCount: number;
+  };
 };
 
 export type NormalizedFalResult = {
@@ -81,6 +85,19 @@ const lightDirections = new Set([
   'front',
   'back',
 ]);
+
+const lightDirectionInstructions: Record<string, string> = {
+  'top-left': 'from the upper-left front. Brighten the upper and left-facing surfaces and cast directional shadows toward the lower-right',
+  top: 'from directly above. Brighten the top-facing surfaces and cast shadows directly below the subject',
+  'top-right': 'from the upper-right front. Brighten the upper and right-facing surfaces and cast directional shadows toward the lower-left',
+  right: 'from camera-right. Brighten the right-facing surfaces and cast directional shadows toward the left',
+  'bottom-right': 'from below and camera-right. Brighten the lower-right edges and cast directional shadows upward toward the upper-left',
+  bottom: 'from directly below. Brighten the lower surfaces with unmistakable underlighting and cast shadows upward behind the subject',
+  'bottom-left': 'from below and camera-left. Brighten the lower-left edges and cast directional shadows upward toward the upper-right',
+  left: 'from camera-left. Brighten the left-facing surfaces and cast directional shadows toward the right',
+  front: 'from the camera axis in front. Brighten the front-facing surfaces and cast shadows behind the subject',
+  back: 'from behind the subject. Create a strong rim and backlight silhouette while keeping the front face comparatively darker',
+};
 
 const expandAnchors = new Set([
   'top-left',
@@ -197,61 +214,55 @@ function lightPlan(request: FalToolRequest): FalWorkflowPlan {
   );
   const smartMode = request.parameters.lightSmartMode === true;
   const rimLight = request.parameters.rimLight === true;
-  const lightDirection = direction === 'front'
-    ? 'front'
-    : direction === 'top' || direction === 'top-left' || direction === 'top-right'
-      ? 'top-down'
-      : direction === 'bottom' || direction === 'bottom-left' || direction === 'bottom-right'
-        ? 'bottom'
-        : 'side';
-  const lightType = rimLight
-    ? 'spotlight on subject'
-    : temperature <= 3800
-      ? intensity >= 65 ? 'low-angle sunlight' : 'sunrise light'
-      : temperature >= 6500
-        ? 'blue hour light'
-        : smartMode
-          ? 'soft overcast daylight lighting'
-          : intensity >= 75
-            ? 'harsh studio lighting'
-            : intensity <= 30
-              ? 'fog-diffused lighting'
-              : 'overcast light';
-  const usesStructuredRelight = direction === 'front' || direction === 'top' || direction === 'bottom';
-
-  if (!usesStructuredRelight) {
-    const instruction = [
-      `Create a clearly visible studio relighting with the key light coming precisely from the ${direction} direction at ${intensity}% intensity and ${temperature}K color temperature.`,
-      smartMode ? 'Balance fill light and exposure while keeping the selected key-light direction dominant.' : '',
-      rimLight ? 'Add a restrained rim light around the product silhouette for clean edge separation.' : '',
-      'Preserve the product shape, label text, logo, colors, material, background, composition, camera angle, and object count.',
-    ].filter(Boolean).join(' ');
-    return {
-      modelId: FAL_DIRECTIONAL_LIGHT_EDIT_MODEL,
-      invocations: Array.from({ length: count }, (_, index) => ({
-        modelId: FAL_DIRECTIONAL_LIGHT_EDIT_MODEL,
-        input: {
-          image_url: source,
-          instruction,
-          seed: 5555 + index,
-          steps_num: 30,
-          guidance_scale: 5,
-        },
-      })),
-    };
-  }
+  const instruction = [
+    `Only relight this exact product photograph with the dominant key light in the selected ${direction} direction, ${lightDirectionInstructions[direction]}.`,
+    `Make the selected direction unmistakable at ${intensity}% intensity and ${temperature}K color temperature: the illuminated face and the cast-shadow direction must visibly prove where the light comes from.`,
+    smartMode ? 'Balance fill exposure automatically, but keep the selected key light visibly dominant.' : 'Keep fill light restrained so the directional contrast remains clearly visible.',
+    rimLight ? 'Add a restrained rim light around the product silhouette without weakening the main directional shadow.' : '',
+    request.prompt.trim() ? `Additional art direction: ${request.prompt.trim()}.` : '',
+    'Preserve every product contour, existing text, logo, colors, material, reflection, prop, background, composition, camera angle, crop, object position, and object count.',
+    'Do not add, remove, rewrite, or invent any text, logo, label, object, decoration, or surface feature. If an area is blank in the source, it must stay blank.',
+    'The only allowed visual change is physically coherent illumination, highlight, and shadow.',
+  ].filter(Boolean).join(' ');
 
   return {
-    modelId: FAL_DIRECTIONAL_LIGHT_MODEL,
-    invocations: Array.from({ length: count }, () => ({
-      modelId: FAL_DIRECTIONAL_LIGHT_MODEL,
+    modelId: FAL_DIRECTIONAL_LIGHT_EDIT_MODEL,
+    invocations: [{
+      modelId: FAL_DIRECTIONAL_LIGHT_STRUCTURE_MODEL,
       input: {
         image_url: source,
-        light_direction: lightDirection,
-        light_type: lightType,
+        instruction,
+        seed: 5555,
       },
-    })),
+    }],
+    directionalLight: {
+      sourceImageUrl: source,
+      outputCount: count,
+    },
   };
+}
+
+export function buildDirectionalLightInvocations(
+  plan: FalWorkflowPlan,
+  structuredInstruction: Record<string, unknown>,
+): FalInvocation[] {
+  const light = plan.directionalLight;
+  if (!light?.sourceImageUrl) throw new Error('定向光源图已失效，请重试任务');
+  if (!structuredInstruction || typeof structuredInstruction !== 'object') {
+    throw new Error('定向光结构解析未生成可用结果');
+  }
+
+  return Array.from({ length: light.outputCount }, (_, index) => ({
+    modelId: FAL_DIRECTIONAL_LIGHT_EDIT_MODEL,
+    input: {
+      image_url: light.sourceImageUrl,
+      structured_instruction: structuredInstruction,
+      seed: 5555 + index,
+      steps_num: 36,
+      guidance_scale: 5,
+      negative_prompt: 'invented text, invented logo, invented label, altered product geometry, changed composition, changed crop, moved objects, extra objects, flat lighting, ambiguous light direction, missing cast shadow',
+    },
+  }));
 }
 
 function removePlan(request: FalToolRequest): FalWorkflowPlan {

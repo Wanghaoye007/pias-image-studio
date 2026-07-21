@@ -35,6 +35,40 @@ function createAdapter(): FalQueueAdapter {
 }
 
 describe('Fal 统一作业编排器', () => {
+  it('恢复旧版定向光任务时不误触发新的结构化阶段', async () => {
+    const legacyJob: PersistedFalJob = {
+      id: 'fal-local-legacy-light',
+      profileId: 'light',
+      modelId: 'bria/fibo-edit/relight',
+      request: request({ profileId: 'light', imageUrls: [] }),
+      plan: { modelId: 'bria/fibo-edit/relight', invocations: [] },
+      children: [{
+        modelId: 'bria/fibo-edit/relight',
+        requestId: 'legacy-upstream-1',
+        status: 'completed',
+      }],
+      nextUpscaleFactorIndex: 1,
+      canceled: false,
+    };
+    const adapter = createAdapter();
+    const service = createFalQueueService({
+      adapter,
+      readKey: async () => 'id:secret',
+      persistence: {
+        load: vi.fn(async () => [legacyJob]),
+        save: vi.fn(async () => undefined),
+      },
+    });
+
+    await expect(service.status('fal-local-legacy-light')).resolves.toEqual({
+      status: 'completed',
+      logs: [],
+      progress: 94,
+    });
+    expect(adapter.result).not.toHaveBeenCalled();
+    expect(adapter.submit).not.toHaveBeenCalled();
+  });
+
   it('服务重启后从轻量快照恢复上游任务并继续查询', async () => {
     let storedJobs: PersistedFalJob[] = [];
     const persistence: FalQueuePersistence = {
@@ -95,16 +129,19 @@ describe('Fal 统一作业编排器', () => {
     });
   });
 
-  it('为单结果模型扇出请求并聚合状态与进度', async () => {
+  it('定向光先解析完整画面结构，再扇出最终出图并聚合结果', async () => {
     const adapter = createAdapter();
-    vi.mocked(adapter.status).mockImplementation(async (_modelId, options) => ({
-      status: options.requestId === 'upstream-1'
-        ? 'IN_QUEUE'
-        : options.requestId === 'upstream-2'
-          ? 'IN_PROGRESS'
-          : 'COMPLETED',
-      logs: options.requestId === 'upstream-2' ? [{ message: 'Rendering' }] : [],
-    }));
+    vi.mocked(adapter.result).mockImplementation(async (_modelId, options) => options.requestId === 'upstream-1'
+      ? {
+          data: {
+            objects: [{ description: 'blank cosmetic bottle' }],
+            lighting: { direction: 'upper-left', shadows: 'lower-right' },
+            text_render: [],
+          },
+        }
+      : {
+          data: { image: { url: `https://fal.media/${options.requestId}.png` } },
+        });
     const service = createFalQueueService({
       adapter,
       readKey: async () => 'id:secret',
@@ -116,11 +153,38 @@ describe('Fal 统一作业编排器', () => {
       parameters: { lightDirection: 'top-left' },
     }));
 
-    expect(adapter.submit).toHaveBeenCalledTimes(4);
+    expect(adapter.submit).toHaveBeenCalledTimes(1);
+    expect(adapter.submit).toHaveBeenLastCalledWith(
+      'bria/fibo-edit/edit/structured_instruction',
+      { input: expect.objectContaining({ image_url: 'source-image' }) },
+    );
     await expect(service.status('fal-local-light')).resolves.toEqual({
-      status: 'running',
-      logs: ['Rendering'],
-      progress: 59,
+      status: 'queued',
+      logs: [],
+      progress: 35,
+    });
+    expect(adapter.submit).toHaveBeenCalledTimes(5);
+    expect(adapter.submit).toHaveBeenNthCalledWith(2, 'bria/fibo-edit/edit', {
+      input: expect.objectContaining({
+        structured_instruction: expect.objectContaining({ text_render: [] }),
+        seed: 5555,
+      }),
+    });
+
+    await expect(service.status('fal-local-light')).resolves.toEqual({
+      status: 'completed',
+      logs: [],
+      progress: 94,
+    });
+    await expect(service.result('fal-local-light')).resolves.toEqual({
+      images: [
+        { url: 'https://fal.media/upstream-2.png' },
+        { url: 'https://fal.media/upstream-3.png' },
+        { url: 'https://fal.media/upstream-4.png' },
+        { url: 'https://fal.media/upstream-5.png' },
+      ],
+      modelId: 'bria/fibo-edit/edit',
+      childRequestIds: ['upstream-1', 'upstream-2', 'upstream-3', 'upstream-4', 'upstream-5'],
     });
   });
 
@@ -194,12 +258,9 @@ describe('Fal 统一作业编排器', () => {
     await service.submit(request({ profileId: 'light', outputCount: 2 }));
 
     await service.cancel('fal-local-light');
-    expect(adapter.cancel).toHaveBeenCalledTimes(2);
-    expect(adapter.cancel).toHaveBeenNthCalledWith(1, 'bria/fibo-edit/relight', {
+    expect(adapter.cancel).toHaveBeenCalledTimes(1);
+    expect(adapter.cancel).toHaveBeenCalledWith('bria/fibo-edit/edit/structured_instruction', {
       requestId: 'upstream-1',
-    });
-    expect(adapter.cancel).toHaveBeenNthCalledWith(2, 'bria/fibo-edit/relight', {
-      requestId: 'upstream-2',
     });
   });
 
