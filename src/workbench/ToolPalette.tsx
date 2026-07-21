@@ -43,6 +43,7 @@ export function ToolPalette({ activeTool, onSelect }: ToolPaletteProps) {
             type="button"
           >
             <Icon size={17} />
+            <span>{profile.label}</span>
           </button>
         );
       })}

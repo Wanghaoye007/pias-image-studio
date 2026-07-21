@@ -11,7 +11,7 @@ import {
   type OnConnectEnd,
   type OnConnectStart,
 } from '@xyflow/react';
-import { CheckCircle2, Coins, FolderKanban, ListChecks } from 'lucide-react';
+import { Aperture, CheckCircle2, Coins, FolderKanban, ListChecks } from 'lucide-react';
 import {
   createContext,
   useCallback,
@@ -111,13 +111,15 @@ const directionLabels: Record<string, string> = { left: '左', right: '右', up:
 const defaultToolParameters: TaskParameters = {
   sceneTemplate: '日光展台',
   quality: '精细',
-  lightIntensity: 60,
-  lightDirection: 'top-right',
+  lightIntensity: 50,
+  lightDirection: 'front',
   lightTemperature: 5200,
+  lightSmartMode: false,
+  rimLight: false,
   productPlacement: 'bottom_center',
-  horizontalAngle: 0,
+  horizontalAngle: -45,
   moveForward: 0,
-  verticalView: 0,
+  verticalView: -0.7,
   wideAngle: false,
   expandAnchor: 'center',
   expandScale: 72,
@@ -131,7 +133,7 @@ function parametersForTool(tool: TaskProfileId, parameters: TaskParameters): Tas
     generate: ['sceneTemplate', 'quality'],
     blend: ['productPlacement'],
     angle: ['horizontalAngle', 'moveForward', 'verticalView', 'wideAngle'],
-    light: ['lightDirection', 'lightIntensity', 'lightTemperature'],
+    light: ['lightDirection', 'lightIntensity', 'lightTemperature', 'lightSmartMode', 'rimLight'],
     remove: ['brushSize'],
     extract: [],
     expand: ['expandAnchor', 'expandScale'],
@@ -185,10 +187,26 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
       ? state.scenes.find((scene) => scene.id === parsed.id)
       : undefined;
   }, [selectedNodeId, state.scenes]);
+  const panelPreviewImageUrl = useMemo(() => {
+    const parsed = parseCanvasNodeId(selectedNodeId);
+    if (parsed?.kind === 'scene') {
+      return state.scenes.find((scene) => scene.id === parsed.id)?.imageUrl ?? '';
+    }
+    if (parsed?.kind === 'result') {
+      return state.results.find((result) => result.id === parsed.id)?.imageUrl ?? '';
+    }
+    if (parsed?.kind === 'job') {
+      const job = state.jobs.find((item) => item.id === parsed.id);
+      return state.scenes.find((scene) => scene.id === job?.sceneId)?.imageUrl ?? '';
+    }
+    return state.scenes.find((scene) => scene.id === state.selectedSceneId)?.imageUrl
+      ?? state.assets[0]?.imageUrl
+      ?? '';
+  }, [selectedNodeId, state.assets, state.jobs, state.results, state.scenes, state.selectedSceneId]);
   const [railCollapsed, setRailCollapsed] = useState(() => (
     typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
-    && window.matchMedia('(min-width: 768px) and (max-width: 1199px)').matches
+    && window.matchMedia('(min-width: 768px) and (max-width: 899px)').matches
   ));
   const [prompt, setPrompt] = useState('');
   const [outputCount, setOutputCount] = useState(getProfile(state.selectedTool).defaultOutputs);
@@ -213,6 +231,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   const userRevisionRef = useRef(0);
   const pendingFocusRef = useRef<{ nodeIds: string[]; revision: number } | null>(null);
   const completedFocusRef = useRef<{ jobId: string; revision: number } | null>(null);
+  const initialFitCompleteRef = useRef(false);
 
   useEffect(() => {
     falExecutorMounted.current = true;
@@ -506,6 +525,19 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
     },
   ), [activeTool, cancelDraftNode, compareResultIds, dragTargetNodeId, handleCreateNode, handleDerive, handleOpenDetails, handleParameterChange, handleSetPrimary, handleSubmitReview, handleToggleAdoption, handleToggleCompare, handleToggleFavorite, interaction.draftNode, interaction.mode, ratio, removeMaskImageUrl, selectedNodeId, state, toolParameters]);
 
+  useEffect(() => {
+    if (initialFitCompleteRef.current || graph.nodes.length === 0) return;
+    const timeoutId = window.setTimeout(() => {
+      initialFitCompleteRef.current = true;
+      void fitView({
+        duration: 220,
+        maxZoom: 1,
+        padding: { top: '36px', right: '28px', bottom: '64px', left: '176px' },
+      });
+    }, 80);
+    return () => window.clearTimeout(timeoutId);
+  }, [fitView, graph.nodes.length]);
+
   const handleToolSelect = (tool: TaskProfileId, trigger: HTMLButtonElement) => {
     markUserGesture();
     toolTriggerRef.current = trigger;
@@ -532,14 +564,14 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
         maxZoom: 1,
         nodes: [{ id: selectedNodeId }],
         padding: panelPlacement === 'left'
-          ? { top: '64px', right: '24px', bottom: '64px', left: '376px' }
-          : { top: '64px', right: '376px', bottom: '64px', left: '24px' },
+          ? { top: '64px', right: '24px', bottom: '64px', left: '456px' }
+          : { top: '64px', right: '456px', bottom: '64px', left: '24px' },
       }).then((didFit) => {
         if (!didFit) return;
         const viewport = getViewport();
         void setViewport({
           ...viewport,
-          x: viewport.x + (panelPlacement === 'left' ? 72 : -72),
+          x: viewport.x + (panelPlacement === 'left' ? 140 : -140),
         }, { duration: 120 });
       });
     }
@@ -736,6 +768,10 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
       revision: userRevisionRef.current,
     };
     dispatchInteraction({ type: 'SUBMIT' });
+    setCanvasNotice({
+      message: `${getProfile(runTool).label}任务已提交，完成后将自动定位结果`,
+      tone: 'success',
+    });
 
     setState((current) => {
       let next = current;
@@ -863,6 +899,11 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   return (
     <div className={`workbench ${railCollapsed ? 'is-rail-collapsed' : ''}`}>
       <header aria-label="工作台状态" className="workbench-topbar">
+        <div className="workbench-topbar__brand" aria-label="PIAS 图片工作台">
+          <span><Aperture aria-hidden="true" size={18} /></span>
+          <strong>PIAS</strong>
+          <small>图片工作台</small>
+        </div>
         <div className="workbench-topbar__project">
           <FolderKanban aria-hidden="true" size={16} />
           <span>项目</span>
@@ -908,6 +949,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
             ariaLabelConfig={reactFlowAriaLabels}
             edges={graph.edges}
             fitView
+            fitViewOptions={{ maxZoom: 1, padding: 0.16 }}
             maxZoom={1.8}
             minZoom={0.3}
             nodes={graph.nodes}
@@ -973,6 +1015,7 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
             hasRemoveMask={Boolean(removeMaskImageUrl)}
             parameters={toolParameters}
             placement={interaction.panelPlacement}
+            previewImageUrl={panelPreviewImageUrl}
             prompt={prompt}
             referenceAssetId={referenceAssetId}
             ratio={ratio}
@@ -1214,7 +1257,7 @@ function getCreationFallbackPosition(
   const source = parsed.kind === 'scene'
     ? state.scenes.find((scene) => scene.id === parsed.id)
     : state.results.find((result) => result.id === parsed.id);
-  return source ? { x: source.x + 320, y: source.y + 24 } : null;
+  return source ? { x: source.x + 380, y: source.y + 24 } : null;
 }
 
 function canDeleteScene(state: StudioState, sceneId: string): boolean {

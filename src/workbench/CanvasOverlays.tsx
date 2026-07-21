@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { Camera } from 'lucide-react';
 
 export type LightDirection =
   | 'top-left'
@@ -14,22 +15,27 @@ export type LightDirection =
   | 'bottom-right'
   | 'bottom'
   | 'bottom-left'
-  | 'left';
+  | 'left'
+  | 'front'
+  | 'back';
 
 const lightDirections: Array<{
   id: LightDirection;
   label: string;
+  shortLabel: string;
   x: number;
   y: number;
 }> = [
-  { id: 'top-left', label: '左上光', x: 16, y: 16 },
-  { id: 'top', label: '上方光', x: 50, y: 8 },
-  { id: 'top-right', label: '右上光', x: 84, y: 16 },
-  { id: 'right', label: '右侧光', x: 92, y: 50 },
-  { id: 'bottom-right', label: '右下光', x: 84, y: 84 },
-  { id: 'bottom', label: '下方光', x: 50, y: 92 },
-  { id: 'bottom-left', label: '左下光', x: 16, y: 84 },
-  { id: 'left', label: '左侧光', x: 8, y: 50 },
+  { id: 'top-left', label: '左上光', shortLabel: '↘', x: 16, y: 16 },
+  { id: 'top', label: '上方光', shortLabel: '↓', x: 50, y: 10 },
+  { id: 'top-right', label: '右上光', shortLabel: '↙', x: 84, y: 16 },
+  { id: 'right', label: '右侧光', shortLabel: '←', x: 78, y: 50 },
+  { id: 'bottom-right', label: '右下光', shortLabel: '↖', x: 84, y: 84 },
+  { id: 'bottom', label: '下方光', shortLabel: '↑', x: 50, y: 90 },
+  { id: 'bottom-left', label: '左下光', shortLabel: '↗', x: 16, y: 84 },
+  { id: 'left', label: '左侧光', shortLabel: '→', x: 14, y: 50 },
+  { id: 'front', label: '前方光', shortLabel: '●', x: 50, y: 68 },
+  { id: 'back', label: '后方光', shortLabel: '○', x: 50, y: 32 },
 ];
 
 export function LightOverlay({
@@ -79,31 +85,46 @@ export function LightOverlay({
           style={{ '--ray-offset': `${offset}deg` } as CSSProperties}
         />
       ))}
-      {lightDirections.map((item) => (
+      {lightDirections.filter((item) => item.id !== 'front' && item.id !== 'back').map((item) => (
         <button
           aria-label={`定向光控制柄 ${item.label}`}
           aria-pressed={item.id === direction}
           className="light-overlay__handle"
           data-position={item.id}
           key={item.id}
-          onClick={() => onDirectionChange?.(item.id)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDirectionChange?.(item.id);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
           style={{ left: `${item.x}%`, top: `${item.y}%` }}
+          title={`设为${item.label}`}
           type="button"
-        />
+        >
+          <span aria-hidden="true">{item.shortLabel}</span>
+        </button>
       ))}
       <button
         aria-label="定向光控制点"
         className="light-overlay__point"
         data-direction={direction}
         onPointerDown={(event) => {
+          event.stopPropagation();
           event.currentTarget.setPointerCapture?.(event.pointerId);
           updateFromPointer(event);
         }}
         onPointerMove={(event) => {
-          if (event.buttons === 1) updateFromPointer(event);
+          if (event.buttons === 1) {
+            event.stopPropagation();
+            updateFromPointer(event);
+          }
         }}
         type="button"
       />
+      <output aria-live="polite" className="light-overlay__readout">
+        <span aria-hidden="true">{selected.shortLabel}</span>
+        {selected.label}
+      </output>
     </div>
   );
 }
@@ -273,26 +294,113 @@ export function RemoveMaskOverlay({
 export function AnglePreview({
   horizontal,
   vertical,
+  onHorizontalChange,
 }: {
   horizontal: number;
   vertical: number;
+  onHorizontalChange?: (horizontal: number) => void;
 }) {
+  const normalizedHorizontal = normalizeAngle(horizontal);
+  const normalizedVertical = Math.max(-1, Math.min(1, vertical));
+  const radians = normalizedHorizontal * Math.PI / 180;
+  const cameraX = 50 + Math.sin(radians) * 27;
+  const cameraY = Math.max(10, Math.min(90, 50 + Math.cos(radians) * 28 - normalizedVertical * 9));
+  const sightAngle = Math.atan2(cameraY - 50, cameraX - 50) * 180 / Math.PI;
+  const sightLength = Math.hypot(cameraX - 50, cameraY - 50);
+  const verticalDegrees = Math.round(normalizedVertical * 45);
   const style = {
-    '--angle-horizontal': `${horizontal}deg`,
-    '--angle-elevation': `${Math.max(-1, Math.min(1, vertical)) * 34}%`,
+    '--camera-x': `${cameraX}%`,
+    '--camera-y': `${cameraY}%`,
+    '--sight-angle': `${sightAngle}deg`,
+    '--sight-length': `${sightLength}%`,
   } as CSSProperties;
+
+  const updateFromPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return;
+    const dx = event.clientX - (bounds.left + bounds.width / 2);
+    const dy = event.clientY - (bounds.top + bounds.height / 2);
+    onHorizontalChange?.(normalizeAngle(Math.round(Math.atan2(dx, dy) * 180 / Math.PI)));
+  };
+
+  const cameraLabel = getCameraPositionLabel(normalizedHorizontal);
+  const verticalLabel = verticalDegrees === 0
+    ? '平视 0°'
+    : `${verticalDegrees > 0 ? '俯视' : '仰视'} ${Math.abs(verticalDegrees)}°`;
 
   return (
     <div
       aria-label="视角预览"
       className="angle-preview nodrag"
       data-overlay="angle"
-      data-horizontal={horizontal}
-      data-vertical={vertical}
+      data-horizontal={normalizedHorizontal}
+      data-vertical={normalizedVertical}
       style={style}
     >
-      <span className="angle-preview__orbit" />
-      <span className="angle-preview__camera" />
+      <button
+        aria-label="拖动调整拍摄方位"
+        className="angle-preview__orbit-hit"
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+          updateFromPointer(event);
+        }}
+        onPointerMove={(event) => {
+          if (event.buttons === 1) updateFromPointer(event);
+        }}
+        type="button"
+      />
+      <span aria-hidden="true" className="angle-preview__orbit" />
+      <span aria-hidden="true" className="angle-preview__sightline" />
+      {anglePresets.map((preset) => {
+        const presetRadians = preset * Math.PI / 180;
+        const x = 50 + Math.sin(presetRadians) * 27;
+        const y = 50 + Math.cos(presetRadians) * 28;
+        return (
+          <button
+            aria-label={`设置拍摄方位 ${preset}°`}
+            aria-pressed={normalizedHorizontal === preset}
+            className="angle-preview__preset"
+            key={preset}
+            onClick={(event) => {
+              event.stopPropagation();
+              onHorizontalChange?.(preset);
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            style={{ left: `${x}%`, top: `${y}%` }}
+            title={`${getCameraPositionLabel(preset)} ${preset}°`}
+            type="button"
+          />
+        );
+      })}
+      <span aria-hidden="true" className="angle-preview__axis angle-preview__axis--front">正面</span>
+      <span aria-hidden="true" className="angle-preview__axis angle-preview__axis--right">右侧</span>
+      <span aria-hidden="true" className="angle-preview__axis angle-preview__axis--back">背面</span>
+      <span aria-hidden="true" className="angle-preview__axis angle-preview__axis--left">左侧</span>
+      <span aria-hidden="true" className="angle-preview__camera">
+        <Camera size={16} strokeWidth={2} />
+      </span>
+      <output aria-live="polite" className="angle-preview__readout">
+        <Camera aria-hidden="true" size={14} />
+        <strong>{cameraLabel} {normalizedHorizontal}°</strong>
+        <span>{verticalLabel}</span>
+      </output>
     </div>
   );
+}
+
+const anglePresets = [-135, -90, -45, 0, 45, 90, 135, 180];
+
+function normalizeAngle(value: number): number {
+  const normalized = ((value + 180) % 360 + 360) % 360 - 180;
+  return normalized === -180 ? 180 : normalized;
+}
+
+function getCameraPositionLabel(horizontal: number): string {
+  const absolute = Math.abs(horizontal);
+  if (absolute <= 22) return '正面';
+  if (absolute >= 158) return '背面';
+  if (horizontal > 0) return absolute < 68 ? '右前侧' : absolute < 113 ? '右侧' : '右后侧';
+  return absolute < 68 ? '左前侧' : absolute < 113 ? '左侧' : '左后侧';
 }

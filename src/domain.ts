@@ -327,8 +327,8 @@ export function createJob(
     reservedCredits,
     actualCredits: 0,
     progress: 8,
-    x: input.position?.x ?? source.x + 320,
-    y: input.position?.y ?? source.y + 24 + (sceneJobCount + sceneBranchCount) * 300,
+    x: input.position?.x ?? source.x + 380,
+    y: input.position?.y ?? source.y + 24 + (sceneJobCount + sceneBranchCount) * 360,
     inputSnapshot: {
       inputKind,
       inputNodeId,
@@ -616,7 +616,7 @@ function settleSuccessfulJob(
       width: output.width,
       height: output.height,
       createdAt: new Date().toISOString(),
-      x: job.x + 280 + index * 220,
+      x: job.x + 380 + index * 300,
       y: job.y,
       ...(output.generationMetadata
         ? { generationMetadata: output.generationMetadata }
@@ -767,7 +767,7 @@ export function createDerivedScene(
     operation: input.operation,
     status: 'draft',
     x: sourceResult.x,
-    y: parent.y + 24 + (parentJobCount + parentBranchCount) * 300,
+    y: parent.y + 24 + (parentJobCount + parentBranchCount) * 360,
     imageUrl: sourceResult.imageUrl,
     resultIds: [],
     parentSceneId: parent.id,

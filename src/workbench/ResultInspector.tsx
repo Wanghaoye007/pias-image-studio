@@ -27,6 +27,8 @@ const parameterLabels: Record<string, string> = {
   lightIntensity: '光照强度',
   lightDirection: '光照方向',
   lightTemperature: '色温',
+  lightSmartMode: '智能打光',
+  rimLight: '轮廓光',
   productPlacement: '商品位置',
   horizontalAngle: '水平旋转',
   moveForward: '镜头推进',

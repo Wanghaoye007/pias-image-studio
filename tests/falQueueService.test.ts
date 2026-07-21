@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createFalQueueService,
   type FalQueueAdapter,
+  type FalQueuePersistence,
+  type PersistedFalJob,
 } from '../src/fal/falQueueService';
 import type { FalToolRequest } from '../src/fal/toolWorkflows';
 
@@ -33,6 +35,47 @@ function createAdapter(): FalQueueAdapter {
 }
 
 describe('Fal 统一作业编排器', () => {
+  it('服务重启后从轻量快照恢复上游任务并继续查询', async () => {
+    let storedJobs: PersistedFalJob[] = [];
+    const persistence: FalQueuePersistence = {
+      load: vi.fn(async () => structuredClone(storedJobs)),
+      save: vi.fn(async (jobs) => { storedJobs = structuredClone(jobs); }),
+    };
+    const firstAdapter = createAdapter();
+    const firstService = createFalQueueService({
+      adapter: firstAdapter,
+      readKey: async () => 'id:secret',
+      createId: () => 'fal-local-resumable',
+      persistence,
+    });
+
+    await firstService.submit(request({
+      profileId: 'angle',
+      imageUrls: ['data:image/png;base64,PRIVATE_IMAGE'],
+      parameters: { horizontalAngle: -45, verticalView: -0.7 },
+    }));
+    expect(storedJobs[0].request.imageUrls).toEqual([]);
+    expect(storedJobs[0].plan.invocations).toEqual([]);
+
+    const resumedAdapter = createAdapter();
+    const resumedService = createFalQueueService({
+      adapter: resumedAdapter,
+      readKey: async () => 'id:secret',
+      persistence,
+    });
+
+    await expect(resumedService.status('fal-local-resumable')).resolves.toEqual({
+      status: 'completed',
+      logs: [],
+      progress: 94,
+    });
+    expect(resumedAdapter.submit).not.toHaveBeenCalled();
+    expect(resumedAdapter.status).toHaveBeenCalledWith(
+      'fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles',
+      { requestId: 'upstream-1', logs: true },
+    );
+  });
+
   it('只在服务端配置凭证，并为原生多结果模型提交一个请求', async () => {
     const adapter = createAdapter();
     const service = createFalQueueService({
@@ -127,10 +170,10 @@ describe('Fal 统一作业编排器', () => {
 
     await service.cancel('fal-local-light');
     expect(adapter.cancel).toHaveBeenCalledTimes(2);
-    expect(adapter.cancel).toHaveBeenNthCalledWith(1, 'bria/fibo-edit/edit', {
+    expect(adapter.cancel).toHaveBeenNthCalledWith(1, 'bria/fibo-edit/relight', {
       requestId: 'upstream-1',
     });
-    expect(adapter.cancel).toHaveBeenNthCalledWith(2, 'bria/fibo-edit/edit', {
+    expect(adapter.cancel).toHaveBeenNthCalledWith(2, 'bria/fibo-edit/relight', {
       requestId: 'upstream-2',
     });
   });

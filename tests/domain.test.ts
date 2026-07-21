@@ -108,7 +108,7 @@ describe('Image Studio domain flow', () => {
       outputCount: 2,
     });
 
-    expect(queued.jobs[0]).toMatchObject({ x: source.x + 320, y: source.y + 24 });
+    expect(queued.jobs[0]).toMatchObject({ x: source.x + 380, y: source.y + 24 });
 
     const settled = completeJob(queued, queued.jobs[0].id, {
       successfulOutputs: 2,
@@ -116,8 +116,8 @@ describe('Image Studio domain flow', () => {
     });
     const results = settled.results;
 
-    expect(results[0]).toMatchObject({ x: queued.jobs[0].x + 280, y: queued.jobs[0].y });
-    expect(results[1]).toMatchObject({ x: queued.jobs[0].x + 500, y: queued.jobs[0].y });
+    expect(results[0]).toMatchObject({ x: queued.jobs[0].x + 380, y: queued.jobs[0].y });
+    expect(results[1]).toMatchObject({ x: queued.jobs[0].x + 680, y: queued.jobs[0].y });
     expect(settled.scenes[0].imageUrl).toBe(source.imageUrl);
 
     const derived = createDerivedScene(settled, {
@@ -127,7 +127,7 @@ describe('Image Studio domain flow', () => {
     });
     expect(derived.scenes.at(-1)).toMatchObject({
       x: results[0].x,
-      y: source.y + 324,
+      y: source.y + 384,
     });
   });
 
@@ -236,8 +236,8 @@ describe('Image Studio domain flow', () => {
       sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
     });
 
-    expect(branched.scenes.at(-1)!.y).toBe(first.jobs[0].y + 300);
-    expect(second.jobs.at(-1)!.y).toBe(branched.scenes.at(-1)!.y + 300);
+    expect(branched.scenes.at(-1)!.y).toBe(first.jobs[0].y + 360);
+    expect(second.jobs.at(-1)!.y).toBe(branched.scenes.at(-1)!.y + 360);
   });
 
   it('treats zero successful outputs as failure and releases the full reserve', () => {

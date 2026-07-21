@@ -1,6 +1,7 @@
-import { RotateCcw, Search, X } from 'lucide-react';
+import { ArrowUp, RotateCcw, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getProfile, type Asset, type TaskParameters, type TaskProfileId } from '../domain';
+import { AngleEditor, LightEditor } from './AdvancedToolEditors';
 
 type ContextToolPanelProps = {
   tool: TaskProfileId;
@@ -11,6 +12,7 @@ type ContextToolPanelProps = {
   assets: Asset[];
   parameters: TaskParameters;
   referenceAssetId: string;
+  previewImageUrl: string;
   hasRemoveMask?: boolean;
   assetPickerOpen?: boolean;
   isSubmitting?: boolean;
@@ -40,6 +42,7 @@ const lightDirections = [
 
 export function ContextToolPanel(props: ContextToolPanelProps) {
   const profile = getProfile(props.tool);
+  const isAdvancedEditor = props.tool === 'light' || props.tool === 'angle';
   const estimate = profile.costPerOutput * props.outputCount;
   const cannotRun = props.isSubmitting
     || (props.tool === 'remove' && !props.hasRemoveMask)
@@ -67,15 +70,61 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
     >
       <header>
         <div>
-          <small>图片处理</small>
-          <strong>{profile.label}</strong>
+          {!isAdvancedEditor && <small>图片处理</small>}
+          <strong>{props.tool === 'light' ? '打光效果' : props.tool === 'angle' ? '多角度编辑器' : profile.label}</strong>
         </div>
         <button aria-label="关闭参数面板" onClick={props.onClose} title="关闭参数面板" type="button">
           <X size={17} />
         </button>
       </header>
 
-      {props.tool === 'blend' && (
+      {props.tool === 'light' && (
+        <>
+          <LightEditor
+            onParameterChange={props.onParameterChange}
+            parameters={props.parameters}
+            previewImageUrl={props.previewImageUrl}
+          />
+          <AdvancedEditorFooter
+            estimate={estimate}
+            onOutputCountChange={props.onOutputCountChange}
+            onParameterChange={props.onParameterChange}
+            onPromptChange={props.onPromptChange}
+            onRatioChange={props.onRatioChange}
+            onRun={props.onRun}
+            outputCount={props.outputCount}
+            ratio={props.ratio}
+            disabled={cannotRun}
+            submitting={Boolean(props.isSubmitting)}
+            tool="light"
+          />
+        </>
+      )}
+
+      {props.tool === 'angle' && (
+        <>
+          <AngleEditor
+            onParameterChange={props.onParameterChange}
+            parameters={props.parameters}
+            previewImageUrl={props.previewImageUrl}
+          />
+          <AdvancedEditorFooter
+            estimate={estimate}
+            onOutputCountChange={props.onOutputCountChange}
+            onParameterChange={props.onParameterChange}
+            onPromptChange={props.onPromptChange}
+            onRatioChange={props.onRatioChange}
+            onRun={props.onRun}
+            outputCount={props.outputCount}
+            ratio={props.ratio}
+            disabled={cannotRun}
+            submitting={Boolean(props.isSubmitting)}
+            tool="angle"
+          />
+        </>
+      )}
+
+      {!isAdvancedEditor && <>{props.tool === 'blend' && (
         <ReferenceAssetSlot
           asset={props.assets.find((asset) => asset.id === props.referenceAssetId)}
           onOpen={() => props.onAssetPickerOpen?.()}
@@ -187,8 +236,96 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
           }}
           selectedAssetId={props.referenceAssetId}
         />
-      )}
+      )}</>}
     </section>
+  );
+}
+
+function AdvancedEditorFooter({
+  tool,
+  outputCount,
+  ratio,
+  estimate,
+  disabled,
+  submitting,
+  onOutputCountChange,
+  onRatioChange,
+  onParameterChange,
+  onPromptChange,
+  onRun,
+}: {
+  tool: 'light' | 'angle';
+  outputCount: number;
+  ratio: string;
+  estimate: number;
+  disabled: boolean;
+  submitting: boolean;
+  onOutputCountChange: (count: number) => void;
+  onRatioChange: (ratio: string) => void;
+  onParameterChange: (key: string, value: string | number | boolean) => void;
+  onPromptChange: (prompt: string) => void;
+  onRun: () => void;
+}) {
+  const reset = () => {
+    if (tool === 'light') {
+      onParameterChange('lightDirection', 'front');
+      onParameterChange('lightIntensity', 50);
+      onParameterChange('lightTemperature', 5200);
+      onParameterChange('lightSmartMode', false);
+      onParameterChange('rimLight', false);
+    } else {
+      onParameterChange('horizontalAngle', -45);
+      onParameterChange('moveForward', 0);
+      onParameterChange('verticalView', -0.7);
+      onParameterChange('wideAngle', false);
+    }
+    onPromptChange('');
+  };
+
+  return (
+    <footer className="advanced-editor-footer">
+      <button className="advanced-editor-footer__reset" onClick={reset} type="button">
+        <RotateCcw aria-hidden="true" size={17} />
+        <span>重置参数</span>
+      </button>
+      <div aria-label="输出数量" className="advanced-editor-footer__count" role="group">
+        <span>输出</span>
+        {[1, 2, 4].map((count) => (
+          <button
+            aria-pressed={count === outputCount}
+            key={count}
+            onClick={() => onOutputCountChange(count)}
+            type="button"
+          >
+            {count}
+          </button>
+        ))}
+      </div>
+      {tool === 'angle' && (
+        <label className="advanced-editor-footer__ratio">
+          <span>比例</span>
+          <select aria-label="画面比例" onChange={(event) => onRatioChange(event.target.value)} value={ratio}>
+            <option value="1:1">1:1</option>
+            <option value="4:5">4:5</option>
+            <option value="3:4">3:4</option>
+            <option value="4:3">4:3</option>
+            <option value="16:9">16:9</option>
+            <option value="9:16">9:16</option>
+          </select>
+        </label>
+      )}
+      <span className="advanced-editor-footer__credit">预计 {estimate} 点</span>
+      <button
+        aria-label="开始生成"
+        className="advanced-editor-footer__run"
+        disabled={disabled}
+        onClick={onRun}
+        type="button"
+      >
+        <span>{submitting ? '提交中' : tool === 'light' ? '生成打光' : '生成视角'}</span>
+        <ArrowUp aria-hidden="true" size={19} strokeWidth={2.2} />
+      </button>
+    </footer>
   );
 }
 

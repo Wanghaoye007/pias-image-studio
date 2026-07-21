@@ -541,6 +541,78 @@ describe('workbench canvas', () => {
     expect(onParameterChange).toHaveBeenCalledWith('expandAnchor', 'bottom-right');
   });
 
+  it('selects a light direction from the image overlay', () => {
+    const state = initialStudioState();
+    const onParameterChange = vi.fn();
+    render(
+      <ReactFlowProvider>
+        <SceneCanvasNode
+          data={{
+            kind: 'scene',
+            scene: state.scenes[0],
+            results: [],
+            selected: true,
+            activeTool: 'light',
+            interactionMode: 'editing-light',
+            parameters: { lightDirection: 'top-right' },
+            onParameterChange,
+          }}
+          id="scene:scene-source"
+          type="scene"
+          isConnectable
+          zIndex={0}
+          dragging={false}
+          selected={false}
+          selectable
+          deletable
+          draggable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+        />
+      </ReactFlowProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '定向光控制柄 左下光' }));
+    expect(onParameterChange).toHaveBeenCalledWith('lightDirection', 'bottom-left');
+  });
+
+  it('selects a camera preset from the multiple-angle orbit', () => {
+    const state = initialStudioState();
+    const onParameterChange = vi.fn();
+    render(
+      <ReactFlowProvider>
+        <SceneCanvasNode
+          data={{
+            kind: 'scene',
+            scene: state.scenes[0],
+            results: [],
+            selected: true,
+            activeTool: 'angle',
+            interactionMode: 'editing-angle',
+            parameters: { horizontalAngle: 0, verticalView: 0.5 },
+            onParameterChange,
+          }}
+          id="scene:scene-source"
+          type="scene"
+          isConnectable
+          zIndex={0}
+          dragging={false}
+          selected={false}
+          selectable
+          deletable
+          draggable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+        />
+      </ReactFlowProvider>,
+    );
+
+    expect(screen.getByText('正面 0°')).toBeInTheDocument();
+    expect(screen.getByText('俯视 23°')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '设置拍摄方位 90°' }));
+    expect(onParameterChange).toHaveBeenCalledWith('horizontalAngle', 90);
+  });
+
   it('draws a binary remove mask and emits a Fal-ready data URL', () => {
     const context = {
       fillStyle: '',
@@ -671,6 +743,13 @@ describe('workbench canvas', () => {
     expect(within(panel).getByRole('slider', { name: '水平旋转' })).toHaveAttribute('min', '-180');
     expect(within(panel).getByRole('slider', { name: '镜头推进' })).toHaveAttribute('max', '10');
     expect(within(panel).getByRole('slider', { name: '垂直视角' })).toHaveAttribute('step', '0.1');
+    expect(within(panel).getByRole('slider', { name: '水平旋转' })).toHaveValue('-45');
+    expect(within(panel).getByRole('slider', { name: '垂直视角' })).toHaveValue('-0.7');
+
+    fireEvent.click(within(panel).getByRole('tab', { name: '正面俯拍' }));
+    expect(within(panel).getByRole('slider', { name: '水平旋转' })).toHaveValue('0');
+    expect(within(panel).getByRole('slider', { name: '垂直视角' })).toHaveValue('-0.8');
+    expect(within(panel).getByRole('slider', { name: '镜头推进' })).toHaveValue('2');
 
     fireEvent.change(within(panel).getByRole('slider', { name: '水平旋转' }), {
       target: { value: '-45' },
@@ -790,13 +869,35 @@ describe('workbench canvas', () => {
     render(<WorkbenchHarness />);
 
     fireEvent.click(screen.getByRole('button', { name: '定向光' }));
-    fireEvent.click(screen.getByRole('button', { name: '左下光' }));
+    fireEvent.click(screen.getByRole('button', { name: '主光源 后方' }));
 
-    expect(screen.getByLabelText('定向光控制点')).toHaveAttribute('data-direction', 'bottom-left');
+    expect(screen.getByLabelText('定向光控制点')).toHaveAttribute('data-direction', 'back');
     expect(screen.getByLabelText('定向光控制')).toHaveStyle({
-      '--light-angle': '135deg',
+      '--light-angle': '-90deg',
     });
     expect(screen.getByLabelText('定向光控制').querySelectorAll('.light-overlay__ray')).toHaveLength(5);
+  });
+
+  it('snapshots the advanced light switches and front key-light direction', () => {
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '定向光' }));
+    const panel = screen.getByRole('dialog', { name: '定向光参数' });
+    expect(within(panel).getByText('打光效果')).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: '主光源 前方' }));
+    fireEvent.click(within(panel).getByRole('checkbox', { name: '智能模式' }));
+    fireEvent.click(within(panel).getByRole('checkbox', { name: '轮廓光' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '1' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '开始生成' }));
+
+    expect(latestState.jobs[0]?.inputSnapshot.parameters).toEqual({
+      lightDirection: 'front',
+      lightIntensity: 50,
+      lightTemperature: 5200,
+      lightSmartMode: true,
+      rimLight: true,
+    });
   });
 
   it('exposes stable state hooks for visual frame comparison', () => {
@@ -1085,7 +1186,7 @@ describe('workbench canvas', () => {
       duration: 260,
       maxZoom: 1,
       nodes: [{ id: 'scene:scene-source' }],
-      padding: { top: '64px', right: '376px', bottom: '64px', left: '24px' },
+      padding: { top: '64px', right: '456px', bottom: '64px', left: '24px' },
     });
   });
 
@@ -1176,7 +1277,7 @@ describe('workbench canvas', () => {
     fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
 
     expect(latestState.jobs).toHaveLength(1);
-    expect(latestState.jobs[0]).toMatchObject({ x: 320, y: 64, profileId: 'blend' });
+    expect(latestState.jobs[0]).toMatchObject({ x: 380, y: 64, profileId: 'blend' });
     expect(latestState.selectedTool).toBe('blend');
     expect(screen.queryByText('待配置')).not.toBeInTheDocument();
   });
@@ -1320,9 +1421,7 @@ describe('workbench canvas', () => {
 
     fireEvent.click(screen.getByAltText('生成 1'));
     fireEvent.click(screen.getByRole('button', { name: '定向光' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '创作描述' }), {
-      target: { value: '右上方柔光，保留瓶身标签' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: '主光源 右侧' }));
     fireEvent.change(screen.getByRole('slider', { name: '光线强度' }), {
       target: { value: '72' },
     });
@@ -1341,15 +1440,17 @@ describe('workbench canvas', () => {
         inputKind: 'result',
         inputNodeId: settled.results[0].id,
         sourceResultId: settled.results[0].id,
-        prompt: '右上方柔光，保留瓶身标签',
+        prompt: '',
         ratio: '1:1',
         parameters: { lightIntensity: 72 },
       },
     });
     expect(branchJob.inputSnapshot.parameters).toEqual({
-      lightDirection: 'top-right',
+      lightDirection: 'right',
       lightIntensity: 72,
       lightTemperature: 5200,
+      lightSmartMode: false,
+      rimLight: false,
     });
   });
 

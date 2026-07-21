@@ -12,6 +12,7 @@ import {
   Crown,
   ImagePlus,
   Info,
+  Pencil,
   Plus,
   Star,
 } from 'lucide-react';
@@ -77,6 +78,10 @@ export function SceneCanvasNode({ data, id }: NodeProps<Node<SceneNodeData, 'sce
       data-interaction-mode={data.interactionMode ?? 'node-selected'}
     >
       <Handle type="target" position={Position.Left} />
+      <header className="canvas-node__header">
+        <strong>{sceneTitle}</strong>
+        <span aria-hidden="true" className="canvas-node__edit-mark"><Pencil size={12} /></span>
+      </header>
       {data.scene.imageUrl ? (
         <img src={data.scene.imageUrl} alt={sceneTitle} />
       ) : (
@@ -85,7 +90,7 @@ export function SceneCanvasNode({ data, id }: NodeProps<Node<SceneNodeData, 'sce
           <span>拖入素材</span>
         </div>
       )}
-      <div className="canvas-node__content">
+      <div className="canvas-node__content canvas-node__metadata">
         <strong>{sceneTitle}</strong>
         <span>{data.scene.skuCode}</span>
         <small>{getSceneStatusLabel(data.scene.status)}</small>
@@ -108,6 +113,9 @@ export function JobCanvasNode({ data }: NodeProps<Node<JobNodeData, 'job'>>) {
       data-stage={getJobStageLabel(data.job)}
     >
       <Handle type="target" position={Position.Left} />
+      <header className="canvas-node__header">
+        <strong>{data.profile.label} · {getJobStageLabel(data.job)}</strong>
+      </header>
       <img alt="" className="job-node__preview" src={data.previewImageUrl} />
       <span aria-hidden="true" className="job-node__scrim" />
       <div className="job-node__progress">
@@ -132,6 +140,10 @@ export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'r
       data-interaction-mode={data.interactionMode ?? 'node-selected'}
     >
       <Handle type="target" position={Position.Left} />
+      <header className="canvas-node__header">
+        <strong>{data.result.title}</strong>
+        <span aria-hidden="true" className="canvas-node__edit-mark"><Pencil size={12} /></span>
+      </header>
       <img src={data.result.imageUrl} alt={data.result.title} />
       <div aria-label="结果快捷操作" className="result-decision-bar nodrag">
         <ResultIconAction
@@ -171,7 +183,7 @@ export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'r
           {isPrimary && <span>主结果</span>}
         </div>
       )}
-      <div className="canvas-node__content">
+      <div className="canvas-node__content canvas-node__metadata">
         <strong>{data.result.title}</strong>
         <small>{getReviewStatusLabel(data.result.reviewStatus)}</small>
         {data.result.reviewComment && <small>{data.result.reviewComment}</small>}
@@ -327,6 +339,7 @@ function CanvasToolOverlay({ data }: { data: SceneNodeData | ResultNodeData }) {
     return (
       <AnglePreview
         horizontal={numberParameter(data.parameters?.horizontalAngle, 0)}
+        onHorizontalChange={(value) => data.onParameterChange?.('horizontalAngle', value)}
         vertical={numberParameter(data.parameters?.verticalView, 0)}
       />
     );
@@ -363,6 +376,8 @@ function isLightDirection(value: unknown): value is LightDirection {
     'bottom',
     'bottom-left',
     'left',
+    'front',
+    'back',
   ].includes(value);
 }
 

@@ -6,7 +6,8 @@ import {
 } from './multipleAngles';
 
 export const FAL_PRODUCT_SHOT_MODEL = 'fal-ai/bria/product-shot';
-export const FAL_DIRECTIONAL_LIGHT_MODEL = 'bria/fibo-edit/edit';
+export const FAL_DIRECTIONAL_LIGHT_MODEL = 'bria/fibo-edit/relight';
+export const FAL_DIRECTIONAL_LIGHT_EDIT_MODEL = 'bria/fibo-edit/edit';
 export const FAL_ERASER_MODEL = 'fal-ai/bria/eraser';
 export const FAL_BACKGROUND_REMOVE_MODEL = 'fal-ai/bria/background/remove';
 export const FAL_EXPAND_MODEL = 'fal-ai/bria/expand';
@@ -77,6 +78,8 @@ const lightDirections = new Set([
   'bottom',
   'bottom-left',
   'left',
+  'front',
+  'back',
 ]);
 
 const expandAnchors = new Set([
@@ -175,7 +178,7 @@ function lightPlan(request: FalToolRequest): FalWorkflowPlan {
   const directionValue = request.parameters.lightDirection;
   const direction = typeof directionValue === 'string' && lightDirections.has(directionValue)
     ? directionValue
-    : 'top-right';
+    : 'front';
   const intensity = numberParameter(
     request.parameters,
     'lightIntensity',
@@ -192,23 +195,60 @@ function lightPlan(request: FalToolRequest): FalWorkflowPlan {
     7500,
     '色温',
   );
-  const supplement = request.prompt.trim();
-  const instruction = [
-    `Relight the existing product photo with the key light coming precisely from the ${direction} direction at ${intensity}% intensity and ${temperature}K color temperature.`,
-    'Preserve the product shape, label text, logo, colors, material, background, composition, camera angle, and object count.',
-    supplement ? `Additional direction: ${supplement}.` : '',
-  ].filter(Boolean).join(' ');
+  const smartMode = request.parameters.lightSmartMode === true;
+  const rimLight = request.parameters.rimLight === true;
+  const lightDirection = direction === 'front'
+    ? 'front'
+    : direction === 'top' || direction === 'top-left' || direction === 'top-right'
+      ? 'top-down'
+      : direction === 'bottom' || direction === 'bottom-left' || direction === 'bottom-right'
+        ? 'bottom'
+        : 'side';
+  const lightType = rimLight
+    ? 'spotlight on subject'
+    : temperature <= 3800
+      ? intensity >= 65 ? 'low-angle sunlight' : 'sunrise light'
+      : temperature >= 6500
+        ? 'blue hour light'
+        : smartMode
+          ? 'soft overcast daylight lighting'
+          : intensity >= 75
+            ? 'harsh studio lighting'
+            : intensity <= 30
+              ? 'fog-diffused lighting'
+              : 'overcast light';
+  const usesStructuredRelight = direction === 'front' || direction === 'top' || direction === 'bottom';
+
+  if (!usesStructuredRelight) {
+    const instruction = [
+      `Create a clearly visible studio relighting with the key light coming precisely from the ${direction} direction at ${intensity}% intensity and ${temperature}K color temperature.`,
+      smartMode ? 'Balance fill light and exposure while keeping the selected key-light direction dominant.' : '',
+      rimLight ? 'Add a restrained rim light around the product silhouette for clean edge separation.' : '',
+      'Preserve the product shape, label text, logo, colors, material, background, composition, camera angle, and object count.',
+    ].filter(Boolean).join(' ');
+    return {
+      modelId: FAL_DIRECTIONAL_LIGHT_EDIT_MODEL,
+      invocations: Array.from({ length: count }, (_, index) => ({
+        modelId: FAL_DIRECTIONAL_LIGHT_EDIT_MODEL,
+        input: {
+          image_url: source,
+          instruction,
+          seed: 5555 + index,
+          steps_num: 30,
+          guidance_scale: 5,
+        },
+      })),
+    };
+  }
 
   return {
     modelId: FAL_DIRECTIONAL_LIGHT_MODEL,
-    invocations: Array.from({ length: count }, (_, index) => ({
+    invocations: Array.from({ length: count }, () => ({
       modelId: FAL_DIRECTIONAL_LIGHT_MODEL,
       input: {
         image_url: source,
-        instruction,
-        seed: 5555 + index,
-        steps_num: 30,
-        guidance_scale: 5,
+        light_direction: lightDirection,
+        light_type: lightType,
       },
     })),
   };

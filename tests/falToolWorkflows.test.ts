@@ -99,7 +99,7 @@ describe('Fal 图片工具适配器', () => {
     }));
   });
 
-  it('把八方向、强度和色温写入 Fibo 指令并按输出数扇出', () => {
+  it('把斜向主光写入精确编辑指令并按输出数扇出', () => {
     const plan = buildFalWorkflowPlan(request({
       profileId: 'light',
       outputCount: 4,
@@ -119,6 +119,57 @@ describe('Fal 图片工具适配器', () => {
       seed: 5555,
     }));
     expect(plan.invocations[3].input).toEqual(expect.objectContaining({ seed: 5558 }));
+  });
+
+  it('把前方主光与轮廓光映射到可控聚光光型', () => {
+    const plan = buildFalWorkflowPlan(request({
+      profileId: 'light',
+      parameters: {
+        lightDirection: 'front',
+        lightIntensity: 50,
+        lightTemperature: 5200,
+        lightSmartMode: true,
+        rimLight: true,
+      },
+    }));
+
+    expect(plan.invocations[0].input).toEqual({
+      image_url: 'source-image',
+      light_direction: 'front',
+      light_type: 'spotlight on subject',
+    });
+  });
+
+  it('把色温与亮度档位映射为 Relight 支持的光型', () => {
+    const warm = buildFalWorkflowPlan(request({
+      profileId: 'light',
+      parameters: { lightDirection: 'front', lightIntensity: 80, lightTemperature: 3200 },
+    }));
+    const cool = buildFalWorkflowPlan(request({
+      profileId: 'light',
+      parameters: { lightDirection: 'top', lightIntensity: 50, lightTemperature: 7000 },
+    }));
+
+    expect(warm.invocations[0].input).toEqual(expect.objectContaining({
+      light_direction: 'front',
+      light_type: 'low-angle sunlight',
+    }));
+    expect(cool.invocations[0].input).toEqual(expect.objectContaining({
+      light_direction: 'top-down',
+      light_type: 'blue hour light',
+    }));
+  });
+
+  it('左、右和后方光保留独立方向语义', () => {
+    const directions = ['left', 'right', 'back'];
+    directions.forEach((lightDirection) => {
+      const plan = buildFalWorkflowPlan(request({
+        profileId: 'light',
+        parameters: { lightDirection, lightIntensity: 60, lightTemperature: 5200 },
+      }));
+      expect(plan.modelId).toBe('bria/fibo-edit/edit');
+      expect(plan.invocations[0].input.instruction).toMatch(new RegExp(lightDirection));
+    });
   });
 
   it('去除节点要求笔刷蒙版并固定单结果', () => {

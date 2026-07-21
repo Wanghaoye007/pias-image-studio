@@ -42,15 +42,15 @@ export type FalToolResult = NormalizedFalResult & {
   childRequestIds: string[];
 };
 
-type ChildStatus = 'queued' | 'running' | 'completed';
+export type ChildStatus = 'queued' | 'running' | 'completed';
 
-type LocalFalChild = {
+export type LocalFalChild = {
   modelId: string;
   requestId: string;
   status: ChildStatus;
 };
 
-type LocalFalJob = {
+export type PersistedFalJob = {
   id: string;
   profileId: TaskProfileId;
   modelId: string;
@@ -59,6 +59,13 @@ type LocalFalJob = {
   children: LocalFalChild[];
   nextUpscaleFactorIndex: number;
   canceled: boolean;
+};
+
+type LocalFalJob = PersistedFalJob;
+
+export type FalQueuePersistence = {
+  load(): Promise<PersistedFalJob[]>;
+  save(jobs: PersistedFalJob[]): Promise<void>;
 };
 
 export class FalServiceError extends Error {
@@ -92,12 +99,44 @@ function aggregateProgress(children: LocalFalChild[]): number {
   return Math.round(24 + completed / children.length * 60 + running / children.length * 20);
 }
 
+function persistenceSnapshot(job: LocalFalJob): PersistedFalJob {
+  const { maskImageUrl: _maskImageUrl, ...request } = job.request;
+  return {
+    ...job,
+    request: {
+      ...request,
+      imageUrls: [],
+      parameters: { ...request.parameters },
+    },
+    plan: {
+      ...job.plan,
+      invocations: [],
+      ...(job.plan.upscaleFactors ? { upscaleFactors: [...job.plan.upscaleFactors] } : {}),
+    },
+    children: job.children.map((child) => ({ ...child })),
+  };
+}
+
+function isPersistedJob(value: unknown): value is PersistedFalJob {
+  if (!value || typeof value !== 'object') return false;
+  const job = value as Partial<PersistedFalJob>;
+  return typeof job.id === 'string'
+    && typeof job.profileId === 'string'
+    && typeof job.modelId === 'string'
+    && Array.isArray(job.children)
+    && Boolean(job.request)
+    && Boolean(job.plan);
+}
+
 export function createFalQueueService(options: {
   adapter: FalQueueAdapter;
   readKey?: () => Promise<string>;
   createId?: () => string;
+  persistence?: FalQueuePersistence;
 }) {
   let configured: Promise<void> | undefined;
+  let hydrated: Promise<void> | undefined;
+  let persistenceWrite = Promise.resolve();
   const jobs = new Map<string, LocalFalJob>();
   const createId = options.createId ?? (() => `fal-local-${randomUUID()}`);
 
@@ -108,6 +147,31 @@ export function createFalQueueService(options: {
         throw new FalServiceError('Fal 服务凭证未配置', 'FAL_CREDENTIALS', 503);
       });
     return configured;
+  };
+
+  const ensureHydrated = () => {
+    hydrated ??= options.persistence
+      ? options.persistence.load()
+        .then((savedJobs) => {
+          savedJobs.filter(isPersistedJob).forEach((job) => jobs.set(job.id, job));
+        })
+        .catch((error) => {
+          console.warn('Fal 任务恢复失败，将使用空队列', error);
+        })
+      : Promise.resolve();
+    return hydrated;
+  };
+
+  const persist = () => {
+    if (!options.persistence) return Promise.resolve();
+    const snapshot = Array.from(jobs.values(), persistenceSnapshot).slice(-100);
+    persistenceWrite = persistenceWrite
+      .catch(() => undefined)
+      .then(() => options.persistence?.save(snapshot))
+      .catch((error) => {
+        console.warn('Fal 任务状态保存失败', error);
+      });
+    return persistenceWrite;
   };
 
   const submitInvocation = async (
@@ -121,6 +185,7 @@ export function createFalQueueService(options: {
 
   return {
     async submit(request: FalToolRequest): Promise<{ requestId: string; modelId: string }> {
+      await ensureHydrated();
       let plan: FalWorkflowPlan;
       try {
         plan = buildFalWorkflowPlan(request);
@@ -160,10 +225,12 @@ export function createFalQueueService(options: {
         nextUpscaleFactorIndex: 1,
         canceled: false,
       });
+      await persist();
       return { requestId, modelId: plan.modelId };
     },
 
     async status(requestId: string): Promise<FalQueueStatus> {
+      await ensureHydrated();
       await ensureConfigured();
       const job = requireJob(jobs, requestId);
       if (job.canceled) return { status: 'completed', logs: [], progress: 94 };
@@ -205,6 +272,7 @@ export function createFalQueueService(options: {
           );
           job.children.push(await submitInvocation(invocation.modelId, invocation.input));
           job.nextUpscaleFactorIndex += 1;
+          await persist();
           return {
             status: 'queued',
             logs,
@@ -218,6 +286,7 @@ export function createFalQueueService(options: {
           : statuses.some((value) => value === 'running')
             ? 'running'
             : 'queued';
+        await persist();
         return {
           status,
           logs,
@@ -230,6 +299,7 @@ export function createFalQueueService(options: {
     },
 
     async result(requestId: string): Promise<FalToolResult> {
+      await ensureHydrated();
       await ensureConfigured();
       const job = requireJob(jobs, requestId);
       const resultChildren = job.profileId === 'upscale'
@@ -256,12 +326,14 @@ export function createFalQueueService(options: {
     },
 
     async cancel(requestId: string): Promise<void> {
+      await ensureHydrated();
       await ensureConfigured();
       const job = requireJob(jobs, requestId);
       job.canceled = true;
       await Promise.allSettled(job.children.map((child) => options.adapter.cancel(child.modelId, {
         requestId: child.requestId,
       })));
+      await persist();
     },
   };
 }

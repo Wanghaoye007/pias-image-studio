@@ -7,6 +7,7 @@ import {
   type FalQueueAdapter,
   type FalQueueService,
 } from './falQueueService';
+import { createFileFalQueuePersistence } from './falJobPersistence';
 import type { FalToolRequest } from './toolWorkflows';
 
 const apiRoot = '/api/fal/jobs';
@@ -95,7 +96,10 @@ export function createFalProxyMiddleware(
 }
 
 export function falImageProxyPlugin(): Plugin {
-  const service = createFalQueueService({ adapter: falAdapter });
+  const service = createFalQueueService({
+    adapter: falAdapter,
+    persistence: createFileFalQueuePersistence(),
+  });
   const middleware = createFalProxyMiddleware(service);
   return {
     name: 'pias-fal-image-proxy',
