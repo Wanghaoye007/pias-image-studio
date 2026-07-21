@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { Camera } from 'lucide-react';
+import { clampFalHorizontalAngle } from '../fal/multipleAngles';
 
 export type LightDirection =
   | 'top-left'
@@ -300,10 +301,10 @@ export function AnglePreview({
   vertical: number;
   onHorizontalChange?: (horizontal: number) => void;
 }) {
-  const normalizedHorizontal = normalizeAngle(horizontal);
+  const normalizedHorizontal = clampFalHorizontalAngle(horizontal);
   const normalizedVertical = Math.max(-1, Math.min(1, vertical));
   const radians = normalizedHorizontal * Math.PI / 180;
-  const cameraX = 50 + Math.sin(radians) * 27;
+  const cameraX = 50 - Math.sin(radians) * 27;
   const cameraY = Math.max(10, Math.min(90, 50 + Math.cos(radians) * 28 - normalizedVertical * 9));
   const sightAngle = Math.atan2(cameraY - 50, cameraX - 50) * 180 / Math.PI;
   const sightLength = Math.hypot(cameraX - 50, cameraY - 50);
@@ -320,7 +321,7 @@ export function AnglePreview({
     if (bounds.width === 0 || bounds.height === 0) return;
     const dx = event.clientX - (bounds.left + bounds.width / 2);
     const dy = event.clientY - (bounds.top + bounds.height / 2);
-    onHorizontalChange?.(normalizeAngle(Math.round(Math.atan2(dx, dy) * 180 / Math.PI)));
+    onHorizontalChange?.(clampFalHorizontalAngle(Math.round(Math.atan2(-dx, dy) * 180 / Math.PI)));
   };
 
   const cameraLabel = getCameraPositionLabel(normalizedHorizontal);
@@ -355,7 +356,7 @@ export function AnglePreview({
       <span aria-hidden="true" className="angle-preview__sightline" />
       {anglePresets.map((preset) => {
         const presetRadians = preset * Math.PI / 180;
-        const x = 50 + Math.sin(presetRadians) * 27;
+        const x = 50 - Math.sin(presetRadians) * 27;
         const y = 50 + Math.cos(presetRadians) * 28;
         return (
           <button
@@ -376,7 +377,6 @@ export function AnglePreview({
       })}
       <span aria-hidden="true" className="angle-preview__axis angle-preview__axis--front">正面</span>
       <span aria-hidden="true" className="angle-preview__axis angle-preview__axis--right">右侧</span>
-      <span aria-hidden="true" className="angle-preview__axis angle-preview__axis--back">背面</span>
       <span aria-hidden="true" className="angle-preview__axis angle-preview__axis--left">左侧</span>
       <span aria-hidden="true" className="angle-preview__camera">
         <Camera size={16} strokeWidth={2} />
@@ -390,17 +390,11 @@ export function AnglePreview({
   );
 }
 
-const anglePresets = [-135, -90, -45, 0, 45, 90, 135, 180];
-
-function normalizeAngle(value: number): number {
-  const normalized = ((value + 180) % 360 + 360) % 360 - 180;
-  return normalized === -180 ? 180 : normalized;
-}
+const anglePresets = [-90, -45, 0, 45, 90];
 
 function getCameraPositionLabel(horizontal: number): string {
   const absolute = Math.abs(horizontal);
   if (absolute <= 22) return '正面';
-  if (absolute >= 158) return '背面';
-  if (horizontal > 0) return absolute < 68 ? '右前侧' : absolute < 113 ? '右侧' : '右后侧';
-  return absolute < 68 ? '左前侧' : absolute < 113 ? '左侧' : '左后侧';
+  if (horizontal > 0) return absolute < 68 ? '左前侧' : '左侧';
+  return absolute < 68 ? '右前侧' : '右侧';
 }

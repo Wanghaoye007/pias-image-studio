@@ -740,7 +740,10 @@ describe('workbench canvas', () => {
     expect(screen.queryByRole('toolbar', { name: '节点命令' })).not.toBeInTheDocument();
     expect(within(panel).queryByRole('textbox', { name: '创作描述' })).not.toBeInTheDocument();
     expect(within(panel).getByText('模型会推断不可见区域，结果需人工复核')).toBeInTheDocument();
-    expect(within(panel).getByRole('slider', { name: '水平旋转' })).toHaveAttribute('min', '-180');
+    expect(within(panel).getByRole('slider', { name: '水平旋转' })).toHaveAttribute('min', '-90');
+    expect(within(panel).getByRole('slider', { name: '水平旋转' })).toHaveAttribute('max', '90');
+    expect(within(panel).getByRole('tab', { name: '侧面视角' })).toBeInTheDocument();
+    expect(within(panel).queryByRole('tab', { name: '背面视角' })).not.toBeInTheDocument();
     expect(within(panel).getByRole('slider', { name: '镜头推进' })).toHaveAttribute('max', '10');
     expect(within(panel).getByRole('slider', { name: '垂直视角' })).toHaveAttribute('step', '0.1');
     expect(within(panel).getByRole('slider', { name: '水平旋转' })).toHaveValue('-45');
@@ -1553,5 +1556,27 @@ describe('workbench canvas', () => {
     expect(latestState.jobs[0]).toMatchObject({ id: queued.jobs[0].id, status: 'failed' });
     expect(latestState.jobs[1]).toMatchObject({ status: 'queued' });
     expect(latestState.jobs[1].id).not.toBe(queued.jobs[0].id);
+  });
+
+  it('重试旧多角度任务时自动修正历史越界角度', () => {
+    falClientMocks.runFalImageJob.mockImplementationOnce(() => new Promise(() => undefined));
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'angle',
+      outputCount: 1,
+      parameters: { horizontalAngle: -111, verticalView: 0, moveForward: 2 },
+    });
+    const failed = failJob(queued, queued.jobs[0].id, '任务未生成可用结果');
+    let latestState = failed;
+    render(<WorkbenchHarness initialState={failed} onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /任务队列/ }));
+    fireEvent.click(screen.getAllByRole('button', { name: '重试任务' })[0]);
+
+    expect(latestState.jobs[1].inputSnapshot.parameters).toMatchObject({
+      horizontalAngle: -90,
+      verticalView: 0,
+      moveForward: 2,
+    });
   });
 });

@@ -62,6 +62,7 @@ import {
   type TaskProfileId,
 } from '../domain';
 import { runFalImageJob } from '../fal/falImageClient';
+import { clampFalHorizontalAngle } from '../fal/multipleAngles';
 import {
   downloadProductionDelivery,
   downloadWatermarkedPreview,
@@ -353,11 +354,22 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
   }, [setState]);
 
   const handleRetry = useCallback((job: GenerationJob) => {
+    const retrySnapshot = job.profileId === 'angle'
+      ? {
+          ...job.inputSnapshot,
+          parameters: {
+            ...job.inputSnapshot.parameters,
+            horizontalAngle: clampFalHorizontalAngle(
+              Number(job.inputSnapshot.parameters.horizontalAngle ?? 0),
+            ),
+          },
+        }
+      : job.inputSnapshot;
     runJob({
       sceneId: job.sceneId,
       profileId: job.profileId,
       outputCount: job.outputCount,
-      ...job.inputSnapshot,
+      ...retrySnapshot,
     });
   }, [runJob]);
 

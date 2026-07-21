@@ -99,6 +99,25 @@ function aggregateProgress(children: LocalFalChild[]): number {
   return Math.round(24 + completed / children.length * 60 + running / children.length * 20);
 }
 
+function falResultFailureMessage(error: unknown): string {
+  if (!error || typeof error !== 'object') return 'Fal 结果读取失败，请重试';
+  const body = (error as { body?: unknown }).body;
+  if (!body || typeof body !== 'object') return 'Fal 结果读取失败，请重试';
+  const detail = (body as { detail?: unknown }).detail;
+  if (!Array.isArray(detail)) return 'Fal 结果读取失败，请重试';
+  const field = detail
+    .flatMap((item) => item && typeof item === 'object'
+      ? [(item as { loc?: unknown }).loc]
+      : [])
+    .find((loc): loc is unknown[] => Array.isArray(loc))
+    ?.at(-1);
+
+  if (field === 'rotate_right_left') return '水平旋转仅支持 -90° 到 90°';
+  if (field === 'vertical_angle') return '垂直视角仅支持 -1 到 1';
+  if (field === 'move_forward') return '镜头推进仅支持 0 到 10';
+  return 'Fal 参数校验失败，请调整后重试';
+}
+
 function persistenceSnapshot(job: LocalFalJob): PersistedFalJob {
   const { maskImageUrl: _maskImageUrl, ...request } = job.request;
   return {
@@ -314,6 +333,14 @@ export function createFalQueueService(options: {
         .map((item) => item.value);
       const images = successful.flatMap((item) => item.images);
       if (images.length === 0) {
+        const rejected = settled.find((item): item is PromiseRejectedResult => item.status === 'rejected');
+        if (rejected) {
+          throw new FalServiceError(
+            falResultFailureMessage(rejected.reason),
+            'FAL_RESULT_FAILED',
+            502,
+          );
+        }
         throw new FalServiceError('任务未生成可用结果', 'FAL_EMPTY_RESULT', 502);
       }
       const seed = successful.find((item) => item.seed !== undefined)?.seed;

@@ -1,5 +1,11 @@
 export const FAL_MULTIPLE_ANGLES_MODEL =
   'fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles';
+export const FAL_HORIZONTAL_ANGLE_MIN = -90;
+export const FAL_HORIZONTAL_ANGLE_MAX = 90;
+
+export function clampFalHorizontalAngle(value: number): number {
+  return Math.max(FAL_HORIZONTAL_ANGLE_MIN, Math.min(FAL_HORIZONTAL_ANGLE_MAX, value));
+}
 
 export type FalImageSize = { width: number; height: number };
 
@@ -95,8 +101,8 @@ export function buildMultipleAnglesInput(request: MultipleAnglesRequest): FalMul
       'horizontalAngle',
       '水平旋转',
       0,
-      -180,
-      180,
+      FAL_HORIZONTAL_ANGLE_MIN,
+      FAL_HORIZONTAL_ANGLE_MAX,
     ),
     move_forward: numberParameter(
       request.parameters,

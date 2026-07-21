@@ -2260,12 +2260,6 @@ textarea:disabled {
   transform: translateX(-50%);
 }
 
-.angle-preview__axis--back {
-  top: 17%;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
 .angle-preview__axis--left {
   top: 50%;
   left: 7%;
@@ -2880,11 +2874,6 @@ textarea:disabled {
 
 .angle-sphere::after {
   transform: rotate(-35deg) scaleX(.55);
-}
-
-.angle-sphere[data-back="true"] .angle-sphere__camera {
-  opacity: .64;
-  transform: translate(-50%, -50%) scale(.88);
 }
 
 .angle-sphere__sightline {

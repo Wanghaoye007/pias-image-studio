@@ -159,6 +159,31 @@ describe('Fal 统一作业编排器', () => {
     });
   });
 
+  it('在全部结果失败时透传可操作的 Fal 参数错误', async () => {
+    const adapter = createAdapter();
+    vi.mocked(adapter.result).mockRejectedValue({
+      name: 'ValidationError',
+      message: 'Unprocessable Entity',
+      status: 422,
+      body: {
+        detail: [{
+          loc: ['body', 'rotate_right_left'],
+          msg: 'Input should be greater than or equal to -90',
+          input: -111,
+        }],
+      },
+    });
+    const service = createFalQueueService({
+      adapter,
+      readKey: async () => 'id:secret',
+      createId: () => 'fal-local-invalid-angle',
+    });
+    await service.submit(request({ profileId: 'angle' }));
+
+    await expect(service.result('fal-local-invalid-angle'))
+      .rejects.toThrow('水平旋转仅支持 -90° 到 90°');
+  });
+
   it('取消本地作业时取消全部未终止子请求', async () => {
     const adapter = createAdapter();
     const service = createFalQueueService({

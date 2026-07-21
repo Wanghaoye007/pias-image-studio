@@ -13,6 +13,11 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { TaskParameters } from '../domain';
+import {
+  clampFalHorizontalAngle,
+  FAL_HORIZONTAL_ANGLE_MAX,
+  FAL_HORIZONTAL_ANGLE_MIN,
+} from '../fal/multipleAngles';
 
 type ParameterChange = (key: string, value: string | number | boolean) => void;
 
@@ -38,7 +43,7 @@ const anglePresets = [
   { label: '正面俯拍', value: 'front-high', parameters: { horizontalAngle: 0, verticalView: -0.8, moveForward: 2, wideAngle: false } },
   { label: '正面仰拍', value: 'front-low', parameters: { horizontalAngle: 0, verticalView: 0.8, moveForward: 2, wideAngle: false } },
   { label: '全景俯拍', value: 'wide-high', parameters: { horizontalAngle: 0, verticalView: -0.7, moveForward: 0, wideAngle: true } },
-  { label: '背面视角', value: 'back', parameters: { horizontalAngle: 180, verticalView: 0, moveForward: 1, wideAngle: false } },
+  { label: '侧面视角', value: 'side', parameters: { horizontalAngle: 90, verticalView: 0, moveForward: 1, wideAngle: false } },
 ] as const;
 
 export function LightEditor({ previewImageUrl, parameters, onParameterChange }: EditorProps) {
@@ -175,7 +180,7 @@ export function LightEditor({ previewImageUrl, parameters, onParameterChange }: 
 
 export function AngleEditor({ previewImageUrl, parameters, onParameterChange }: EditorProps) {
   const [preset, setPreset] = useState('custom');
-  const horizontal = numberValue(parameters.horizontalAngle, -45);
+  const horizontal = clampFalHorizontalAngle(numberValue(parameters.horizontalAngle, -45));
   const vertical = numberValue(parameters.verticalView, -0.7);
   const moveForward = numberValue(parameters.moveForward, 0);
   const radians = horizontal * Math.PI / 180;
@@ -192,7 +197,12 @@ export function AngleEditor({ previewImageUrl, parameters, onParameterChange }: 
 
   const changeParameter = (key: string, value: string | number | boolean) => {
     setPreset('custom');
-    onParameterChange(key, value);
+    onParameterChange(
+      key,
+      key === 'horizontalAngle' && typeof value === 'number'
+        ? clampFalHorizontalAngle(value)
+        : value,
+    );
   };
 
   const updateFromPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -200,7 +210,7 @@ export function AngleEditor({ previewImageUrl, parameters, onParameterChange }: 
     if (bounds.width === 0 || bounds.height === 0) return;
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
     const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    changeParameter('horizontalAngle', normalizeAngle(Math.round(Math.atan2(-x, y) * 180 / Math.PI)));
+    changeParameter('horizontalAngle', Math.round(Math.atan2(-x, y) * 180 / Math.PI));
   };
 
   return (
@@ -223,7 +233,7 @@ export function AngleEditor({ previewImageUrl, parameters, onParameterChange }: 
       </div>
       <div className="advanced-editor advanced-editor--angle">
         <div className="advanced-editor__viewport angle-sphere-viewport">
-          <div className="angle-sphere" data-back={Math.abs(horizontal) > 90} style={angleStyle}>
+          <div className="angle-sphere" style={angleStyle}>
             <span aria-hidden="true" className="editor-sphere__latitude editor-sphere__latitude--one" />
             <span aria-hidden="true" className="editor-sphere__latitude editor-sphere__latitude--two" />
             <span aria-hidden="true" className="editor-sphere__latitude editor-sphere__latitude--three" />
@@ -259,7 +269,7 @@ export function AngleEditor({ previewImageUrl, parameters, onParameterChange }: 
           <AngleNudge
             icon={ChevronRight}
             label="向右环绕机位"
-            onClick={() => changeParameter('horizontalAngle', normalizeAngle(horizontal - 15))}
+            onClick={() => changeParameter('horizontalAngle', horizontal - 15)}
             position="right"
           />
           <AngleNudge
@@ -271,7 +281,7 @@ export function AngleEditor({ previewImageUrl, parameters, onParameterChange }: 
           <AngleNudge
             icon={ChevronLeft}
             label="向左环绕机位"
-            onClick={() => changeParameter('horizontalAngle', normalizeAngle(horizontal + 15))}
+            onClick={() => changeParameter('horizontalAngle', horizontal + 15)}
             position="left"
           />
         </div>
@@ -281,8 +291,8 @@ export function AngleEditor({ previewImageUrl, parameters, onParameterChange }: 
             ariaLabel="水平旋转"
             formatValue={formatHorizontalAngle}
             label="水平环绕"
-            max={180}
-            min={-180}
+            max={FAL_HORIZONTAL_ANGLE_MAX}
+            min={FAL_HORIZONTAL_ANGLE_MIN}
             onChange={(value) => changeParameter('horizontalAngle', value)}
             value={horizontal}
           />
@@ -456,7 +466,6 @@ function shotScaleLabel(value: number): string {
 
 function formatHorizontalAngle(value: number): string {
   if (value === 0) return '正面';
-  if (Math.abs(value) === 180) return '背面';
   return `${value > 0 ? '左' : '右'} ${Math.abs(value)}°`;
 }
 
@@ -467,10 +476,4 @@ function formatVerticalAngle(value: number): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Number(value.toFixed(1))));
-}
-
-function normalizeAngle(value: number): number {
-  if (value > 180) return -180;
-  if (value < -180) return 180;
-  return value;
 }

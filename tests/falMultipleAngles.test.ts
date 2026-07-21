@@ -66,7 +66,11 @@ describe('Fal 多角度输入契约', () => {
     expect(() => buildMultipleAnglesInput({ ...valid, outputCount: 5 })).toThrow('输出数量');
     expect(() => buildMultipleAnglesInput({
       ...valid,
-      parameters: { horizontalAngle: 181 },
+      parameters: { horizontalAngle: 91 },
+    })).toThrow('水平旋转');
+    expect(() => buildMultipleAnglesInput({
+      ...valid,
+      parameters: { horizontalAngle: -91 },
     })).toThrow('水平旋转');
     expect(() => buildMultipleAnglesInput({
       ...valid,
@@ -76,6 +80,23 @@ describe('Fal 多角度输入契约', () => {
       ...valid,
       parameters: { verticalView: 1.1 },
     })).toThrow('垂直视角');
+  });
+
+  it('接受 Fal 官方模型的水平旋转边界', () => {
+    const base = {
+      imageUrls: ['https://example.com/product.png'],
+      ratio: '1:1',
+      outputCount: 1,
+    };
+
+    expect(buildMultipleAnglesInput({
+      ...base,
+      parameters: { horizontalAngle: -90 },
+    }).rotate_right_left).toBe(-90);
+    expect(buildMultipleAnglesInput({
+      ...base,
+      parameters: { horizontalAngle: 90 },
+    }).rotate_right_left).toBe(90);
   });
 });
 
