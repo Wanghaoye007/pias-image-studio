@@ -11,7 +11,7 @@ import {
   type OnConnectEnd,
   type OnConnectStart,
 } from '@xyflow/react';
-import { Aperture, CheckCircle2, Coins, FolderKanban, ListChecks } from 'lucide-react';
+import { Aperture, Coins, FolderKanban, ListChecks } from 'lucide-react';
 import {
   createContext,
   useCallback,
@@ -63,6 +63,8 @@ import {
 } from '../domain';
 import { runFalImageJob } from '../fal/falImageClient';
 import { clampFalHorizontalAngle } from '../fal/multipleAngles';
+import { PersistenceStatus } from '../studio/PersistenceStatus';
+import type { StudioSaveStatus } from '../studio/usePersistentStudioState';
 import {
   downloadProductionDelivery,
   downloadWatermarkedPreview,
@@ -94,6 +96,9 @@ import {
 type WorkbenchProps = {
   state: StudioState;
   setState: Dispatch<SetStateAction<StudioState>>;
+  saveStatus?: StudioSaveStatus;
+  onRetrySave?: () => void;
+  onReloadState?: () => void;
 };
 
 type RunJobInput = Parameters<typeof createJob>[1];
@@ -173,7 +178,13 @@ export function Workbench(props: WorkbenchProps) {
   );
 }
 
-function WorkbenchContent({ state, setState }: WorkbenchProps) {
+function WorkbenchContent({
+  state,
+  setState,
+  saveStatus = 'saved',
+  onRetrySave = () => undefined,
+  onReloadState = () => undefined,
+}: WorkbenchProps) {
   const { fitView, getViewport, screenToFlowPosition, setViewport } = useReactFlow();
   const [interaction, dispatchInteraction] = useReducer(
     reduceWorkbenchInteraction,
@@ -922,10 +933,11 @@ function WorkbenchContent({ state, setState }: WorkbenchProps) {
           <strong title={state.projectName}>{state.projectName}</strong>
         </div>
         <div className="workbench-topbar__status">
-          <span className="is-saved">
-            <CheckCircle2 aria-hidden="true" size={15} />
-            已自动保存
-          </span>
+          <PersistenceStatus
+            onReload={onReloadState}
+            onRetry={onRetrySave}
+            status={saveStatus}
+          />
           <span>
             <Coins aria-hidden="true" size={15} />
             可用点数 <strong>{state.usage.availableCredits}</strong>

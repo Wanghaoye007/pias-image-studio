@@ -31,6 +31,8 @@ import {
   type StudioState,
 } from './domain';
 import { downloadProductionDelivery } from './exportDelivery';
+import { PersistenceStatus } from './studio/PersistenceStatus';
+import type { StudioSaveStatus } from './studio/usePersistentStudioState';
 import { getSceneTitle } from './workbench/graph';
 
 export type NavKey = 'dashboard' | 'projects' | 'studio' | 'assets' | 'reviews' | 'usage' | 'admin';
@@ -45,6 +47,9 @@ type SecondaryViewProps = {
   activeNav: NavKey;
   state: StudioState;
   setState: Dispatch<SetStateAction<StudioState>>;
+  saveStatus?: StudioSaveStatus;
+  onRetrySave?: () => void;
+  onReloadState?: () => void;
 };
 
 export const navItems: NavItem[] = [
@@ -160,7 +165,14 @@ export function GlobalNav({
   );
 }
 
-export function SecondaryView({ activeNav, state, setState }: SecondaryViewProps) {
+export function SecondaryView({
+  activeNav,
+  state,
+  setState,
+  saveStatus = 'saved',
+  onRetrySave = () => undefined,
+  onReloadState = () => undefined,
+}: SecondaryViewProps) {
   const submittedResults = state.results.filter((result) => result.reviewStatus === 'submitted');
   const approvedResults = state.results.filter((result) => result.reviewStatus === 'approved');
   const activeLabel = navItems.find((item) => item.key === activeNav)?.label ?? '首页';
@@ -191,6 +203,13 @@ export function SecondaryView({ activeNav, state, setState }: SecondaryViewProps
           <h1>{activeLabel}</h1>
         </div>
         <div className="header-metrics" aria-label="工作区摘要">
+          <div className="secondary-persistence-status">
+            <PersistenceStatus
+              onReload={onReloadState}
+              onRetry={onRetrySave}
+              status={saveStatus}
+            />
+          </div>
           <Metric label="冻结" value={state.usage.frozenCredits.toString()} />
           <Metric label="已用" value={state.usage.spentCredits.toString()} />
           <Metric label="待审核" value={submittedResults.length.toString()} />

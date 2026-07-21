@@ -598,7 +598,8 @@ small {
 
 .workbench-topbar__project,
 .workbench-topbar__status,
-.workbench-topbar__status > span {
+.workbench-topbar__status > span,
+.workbench-topbar__status > button {
   display: flex;
   align-items: center;
 }
@@ -634,14 +635,60 @@ small {
   height: 100%;
 }
 
-.workbench-topbar__status > span {
+.workbench-topbar__status > span,
+.workbench-topbar__status > button {
   height: 24px;
   gap: 6px;
   padding: 0 12px;
   border-left: 1px solid var(--line);
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--muted);
   font-size: 12px;
+  font-family: inherit;
   white-space: nowrap;
+}
+
+.workbench-topbar__status > button {
+  cursor: pointer;
+}
+
+.persistence-status {
+  min-width: 104px;
+  justify-content: center;
+}
+
+.secondary-persistence-status .persistence-status {
+  min-width: 112px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--control);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.secondary-persistence-status button.persistence-status {
+  cursor: pointer;
+}
+
+.secondary-persistence-status .is-saved {
+  color: var(--green);
+}
+
+.secondary-persistence-status .is-error,
+.secondary-persistence-status .is-conflict {
+  color: var(--danger);
 }
 
 .workbench-topbar__status strong {
@@ -653,6 +700,65 @@ small {
 .workbench-topbar__status .is-saved,
 .workbench-topbar__status .is-saved > svg {
   color: var(--green);
+}
+
+.workbench-topbar__status .is-error,
+.workbench-topbar__status .is-conflict {
+  color: var(--danger);
+}
+
+.is-spinning {
+  animation: persistence-spin 0.9s linear infinite;
+}
+
+@keyframes persistence-spin {
+  to { transform: rotate(360deg); }
+}
+
+.app-state-screen {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  background: var(--app-bg);
+  color: var(--text);
+  text-align: center;
+}
+
+.app-state-screen h1,
+.app-state-screen p {
+  margin: 0;
+}
+
+.app-state-screen h1 {
+  font-size: 20px;
+}
+
+.app-state-screen p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.app-state-screen button {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--control);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-state-screen__indicator {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: persistence-spin 0.9s linear infinite;
 }
 
 .scene-rail {
