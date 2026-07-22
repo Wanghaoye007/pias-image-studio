@@ -37,11 +37,15 @@ import {
   deleteScene,
   duplicateScene,
   failJob,
+  expireJob,
   getNextSceneId,
   getProfile,
+  markJobPostprocessing,
   moveCanvasItem,
   recordResultExport,
   renameScene,
+  requestJobCancellation,
+  retryResultGeneration,
   setPrimaryResult,
   setResultQualityIssue,
   setSelectedScene,
@@ -50,10 +54,12 @@ import {
   toggleResultAdoption,
   toggleResultFavorite,
   updateJobProgress,
+  withdrawReview,
   type CanvasNodeKind,
   type Asset,
   type ExportSpec,
   type GenerationJob,
+  type JobStatus,
   type QualityIssue,
   type Result,
   type Scene,
@@ -61,7 +67,11 @@ import {
   type TaskParameters,
   type TaskProfileId,
 } from '../domain';
-import { runFalImageJob } from '../fal/falImageClient';
+import {
+  FAL_LIFECYCLE_ABORT_REASON,
+  resumeFalImageJob,
+  runFalImageJob,
+} from '../fal/falImageClient';
 import { clampFalHorizontalAngle } from '../fal/multipleAngles';
 import { PersistenceStatus } from '../studio/PersistenceStatus';
 import type { StudioSaveStatus } from '../studio/usePersistentStudioState';
@@ -94,6 +104,7 @@ import {
 } from './viewportDirector';
 
 type WorkbenchProps = {
+  actorId?: string;
   state: StudioState;
   setState: Dispatch<SetStateAction<StudioState>>;
   saveStatus?: StudioSaveStatus;
@@ -111,7 +122,11 @@ type JobActions = {
 type CanvasNotice = { message: string; tone: 'success' | 'warning' };
 type NodeDialog = 'rename' | 'delete' | null;
 
-const terminalStatuses = new Set(['succeeded', 'failed', 'canceled']);
+const terminalStatuses = new Set<JobStatus>([
+  'partially_succeeded', 'succeeded', 'failed', 'canceled', 'expired',
+]);
+const executableStatuses = new Set<JobStatus>(['preflight', 'queued', 'running']);
+const cancellableStatuses = new Set<JobStatus>(['preflight', 'queued', 'running', 'postprocessing']);
 const JobActionsContext = createContext<JobActions>({ onCancel: () => undefined, onRetry: () => undefined });
 const directionLabels: Record<string, string> = { left: '左', right: '右', up: '上', down: '下' };
 const defaultToolParameters: TaskParameters = {
@@ -179,6 +194,7 @@ export function Workbench(props: WorkbenchProps) {
 }
 
 function WorkbenchContent({
+  actorId = 'Mika Tanaka',
   state,
   setState,
   saveStatus = 'saved',
@@ -236,6 +252,8 @@ function WorkbenchContent({
   const [compareOpen, setCompareOpen] = useState(false);
   const [inspectedResultId, setInspectedResultId] = useState<string | null>(null);
   const [exportResultId, setExportResultId] = useState<string | null>(null);
+  const [revisionResultId, setRevisionResultId] = useState<string | null>(null);
+  const [revisionPrompt, setRevisionPrompt] = useState('');
   const falJobControllers = useRef(new Map<string, AbortController>());
   const falExecutorMounted = useRef(true);
   const toolTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -251,7 +269,9 @@ function WorkbenchContent({
       falExecutorMounted.current = false;
       queueMicrotask(() => {
         if (falExecutorMounted.current) return;
-        falJobControllers.current.forEach((controller) => controller.abort());
+        falJobControllers.current.forEach((controller) => {
+          controller.abort(FAL_LIFECYCLE_ABORT_REASON);
+        });
         falJobControllers.current.clear();
       });
     };
@@ -273,7 +293,7 @@ function WorkbenchContent({
 
   useEffect(() => {
     state.jobs.forEach((job) => {
-      if (job.status !== 'queued' && job.status !== 'running') return;
+      if (!executableStatuses.has(job.status)) return;
       if (falJobControllers.current.has(job.id)) return;
 
       const scene = state.scenes.find((item) => item.id === job.sceneId);
@@ -297,52 +317,79 @@ function WorkbenchContent({
 
       const controller = new AbortController();
       falJobControllers.current.set(job.id, controller);
-      void runFalImageJob({
-        profileId: job.profileId,
-        imageUrls: [imageUrl, ...referenceUrls],
-        prompt: job.inputSnapshot.prompt,
-        ratio: job.inputSnapshot.ratio,
-        outputCount: job.outputCount,
-        parameters: job.inputSnapshot.parameters,
-        ...(job.inputSnapshot.maskImageUrl
-          ? { maskImageUrl: job.inputSnapshot.maskImageUrl }
-          : {}),
-        sourceWidth: sourceResult?.width ?? 512,
-        sourceHeight: sourceResult?.height ?? 512,
-      }, {
+      const executionOptions = {
         signal: controller.signal,
-        onExecution: ({ requestId, modelId }) => {
-          setState((current) => {
-            const currentJob = current.jobs.find((item) => item.id === job.id);
-            if (!currentJob || terminalStatuses.has(currentJob.status)) return current;
-            return attachExternalJob(current, job.id, {
-              provider: 'fal',
-              modelId,
-              requestId,
-            });
-          });
-        },
-        onProgress: (progress) => {
+        onProgress: (progress: number) => {
           setState((current) => updateJobProgress(current, job.id, progress));
         },
-      }).then((result) => {
+      };
+      const execution = job.externalExecution
+        ? resumeFalImageJob(job.externalExecution, executionOptions)
+        : runFalImageJob({
+            profileId: job.profileId,
+            imageUrls: [imageUrl, ...referenceUrls],
+            prompt: job.inputSnapshot.prompt,
+            ratio: job.inputSnapshot.ratio,
+            outputCount: job.outputCount,
+            parameters: job.inputSnapshot.parameters,
+            ...(job.inputSnapshot.maskImageUrl
+              ? { maskImageUrl: job.inputSnapshot.maskImageUrl }
+              : {}),
+            sourceWidth: sourceResult?.width ?? 512,
+            sourceHeight: sourceResult?.height ?? 512,
+          }, {
+            ...executionOptions,
+            onExecution: ({ requestId, modelId }) => {
+              setState((current) => {
+                const currentJob = current.jobs.find((item) => item.id === job.id);
+                if (!currentJob || terminalStatuses.has(currentJob.status)) return current;
+                return attachExternalJob(current, job.id, {
+                  provider: 'fal',
+                  modelId,
+                  requestId,
+                });
+              });
+            },
+          });
+      void execution.then((result) => {
         completedFocusRef.current = { jobId: job.id, revision: userRevisionRef.current };
         setState((current) => {
           const currentJob = current.jobs.find((item) => item.id === job.id);
           if (!currentJob || terminalStatuses.has(currentJob.status)) return current;
+          return markJobPostprocessing(current, job.id);
+        });
+        queueMicrotask(() => setState((current) => {
+          const currentJob = current.jobs.find((item) => item.id === job.id);
+          if (!currentJob || terminalStatuses.has(currentJob.status) || currentJob.status === 'cancel_requested') {
+            return current;
+          }
+          const actualCredits = Math.min(
+            currentJob.reservedCredits,
+            result.images.length * getProfile(currentJob.profileId).costPerOutput,
+          );
           return completeJobWithResults(current, job.id, {
             images: result.images,
-            actualCredits: currentJob.reservedCredits,
+            actualCredits,
             ...(result.seed !== undefined ? { seed: result.seed } : {}),
           });
-        });
+        }));
       }).catch((error: unknown) => {
         setState((current) => {
           const currentJob = current.jobs.find((item) => item.id === job.id);
           if (!currentJob || terminalStatuses.has(currentJob.status)) return current;
+          const errorName = error && typeof error === 'object' && 'name' in error
+            ? String(error.name)
+            : '';
+          if (errorName === 'AbortError') {
+            if (controller.signal.reason === FAL_LIFECYCLE_ABORT_REASON) return current;
+            return cancelJob(current, job.id);
+          }
           const message = error instanceof Error && error.name !== 'AbortError'
             ? error.message
             : `${getProfile(job.profileId).label}任务已取消`;
+          if (/过期|expired|not found|不存在/i.test(message) && currentJob.externalExecution) {
+            return expireJob(current, job.id, '供应商任务已过期，请重新提交');
+          }
           return failJob(current, job.id, message);
         });
       }).finally(() => {
@@ -356,12 +403,25 @@ function WorkbenchContent({
   }, [setState]);
 
   const handleCancel = useCallback((jobId: string) => {
-    falJobControllers.current.get(jobId)?.abort();
+    const controller = falJobControllers.current.get(jobId);
     setState((current) => {
       const job = current.jobs.find((item) => item.id === jobId);
-      if (!job || terminalStatuses.has(job.status)) return current;
-      return cancelJob(current, jobId);
+      if (!job || !cancellableStatuses.has(job.status)) return current;
+      return requestJobCancellation(current, jobId);
     });
+    if (controller) {
+      controller.abort();
+      queueMicrotask(() => setState((current) => {
+        const job = current.jobs.find((item) => item.id === jobId);
+        return job?.status === 'cancel_requested' ? cancelJob(current, jobId) : current;
+      }));
+    }
+    else {
+      setState((current) => {
+        const job = current.jobs.find((item) => item.id === jobId);
+        return job?.status === 'cancel_requested' ? cancelJob(current, jobId) : current;
+      });
+    }
   }, [setState]);
 
   const handleRetry = useCallback((job: GenerationJob) => {
@@ -381,6 +441,7 @@ function WorkbenchContent({
       profileId: job.profileId,
       outputCount: job.outputCount,
       ...retrySnapshot,
+      retryOfJobId: job.id,
     });
   }, [runJob]);
 
@@ -396,8 +457,29 @@ function WorkbenchContent({
   }, [setState, state.scenes]);
 
   const handleSubmitReview = useCallback((resultId: string) => {
-    setState((current) => submitForReview(current, resultId));
-  }, [setState]);
+    setState((current) => submitForReview(current, resultId, actorId));
+  }, [actorId, setState]);
+
+  const handleWithdrawReview = useCallback((resultId: string) => {
+    setState((current) => withdrawReview(current, resultId, actorId));
+  }, [actorId, setState]);
+
+  const handleRequestRevision = useCallback((resultId: string) => {
+    const result = state.results.find((item) => item.id === resultId);
+    const job = result ? state.jobs.find((item) => item.id === result.jobId) : undefined;
+    if (!result || !job) return;
+    setRevisionResultId(resultId);
+    setRevisionPrompt(job.inputSnapshot.prompt);
+  }, [state.jobs, state.results]);
+
+  const handleConfirmRevision = useCallback(() => {
+    if (!revisionResultId) return;
+    setState((current) => retryResultGeneration(current, revisionResultId, {
+      prompt: revisionPrompt,
+    }));
+    setRevisionResultId(null);
+    setCanvasNotice({ message: '已创建修改版本任务', tone: 'success' });
+  }, [revisionPrompt, revisionResultId, setState]);
 
   const handleToggleFavorite = useCallback((resultId: string) => {
     setState((current) => toggleResultFavorite(current, resultId));
@@ -528,6 +610,8 @@ function WorkbenchContent({
       onCreateNode: handleCreateNode,
       onDerive: handleDerive,
       onSubmitReview: handleSubmitReview,
+      onWithdrawReview: handleWithdrawReview,
+      onReviseResult: handleRequestRevision,
       onToggleFavorite: handleToggleFavorite,
       onToggleAdoption: handleToggleAdoption,
       onSetPrimary: handleSetPrimary,
@@ -546,7 +630,7 @@ function WorkbenchContent({
       onParameterChange: handleParameterChange,
       onMaskChange: setRemoveMaskImageUrl,
     },
-  ), [activeTool, cancelDraftNode, compareResultIds, dragTargetNodeId, handleCreateNode, handleDerive, handleOpenDetails, handleParameterChange, handleSetPrimary, handleSubmitReview, handleToggleAdoption, handleToggleCompare, handleToggleFavorite, interaction.draftNode, interaction.mode, ratio, removeMaskImageUrl, selectedNodeId, state, toolParameters]);
+  ), [activeTool, cancelDraftNode, compareResultIds, dragTargetNodeId, handleCreateNode, handleDerive, handleOpenDetails, handleParameterChange, handleRequestRevision, handleSetPrimary, handleSubmitReview, handleToggleAdoption, handleToggleCompare, handleToggleFavorite, handleWithdrawReview, interaction.draftNode, interaction.mode, ratio, removeMaskImageUrl, selectedNodeId, state, toolParameters]);
 
   useEffect(() => {
     if (initialFitCompleteRef.current || graph.nodes.length === 0) return;
@@ -864,7 +948,7 @@ function WorkbenchContent({
     const job = state.jobs.find((item) => item.id === request.jobId);
     if (!job || !terminalStatuses.has(job.status)) return;
     completedFocusRef.current = null;
-    if (job.status !== 'succeeded') return;
+    if (job.status !== 'succeeded' && job.status !== 'partially_succeeded') return;
 
     const resultNodeIds = state.results
       .filter((result) => result.jobId === job.id)
@@ -997,6 +1081,8 @@ function WorkbenchContent({
           onOpenExport={(resultId) => setExportResultId(resultId)}
           onOpenDetails={handleOpenDetails}
           onSubmitReview={handleSubmitReview}
+          onWithdrawReview={handleWithdrawReview}
+          onReviseResult={handleRequestRevision}
           onToggleAdoption={handleToggleAdoption}
           onToggleFavorite={handleToggleFavorite}
           results={state.results}
@@ -1066,6 +1152,8 @@ function WorkbenchContent({
             onQualityIssue={(issue) => handleQualityIssue(inspectedResult.id, issue)}
             onSetPrimary={() => handleSetPrimary(inspectedResult.id)}
             onSubmitReview={() => handleSubmitReview(inspectedResult.id)}
+            onWithdrawReview={() => handleWithdrawReview(inspectedResult.id)}
+            onReviseResult={() => handleRequestRevision(inspectedResult.id)}
             onToggleAdoption={() => handleToggleAdoption(inspectedResult.id)}
             onToggleFavorite={() => handleToggleFavorite(inspectedResult.id)}
             result={inspectedResult}
@@ -1134,6 +1222,37 @@ function WorkbenchContent({
             </footer>
           </section>
         )}
+        {revisionResultId && (
+          <section aria-label="创建修改版本" className="node-command-dialog" role="dialog">
+            <header>
+              <strong>创建修改版本</strong>
+              <small>原结果保留</small>
+            </header>
+            <p>新任务会保留原审核结果、参数快照和结算记录。</p>
+            <label>
+              <span>修改提示词</span>
+              <textarea
+                aria-label="修改提示词"
+                autoFocus
+                maxLength={2000}
+                onChange={(event) => setRevisionPrompt(event.target.value)}
+                rows={5}
+                value={revisionPrompt}
+              />
+            </label>
+            <footer>
+              <button aria-label="取消修改版本" onClick={() => setRevisionResultId(null)} type="button">取消</button>
+              <button
+                aria-label="开始生成修改版本"
+                className="is-primary"
+                onClick={handleConfirmRevision}
+                type="button"
+              >
+                开始生成
+              </button>
+            </footer>
+          </section>
+        )}
         {canvasNotice && (
           <div
             aria-label="画布操作反馈"
@@ -1153,6 +1272,8 @@ function WorkbenchContent({
 function MobileResultPreview({
   results,
   onSubmitReview,
+  onWithdrawReview,
+  onReviseResult,
   onOpenDetails,
   onOpenExport,
   onToggleAdoption,
@@ -1160,6 +1281,8 @@ function MobileResultPreview({
 }: {
   results: Result[];
   onSubmitReview: (resultId: string) => void;
+  onWithdrawReview: (resultId: string) => void;
+  onReviseResult: (resultId: string) => void;
   onOpenDetails: (resultId: string) => void;
   onOpenExport: (resultId: string) => void;
   onToggleAdoption: (resultId: string) => void;
@@ -1173,7 +1296,8 @@ function MobileResultPreview({
       </header>
       <div className="mobile-preview__results">
         {results.map((result) => {
-          const canSubmit = result.reviewStatus === 'draft' || result.reviewStatus === 'returned';
+          const canSubmit = result.reviewStatus === 'draft';
+          const canRevise = result.reviewStatus === 'returned' || result.reviewStatus === 'rejected';
           return (
             <article key={result.id}>
               <img alt="" src={result.imageUrl} />
@@ -1202,7 +1326,15 @@ function MobileResultPreview({
                 </button>
                 {canSubmit && (
                   <button aria-label="提交审核" onClick={() => onSubmitReview(result.id)} type="button">
-                    {result.reviewStatus === 'returned' ? '重新提交' : '提交审核'}
+                    提交审核
+                  </button>
+                )}
+                {result.reviewStatus === 'submitted' && (
+                  <button aria-label="撤回审核" onClick={() => onWithdrawReview(result.id)} type="button">撤回</button>
+                )}
+                {canRevise && (
+                  <button aria-label="创建修改版本" onClick={() => onReviseResult(result.id)} type="button">
+                    修改后重试
                   </button>
                 )}
                 {result.reviewStatus === 'approved' && (
@@ -1223,7 +1355,7 @@ function MobileResultPreview({
 function InteractiveJobCanvasNode(props: NodeProps<Node<JobNodeData, 'job'>>) {
   const actions = useContext(JobActionsContext);
   const job = props.data.job;
-  const canCancel = job.status === 'queued' || job.status === 'running';
+  const canCancel = cancellableStatuses.has(job.status);
 
   return (
     <div className="interactive-job-node">
@@ -1234,7 +1366,7 @@ function InteractiveJobCanvasNode(props: NodeProps<Node<JobNodeData, 'job'>>) {
           取消
         </button>
       )}
-      {job.status === 'failed' && (
+      {(job.status === 'failed' || job.status === 'expired') && (
         <button aria-label="重试任务" onClick={() => actions.onRetry(job)} type="button">
           重试
         </button>

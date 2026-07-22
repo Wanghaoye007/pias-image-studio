@@ -7,6 +7,35 @@ import {
   submitForReview,
   type StudioState,
 } from '../domain';
+import type { OrganizationProject } from '../organization/organizationService';
+
+export function createBlankProjectStudioState(
+  project: Pick<OrganizationProject, 'name'> & Partial<Pick<OrganizationProject, 'defaultSku'>>,
+): StudioState {
+  const base = initialStudioState();
+  return {
+    ...base,
+    projectName: project.name,
+    selectedSceneId: 'scene-source',
+    assets: [],
+    scenes: [{
+      id: 'scene-source',
+      title: '未命名场景',
+      skuCode: project.defaultSku ?? '',
+      operation: '空白场景',
+      status: 'draft',
+      x: 0,
+      y: 40,
+      imageUrl: '',
+      resultIds: [],
+    }],
+    edges: [],
+    jobs: [],
+    results: [],
+    auditEvents: [],
+    notifications: [],
+  };
+}
 
 export function createDemoStudioState(): StudioState {
   const base = initialStudioState();

@@ -302,6 +302,11 @@ small {
   background: #22242a;
 }
 
+.secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: .46;
+}
+
 .status-chip {
   display: inline-flex;
   align-items: center;
@@ -427,6 +432,7 @@ small {
 }
 
 .project-row {
+  width: 100%;
   min-height: 92px;
   display: flex;
   align-items: center;
@@ -436,6 +442,27 @@ small {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.project-list,
+.organization-invitations {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.project-row:not(.project-row--current) {
+  cursor: pointer;
+}
+
+.project-row__status,
+.table-header__meta {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .project-row > div {
@@ -1309,11 +1336,21 @@ progress::-moz-progress-bar {
   border-top: 2px solid var(--green);
 }
 
-.job-node.is-failed {
+.job-node.is-partially_succeeded {
+  border-top: 2px solid var(--warning);
+}
+
+.job-node.is-postprocessing {
+  border-top: 2px solid var(--blue);
+}
+
+.job-node.is-failed,
+.job-node.is-expired {
   border-top: 2px solid var(--danger);
 }
 
-.job-node.is-canceled {
+.job-node.is-canceled,
+.job-node.is-cancel_requested {
   border-top: 2px solid var(--muted);
 }
 
@@ -1997,8 +2034,10 @@ progress::-moz-progress-bar {
   background: var(--node);
 }
 
+.task-row.is-preflight,
 .task-row.is-queued,
-.task-row.is-running {
+.task-row.is-running,
+.task-row.is-postprocessing {
   border-left-color: var(--blue);
 }
 
@@ -2006,7 +2045,13 @@ progress::-moz-progress-bar {
   border-left-color: var(--green);
 }
 
-.task-row.is-failed {
+.task-row.is-partially_succeeded,
+.task-row.is-cancel_requested {
+  border-left-color: var(--warning);
+}
+
+.task-row.is-failed,
+.task-row.is-expired {
   border-left-color: var(--danger);
 }
 
@@ -2126,7 +2171,8 @@ progress::-moz-progress-bar {
   backdrop-filter: blur(3px);
 }
 
-.job-node.is-succeeded .job-node__scrim {
+.job-node.is-succeeded .job-node__scrim,
+.job-node.is-partially_succeeded .job-node__scrim {
   background: rgb(5 6 8 / 28%);
   backdrop-filter: blur(0);
 }
@@ -2827,14 +2873,16 @@ progress::-moz-progress-bar {
   font-size: 12px;
 }
 
-.node-command-dialog input {
+.node-command-dialog input,
+.node-command-dialog textarea {
   width: 100%;
-  height: 38px;
-  padding: 0 10px;
+  min-height: 38px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text);
   background: var(--canvas);
+  resize: vertical;
 }
 
 .node-command-dialog > footer {

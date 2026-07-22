@@ -3,12 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint . --max-warnings 0",
+    "build": "tsc -b && vite build && vite build --config vite.server.config.ts && node scripts/write-release-metadata.mjs",
     "test": "vitest run --config vitest.config.ts",
+    "migrate:studio-state": "node scripts/migrate-studio-state.mjs",
+    "migrate:project-storage": "node scripts/migrate-project-storage.mjs",
+    "migrate:sqlite": "node scripts/migrate-to-sqlite.mjs",
+    "database": "node scripts/pias-database.mjs",
+    "fal:billing:check": "node scripts/check-fal-billing-access.mjs",
+    "release:preflight": "node scripts/release-preflight.mjs",
+    "release:preflight:report": "node scripts/release-preflight.mjs --report-only",
     "acceptance": "node scripts/acceptance-check.mjs",
     "acceptance:report": "node scripts/acceptance-check.mjs --report-only",
+    "start": "node dist-server/server.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -18,18 +31,23 @@
     "@xyflow/react": "^12.8.5",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sirv": "^3.0.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^26.1.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
     "jsdom": "^25.0.1",
     "typescript": "^5.8.0",
+    "typescript-eslint": "^8.65.0",
     "vite": "^7.0.0",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.10"
   }
 }

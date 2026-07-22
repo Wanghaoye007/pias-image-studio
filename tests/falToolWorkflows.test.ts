@@ -280,13 +280,14 @@ describe('Fal 图片工具适配器', () => {
       modelId: 'fal-ai/topaz/upscale/image',
       input: expect.objectContaining({
         image_url: 'source-image',
-        model: 'High Fidelity V2',
+        model: 'Recovery V2',
         upscale_factor: 4,
         output_format: 'png',
         face_enhancement: false,
-        sharpen: 0.6,
+        detail: 0.6,
       }),
     });
+    expect(plan.invocations[0].input).not.toHaveProperty('sharpen');
   });
 
   it('标准化 images 和 image 两类 Fal 输出', () => {

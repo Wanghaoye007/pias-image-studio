@@ -1,7 +1,15 @@
 node_modules/
 dist/
+dist-server/
 coverage/
 .vite/
 *.tsbuildinfo
 .DS_Store
 .gstack/
+.env*
+deploy/*.env
+
+# Local source/reference material is intentionally kept outside release commits.
+analysis/
+figma_thesea_slides_15_21/
+thesea_videos/

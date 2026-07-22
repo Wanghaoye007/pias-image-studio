@@ -1,12 +1,26 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { dirname, join } from 'node:path';
 import type { Connect, Plugin } from 'vite';
 import {
+  getRequestAuthContext,
+  getRequestProjectScope,
+  type RequestProjectScope,
+} from '../auth/authApiPlugin';
+import {
   createFileStudioStatePersistence,
+  createScopedStudioStatePersistence,
+  createSqliteStudioStatePersistence,
   StudioStateConflictError,
   StudioStateStorageError,
   type StudioStatePersistence,
 } from './studioStatePersistence';
+import { openPiasDatabase, type PiasDatabase } from '../persistence/sqliteDatabase';
 import { parseStudioState, StudioStateValidationError } from './studioStateSchema';
+import {
+  authorizeStudioStateWrite,
+  StudioStateCommandError,
+} from './studioStateAuthorization';
+import type { StudioState } from '../domain';
 
 const apiPath = '/api/studio/state';
 const maxBodyBytes = 5 * 1024 * 1024;
@@ -23,7 +37,14 @@ class StudioStateApiError extends Error {
 }
 
 export function createStudioStateMiddleware(
-  persistence: StudioStatePersistence,
+  persistenceSource: StudioStatePersistence | ((request: IncomingMessage) => StudioStatePersistence),
+  options: {
+    authorizeWrite?: (
+      request: IncomingMessage,
+      previous: StudioState | null,
+      requested: StudioState,
+    ) => StudioState;
+  } = {},
 ): Connect.NextHandleFunction {
   return async (request, response, next) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -33,6 +54,9 @@ export function createStudioStateMiddleware(
     }
 
     try {
+      const persistence = typeof persistenceSource === 'function'
+        ? persistenceSource(request)
+        : persistenceSource;
       if (request.method === 'GET') {
         const snapshot = await persistence.load();
         if (!snapshot) {
@@ -53,7 +77,11 @@ export function createStudioStateMiddleware(
         if (!Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0) {
           throw new StudioStateApiError('工作台状态 revision 无效', 'STUDIO_STATE_INVALID', 400);
         }
-        const state = parseStudioState(body.state);
+        const requestedState = parseStudioState(body.state);
+        const previous = options.authorizeWrite ? (await persistence.load())?.state ?? null : null;
+        const state = options.authorizeWrite
+          ? options.authorizeWrite(request, previous, requestedState)
+          : requestedState;
         const saved = await persistence.save(body.expectedRevision as number, state);
         writeJson(response, 200, {
           schemaVersion: saved.schemaVersion,
@@ -75,8 +103,37 @@ export function createStudioStateMiddleware(
   };
 }
 
-export function studioStatePlugin(): Plugin {
-  const middleware = createStudioStateMiddleware(createFileStudioStatePersistence());
+export function studioStatePlugin(options: {
+  scoped?: boolean;
+  scopedDirectory?: string;
+  databaseFile?: string;
+  persistenceBackend?: 'sqlite' | 'file';
+} = {}): Plugin {
+  let database: PiasDatabase | null = null;
+  const backend = options.persistenceBackend
+    ?? (process.env.PIAS_PERSISTENCE_BACKEND === 'file' ? 'file' : 'sqlite');
+  const persistence = options.scoped
+    ? backend === 'sqlite'
+      ? createSqlitePersistenceResolver(() => {
+          database ??= openPiasDatabase(
+            options.databaseFile
+            || process.env.PIAS_DATABASE_FILE
+            || '/tmp/pias-image-studio/pias.sqlite',
+          );
+          return database;
+        })
+      : createScopedPersistenceResolver(options.scopedDirectory)
+    : createFileStudioStatePersistence();
+  const middleware = createStudioStateMiddleware(persistence, {
+    ...(options.scoped ? {
+      authorizeWrite: (request, previous, requested) => authorizeStudioStateWrite({
+        context: getRequestAuthContext(request),
+        scope: getRequestProjectScope(request),
+        previous,
+        requested,
+      }),
+    } : {}),
+  });
   return {
     name: 'pias-studio-state',
     configureServer(server) {
@@ -85,6 +142,47 @@ export function studioStatePlugin(): Plugin {
     configurePreviewServer(server) {
       server.middlewares.use(middleware);
     },
+    closeBundle() {
+      database?.close();
+      database = null;
+    },
+  };
+}
+
+function createSqlitePersistenceResolver(
+  databaseSource: () => PiasDatabase,
+): (request: IncomingMessage) => StudioStatePersistence {
+  const cache = new Map<string, StudioStatePersistence>();
+  return (request) => {
+    const scope = getRequestProjectScope(request);
+    const key = `${scope.tenantId}\0${scope.projectId}`;
+    let persistence = cache.get(key);
+    if (!persistence) {
+      persistence = createSqliteStudioStatePersistence(databaseSource(), scope);
+      cache.set(key, persistence);
+    }
+    return persistence;
+  };
+}
+
+function createScopedPersistenceResolver(
+  configuredDirectory?: string,
+): (request: IncomingMessage) => StudioStatePersistence {
+  const legacyFile = process.env.PIAS_STUDIO_STATE_FILE
+    || '/tmp/pias-image-studio/studio-state.json';
+  const rootDirectory = configuredDirectory
+    || process.env.PIAS_STUDIO_STATE_DIR
+    || join(dirname(legacyFile), 'studio-state-scopes');
+  const cache = new Map<string, StudioStatePersistence>();
+  return (request) => {
+    const scope: RequestProjectScope = getRequestProjectScope(request);
+    const key = `${scope.tenantId}\0${scope.projectId}`;
+    let scopedPersistence = cache.get(key);
+    if (!scopedPersistence) {
+      scopedPersistence = createScopedStudioStatePersistence(rootDirectory, scope);
+      cache.set(key, scopedPersistence);
+    }
+    return scopedPersistence;
   };
 }
 
@@ -143,6 +241,24 @@ function normalizeError(error: unknown): StudioStateApiError {
       '工作台状态内容无效',
       'STUDIO_STATE_INVALID',
       400,
+    );
+  }
+  if (error instanceof StudioStateCommandError) {
+    return new StudioStateApiError(error.message, error.code, error.statusCode);
+  }
+  if (
+    error
+    && typeof error === 'object'
+    && 'code' in error
+    && 'statusCode' in error
+    && typeof error.code === 'string'
+    && typeof error.statusCode === 'number'
+    && error.code.startsWith('AUTH_')
+  ) {
+    return new StudioStateApiError(
+      error instanceof Error ? error.message : '没有执行该操作的权限',
+      error.code,
+      error.statusCode,
     );
   }
   if (error instanceof StudioStateStorageError) {

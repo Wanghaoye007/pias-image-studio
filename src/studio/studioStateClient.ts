@@ -1,6 +1,7 @@
 import type { StudioState } from '../domain';
 import type { PersistedStudioSnapshot } from './studioStatePersistence';
 import { parseStudioState } from './studioStateSchema';
+import { withCsrfProtection } from '../auth/authClient';
 
 export type PersistedStudioSnapshotMeta = Omit<PersistedStudioSnapshot, 'state'>;
 
@@ -19,7 +20,7 @@ export class StudioStateClientError extends Error {
 export async function loadStudioState(): Promise<PersistedStudioSnapshot | null> {
   let response: Response;
   try {
-    response = await fetch('/api/studio/state', { method: 'GET' });
+    response = await fetch('/api/studio/state', withCsrfProtection({ method: 'GET' }));
   } catch (error) {
     throw requestFailed(error);
   }
@@ -49,11 +50,11 @@ export async function saveStudioState(
 ): Promise<PersistedStudioSnapshotMeta> {
   let response: Response;
   try {
-    response = await fetch('/api/studio/state', {
+    response = await fetch('/api/studio/state', withCsrfProtection({
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ schemaVersion: 1, expectedRevision, state }),
-    });
+    }));
   } catch (error) {
     throw requestFailed(error);
   }

@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { StudioState } from '../domain';
+import type { PiasDatabase } from '../persistence/sqliteDatabase';
 import { parseStudioState, StudioStateValidationError } from './studioStateSchema';
 
 export type PersistedStudioSnapshot = {
@@ -13,6 +15,11 @@ export type PersistedStudioSnapshot = {
 export type StudioStatePersistence = {
   load(): Promise<PersistedStudioSnapshot | null>;
   save(expectedRevision: number, state: StudioState): Promise<PersistedStudioSnapshot>;
+};
+
+export type StudioStateScope = {
+  tenantId: string;
+  projectId: string;
 };
 
 export class StudioStateConflictError extends Error {
@@ -84,6 +91,95 @@ export function createFileStudioStatePersistence(
   return { load, save };
 }
 
+export function createScopedStudioStatePersistence(
+  rootDirectory: string,
+  scope: StudioStateScope,
+): StudioStatePersistence {
+  const scopeKey = createHash('sha256')
+    .update(scope.tenantId)
+    .update('\0')
+    .update(scope.projectId)
+    .digest('hex');
+  return createFileStudioStatePersistence(join(rootDirectory, scopeKey, 'studio-state.json'));
+}
+
+export function createSqliteStudioStatePersistence(
+  database: PiasDatabase,
+  scope: StudioStateScope,
+): StudioStatePersistence {
+  const scopeKey = database.scopeKey(scope);
+  const select = database.connection.prepare(`
+    SELECT schema_version, revision, updated_at, state_json
+    FROM studio_states
+    WHERE scope_key = ?
+  `);
+  const upsert = database.connection.prepare(`
+    INSERT INTO studio_states (
+      scope_key, schema_version, revision, updated_at, state_json
+    ) VALUES (?, 1, ?, ?, ?)
+    ON CONFLICT(scope_key) DO UPDATE SET
+      schema_version = excluded.schema_version,
+      revision = excluded.revision,
+      updated_at = excluded.updated_at,
+      state_json = excluded.state_json
+  `);
+
+  const load = async (): Promise<PersistedStudioSnapshot | null> => {
+    try {
+      const row = select.get(scopeKey) as Record<string, unknown> | undefined;
+      return row ? parseSqliteSnapshot(row) : null;
+    } catch (error) {
+      if (error instanceof StudioStateStorageError) throw error;
+      throw new StudioStateStorageError('无法读取事务工作台状态', { cause: error });
+    }
+  };
+
+  const save = async (
+    expectedRevision: number,
+    state: StudioState,
+  ): Promise<PersistedStudioSnapshot> => {
+    const validatedState = structuredClone(parseStudioState(state));
+    let transactionOpen = false;
+    try {
+      database.connection.exec('BEGIN IMMEDIATE');
+      transactionOpen = true;
+      const current = select.get(scopeKey) as Record<string, unknown> | undefined;
+      const actualRevision = current ? requireRevision(current.revision) : 0;
+      if (actualRevision !== expectedRevision) {
+        throw new StudioStateConflictError(expectedRevision, actualRevision);
+      }
+      const snapshot: PersistedStudioSnapshot = {
+        schemaVersion: 1,
+        revision: actualRevision + 1,
+        updatedAt: new Date().toISOString(),
+        state: validatedState,
+      };
+      upsert.run(
+        scopeKey,
+        snapshot.revision,
+        snapshot.updatedAt,
+        JSON.stringify(snapshot.state),
+      );
+      database.connection.exec('COMMIT');
+      transactionOpen = false;
+      return snapshot;
+    } catch (error) {
+      if (transactionOpen) {
+        try {
+          database.connection.exec('ROLLBACK');
+        } catch {
+          // Preserve the original database error.
+        }
+      }
+      if (error instanceof StudioStateConflictError) throw error;
+      if (error instanceof StudioStateValidationError) throw error;
+      throw new StudioStateStorageError('无法保存事务工作台状态', { cause: error });
+    }
+  };
+
+  return { load, save };
+}
+
 async function readSnapshot(filePath: string): Promise<PersistedStudioSnapshot> {
   let value: unknown;
   try {
@@ -117,6 +213,36 @@ async function readSnapshot(filePath: string): Promise<PersistedStudioSnapshot> 
     }
     throw new StudioStateStorageError('已保存的工作台状态无效', { cause: error });
   }
+}
+
+function parseSqliteSnapshot(row: Record<string, unknown>): PersistedStudioSnapshot {
+  try {
+    if (row.schema_version !== 1) {
+      throw new StudioStateStorageError('工作台状态版本不受支持');
+    }
+    if (typeof row.updated_at !== 'string' || !row.updated_at) {
+      throw new StudioStateStorageError('工作台状态更新时间无效');
+    }
+    if (typeof row.state_json !== 'string') {
+      throw new StudioStateStorageError('工作台状态内容无效');
+    }
+    return {
+      schemaVersion: 1,
+      revision: requireRevision(row.revision),
+      updatedAt: row.updated_at,
+      state: parseStudioState(JSON.parse(row.state_json)),
+    };
+  } catch (error) {
+    if (error instanceof StudioStateStorageError) throw error;
+    throw new StudioStateStorageError('事务工作台状态损坏', { cause: error });
+  }
+}
+
+function requireRevision(value: unknown): number {
+  if (!Number.isInteger(value) || (value as number) < 1) {
+    throw new StudioStateStorageError('工作台状态 revision 无效');
+  }
+  return value as number;
 }
 
 function asRecord(value: unknown, path: string): Record<string, unknown> {

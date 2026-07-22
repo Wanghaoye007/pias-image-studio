@@ -153,7 +153,7 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
         </div>
       )}
 
-      {['generate', 'blend', 'light', 'expand'].includes(props.tool) && (
+      {['generate', 'light', 'expand'].includes(props.tool) && (
         <label className="context-panel__field">
           <span>补充描述（可选）</span>
           <textarea
@@ -333,7 +333,7 @@ function ReferenceAssetSlot({ asset, onOpen }: { asset?: Asset; onOpen: () => vo
   return (
     <div className="reference-slot">
       <span>参考素材</span>
-      <button aria-label="选择参考素材" onClick={onOpen} type="button">
+      <button aria-label="选择参考素材" autoFocus onClick={onOpen} type="button">
         {asset ? (
           <>
             <img alt="" src={asset.imageUrl} />

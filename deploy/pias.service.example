@@ -1,0 +1,26 @@
+[Unit]
+Description=PIAS Image Studio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pias
+Group=pias
+WorkingDirectory=/opt/pias/current
+EnvironmentFile=/etc/pias/pias.env
+ExecStartPre=/usr/bin/npm run release:preflight
+ExecStart=/usr/bin/node /opt/pias/current/dist-server/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pias /var/backups/pias
+
+[Install]
+WantedBy=multi-user.target

@@ -29,11 +29,16 @@ import {
 import { getSceneTitle, type JobNodeData, type ResultNodeData, type SceneNodeData } from './graph';
 
 const jobStatusLabels: Record<JobStatus, string> = {
+  preflight: '预检中',
   queued: '等待中',
   running: '生成中',
+  postprocessing: '后处理中',
+  partially_succeeded: '部分完成',
+  cancel_requested: '正在取消',
   succeeded: '已完成',
   failed: '失败',
   canceled: '已取消',
+  expired: '已过期',
 };
 
 const reviewStatusLabels: Record<ReviewStatus, string> = {
@@ -41,6 +46,7 @@ const reviewStatusLabels: Record<ReviewStatus, string> = {
   submitted: '待审核',
   approved: '审核已通过',
   returned: '已退回',
+  rejected: '已拒绝',
 };
 
 const sceneStatusLabels: Record<Scene['status'], string> = {
@@ -54,8 +60,13 @@ export function getJobStatusLabel(status: JobStatus): string {
 }
 
 export function getJobStageLabel(job: Pick<GenerationJob, 'progress' | 'status'>): string {
+  if (job.status === 'preflight') return '正在检查输入';
   if (job.status === 'queued') return '等待调度';
   if (job.status === 'running') return job.progress >= 70 ? '优化细节' : '正在生成';
+  if (job.status === 'postprocessing') return '整理生成结果';
+  if (job.status === 'partially_succeeded') return '部分结果可用';
+  if (job.status === 'cancel_requested') return '正在取消远端任务';
+  if (job.status === 'expired') return '任务已过期';
   return getJobStatusLabel(job.status);
 }
 
@@ -130,7 +141,8 @@ export function JobCanvasNode({ data }: NodeProps<Node<JobNodeData, 'job'>>) {
 }
 
 export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'result'>>) {
-  const canSubmit = data.result.reviewStatus === 'draft' || data.result.reviewStatus === 'returned';
+  const canSubmit = data.result.reviewStatus === 'draft';
+  const canRevise = data.result.reviewStatus === 'returned' || data.result.reviewStatus === 'rejected';
   const isAdopted = Boolean(data.result.isAdopted);
   const isPrimary = Boolean(data.result.isPrimary);
 
@@ -208,7 +220,31 @@ export function ResultCanvasNode({ data, id }: NodeProps<Node<ResultNodeData, 'r
             }}
             type="button"
           >
-            {data.result.reviewStatus === 'returned' ? '重新提交' : '提交审核'}
+            提交审核
+          </button>
+        )}
+        {data.result.reviewStatus === 'submitted' && (
+          <button
+            aria-label="撤回审核"
+            onClick={(event) => {
+              event.stopPropagation();
+              data.actions.onWithdrawReview?.(data.result.id);
+            }}
+            type="button"
+          >
+            撤回
+          </button>
+        )}
+        {canRevise && (
+          <button
+            aria-label="创建修改版本"
+            onClick={(event) => {
+              event.stopPropagation();
+              data.actions.onReviseResult?.(data.result.id);
+            }}
+            type="button"
+          >
+            修改后重试
           </button>
         )}
       </div>

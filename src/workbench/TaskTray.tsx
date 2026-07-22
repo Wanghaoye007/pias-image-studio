@@ -11,7 +11,13 @@ type TaskTrayProps = {
 
 export function TaskTray({ jobs, onCancel, onRetry }: TaskTrayProps) {
   const [open, setOpen] = useState(false);
-  const activeCount = jobs.filter((job) => job.status === 'queued' || job.status === 'running').length;
+  const activeCount = jobs.filter((job) => (
+    job.status === 'preflight'
+    || job.status === 'queued'
+    || job.status === 'running'
+    || job.status === 'postprocessing'
+    || job.status === 'cancel_requested'
+  )).length;
 
   return (
     <section className={`task-tray ${open ? 'is-open' : ''}`} aria-label="任务抽屉">
@@ -31,7 +37,10 @@ export function TaskTray({ jobs, onCancel, onRetry }: TaskTrayProps) {
         <div className="task-tray__content">
           {jobs.length === 0 && <p>暂无任务</p>}
           {jobs.map((job) => {
-            const canCancel = job.status === 'queued' || job.status === 'running';
+            const canCancel = job.status === 'preflight'
+              || job.status === 'queued'
+              || job.status === 'running'
+              || job.status === 'postprocessing';
             return (
               <article className={`task-row is-${job.status}`} key={job.id}>
                 <div>
@@ -46,7 +55,7 @@ export function TaskTray({ jobs, onCancel, onRetry }: TaskTrayProps) {
                     <XCircle size={16} />
                   </button>
                 )}
-                {job.status === 'failed' && (
+                {(job.status === 'failed' || job.status === 'expired') && (
                   <button aria-label="重试任务" onClick={() => onRetry(job)} title="重试任务" type="button">
                     <RotateCcw size={16} />
                   </button>

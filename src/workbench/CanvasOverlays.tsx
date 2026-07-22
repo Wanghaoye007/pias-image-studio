@@ -305,7 +305,7 @@ export function AnglePreview({
   const normalizedVertical = Math.max(-1, Math.min(1, vertical));
   const radians = normalizedHorizontal * Math.PI / 180;
   const cameraX = 50 - Math.sin(radians) * 27;
-  const cameraY = Math.max(10, Math.min(90, 50 + Math.cos(radians) * 28 - normalizedVertical * 9));
+  const cameraY = Math.max(10, Math.min(90, 50 + Math.cos(radians) * 28 + normalizedVertical * 9));
   const sightAngle = Math.atan2(cameraY - 50, cameraX - 50) * 180 / Math.PI;
   const sightLength = Math.hypot(cameraX - 50, cameraY - 50);
   const verticalDegrees = Math.round(normalizedVertical * 45);
@@ -327,7 +327,7 @@ export function AnglePreview({
   const cameraLabel = getCameraPositionLabel(normalizedHorizontal);
   const verticalLabel = verticalDegrees === 0
     ? '平视 0°'
-    : `${verticalDegrees > 0 ? '俯视' : '仰视'} ${Math.abs(verticalDegrees)}°`;
+    : `${verticalDegrees > 0 ? '仰视' : '俯视'} ${Math.abs(verticalDegrees)}°`;
 
   return (
     <div

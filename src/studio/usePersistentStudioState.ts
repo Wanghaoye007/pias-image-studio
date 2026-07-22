@@ -29,7 +29,10 @@ export type PersistentStudioState = {
 
 const autosaveDelayMs = 400;
 
-export function usePersistentStudioState(): PersistentStudioState {
+export function usePersistentStudioState(
+  projectScope = '',
+  initialState?: StudioState,
+): PersistentStudioState {
   const [state, setStateValue] = useState<StudioState | null>(null);
   const [loadStatus, setLoadStatus] = useState<StudioLoadStatus>('loading');
   const [saveStatus, setSaveStatus] = useState<StudioSaveStatus>('idle');
@@ -53,6 +56,32 @@ export function usePersistentStudioState(): PersistentStudioState {
   }, []);
 
   useEffect(() => {
+    const hasUnconfirmedWrite = () => (
+      inFlightRef.current
+      || queuedStateRef.current !== null
+      || timerRef.current !== null
+      || blockedRef.current
+    );
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnconfirmedWrite()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const handlePageHide = () => {
+      if (!hasUnconfirmedWrite() || inFlightRef.current) return;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+      flushSaveRef.current();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, []);
+
+  useEffect(() => {
     mountedRef.current = true;
     const session = sessionRef.current + 1;
     sessionRef.current = session;
@@ -72,7 +101,7 @@ export function usePersistentStudioState(): PersistentStudioState {
 
     void loadStudioState().then((snapshot) => {
       if (!active || !mountedRef.current || sessionRef.current !== session) return;
-      const restoredState = snapshot?.state ?? createDemoStudioState();
+      const restoredState = snapshot?.state ?? initialState ?? createDemoStudioState();
       revisionRef.current = snapshot?.revision ?? 0;
       confirmedJsonRef.current = snapshot ? JSON.stringify(restoredState) : '';
       stateRef.current = restoredState;
@@ -88,7 +117,7 @@ export function usePersistentStudioState(): PersistentStudioState {
     return () => {
       active = false;
     };
-  }, [loadAttempt]);
+  }, [loadAttempt, projectScope]);
 
   const flushSave = useCallback(() => {
     if (blockedRef.current || inFlightRef.current || !mountedRef.current) return;

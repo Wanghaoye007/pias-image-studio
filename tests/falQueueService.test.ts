@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createFalQueueService,
+  type FalJobLeaseStore,
+  type FalJobPayloadStore,
   type FalQueueAdapter,
   type FalQueuePersistence,
   type PersistedFalJob,
@@ -35,6 +37,97 @@ function createAdapter(): FalQueueAdapter {
 }
 
 describe('Fal 统一作业编排器', () => {
+  it('cancels submitted upstream work when durable job persistence fails', async () => {
+    const adapter = createAdapter();
+    const service = createFalQueueService({
+      adapter,
+      readKey: async () => 'id:secret',
+      createId: () => 'fal-local-persist-failed',
+      persistence: {
+        load: vi.fn(async () => []),
+        save: vi.fn(async () => { throw new Error('disk full'); }),
+      },
+    });
+
+    await expect(service.submit(request())).rejects.toMatchObject({
+      code: 'FAL_PERSIST_FAILED',
+      statusCode: 503,
+    });
+    expect(adapter.cancel).toHaveBeenCalledWith('fal-ai/bria/product-shot', {
+      requestId: 'upstream-1',
+    });
+  });
+
+  it('renews the job lease while an upstream status request is still running', async () => {
+    vi.useFakeTimers();
+    try {
+      let now = 1_000;
+      let resolveStatus!: (value: { status: 'COMPLETED'; logs: [] }) => void;
+      const pendingStatus = new Promise<{ status: 'COMPLETED'; logs: [] }>((resolve) => {
+        resolveStatus = resolve;
+      });
+      const adapter = createAdapter();
+      vi.mocked(adapter.status).mockReturnValue(pendingStatus);
+      const leaseStore: FalJobLeaseStore = {
+        acquire: vi.fn(async () => true),
+        renew: vi.fn(async () => true),
+        release: vi.fn(async () => undefined),
+      };
+      const service = createFalQueueService({
+        adapter,
+        readKey: async () => 'id:secret',
+        persistence: {
+          load: vi.fn(async () => [persistedQueuedJob('fal-local-slow')]),
+          save: vi.fn(async () => undefined),
+        },
+        leaseStore,
+        leaseTtlMs: 300,
+        workerId: 'worker-slow',
+        now: () => now,
+      });
+
+      const status = service.status('fal-local-slow');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(adapter.status).toHaveBeenCalledOnce();
+      now = 1_100;
+      await vi.advanceTimersByTimeAsync(100);
+      expect(leaseStore.renew).toHaveBeenCalledWith(
+        'fal-local-slow',
+        'worker-slow',
+        1_100,
+        300,
+      );
+
+      resolveStatus({ status: 'COMPLETED', logs: [] });
+      await expect(status).resolves.toMatchObject({ status: 'completed' });
+      expect(leaseStore.release).toHaveBeenCalledWith('fal-local-slow', 'worker-slow');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('persists the trusted creator and rejects another creator canceling the job', async () => {
+    let storedJobs: PersistedFalJob[] = [];
+    const adapter = createAdapter();
+    const service = createFalQueueService({
+      adapter,
+      readKey: async () => 'id:secret',
+      createId: () => 'fal-local-owned',
+      persistence: {
+        load: vi.fn(async () => structuredClone(storedJobs)),
+        save: vi.fn(async (jobs) => { storedJobs = structuredClone(jobs); }),
+      },
+    });
+
+    await service.submit(request(), 'user-creator-a');
+    expect(storedJobs[0].createdBy).toBe('user-creator-a');
+    await expect(service.cancel('fal-local-owned', 'user-creator-b', false)).rejects.toMatchObject({
+      code: 'FAL_JOB_FORBIDDEN',
+      statusCode: 403,
+    });
+    await expect(service.cancel('fal-local-owned', 'user-creator-a', false)).resolves.toBeUndefined();
+  });
+
   it('恢复旧版定向光任务时不误触发新的结构化阶段', async () => {
     const legacyJob: PersistedFalJob = {
       id: 'fal-local-legacy-light',
@@ -110,6 +203,66 @@ describe('Fal 统一作业编排器', () => {
     );
   });
 
+  it('服务重启后用隔离恢复载荷继续定向光最终阶段并清理源图', async () => {
+    let storedJobs: PersistedFalJob[] = [];
+    const payloads = new Map<string, { directionalLightSourceImageUrl?: string }>();
+    const persistence: FalQueuePersistence = {
+      load: vi.fn(async () => structuredClone(storedJobs)),
+      save: vi.fn(async (jobs) => { storedJobs = structuredClone(jobs); }),
+    };
+    const payloadStore: FalJobPayloadStore = {
+      load: vi.fn(async (jobId) => structuredClone(payloads.get(jobId))),
+      save: vi.fn(async (jobId, payload) => { payloads.set(jobId, structuredClone(payload)); }),
+      delete: vi.fn(async (jobId) => { payloads.delete(jobId); }),
+    };
+    const firstAdapter = createAdapter();
+    const firstService = createFalQueueService({
+      adapter: firstAdapter,
+      readKey: async () => 'id:secret',
+      createId: () => 'fal-local-light-recover',
+      persistence,
+      payloadStore,
+    });
+    await firstService.submit(request({
+      profileId: 'light',
+      imageUrls: ['data:image/png;base64,PRIVATE_LIGHT_SOURCE'],
+      parameters: { lightDirection: 'top-left' },
+    }));
+    expect(storedJobs[0].plan.directionalLight?.sourceImageUrl).toBe('');
+    expect(payloads.get('fal-local-light-recover')).toEqual({
+      directionalLightSourceImageUrl: 'data:image/png;base64,PRIVATE_LIGHT_SOURCE',
+    });
+
+    const resumedAdapter = createAdapter();
+    vi.mocked(resumedAdapter.result).mockResolvedValueOnce({
+      data: {
+        objects: [{ description: 'cosmetic bottle' }],
+        lighting: { direction: 'top-left' },
+        text_render: [],
+      },
+    });
+    const resumedService = createFalQueueService({
+      adapter: resumedAdapter,
+      readKey: async () => 'id:secret',
+      persistence,
+      payloadStore,
+    });
+
+    await expect(resumedService.status('fal-local-light-recover')).resolves.toMatchObject({
+      status: 'queued',
+    });
+    expect(resumedAdapter.submit).toHaveBeenCalledWith(
+      'bria/fibo-edit/edit',
+      expect.objectContaining({
+        input: expect.objectContaining({
+          image_url: 'data:image/png;base64,PRIVATE_LIGHT_SOURCE',
+        }),
+      }),
+    );
+    expect(payloadStore.delete).toHaveBeenCalledWith('fal-local-light-recover');
+    expect(payloads.has('fal-local-light-recover')).toBe(false);
+  });
+
   it('只在服务端配置凭证，并为原生多结果模型提交一个请求', async () => {
     const adapter = createAdapter();
     const service = createFalQueueService({
@@ -127,6 +280,92 @@ describe('Fal 统一作业编排器', () => {
     expect(adapter.submit).toHaveBeenCalledWith('fal-ai/bria/product-shot', {
       input: expect.objectContaining({ num_results: 4 }),
     });
+  });
+
+  it('persists private provider billing without exposing it in the public result', async () => {
+    let storedJobs: PersistedFalJob[] = [];
+    const billingAdapter = {
+      lookup: vi.fn(async () => ({
+        status: 'confirmed' as const,
+        events: [{
+          requestId: 'upstream-1',
+          endpointId: 'fal-ai/bria/product-shot',
+          timestamp: '2026-07-22T00:00:00Z',
+          outputUnits: 1,
+          unitPrice: 0.02,
+          percentDiscount: null,
+          costNanoUsd: 20_000_000,
+        }],
+        totalCostNanoUsd: 20_000_000,
+        currency: 'USD' as const,
+        checkedAt: '2026-07-22T00:01:00Z',
+      })),
+    };
+    const service = createFalQueueService({
+      adapter: createAdapter(),
+      billingAdapter,
+      readKey: async () => 'id:secret',
+      createId: () => 'fal-local-billing',
+      persistence: {
+        load: vi.fn(async () => structuredClone(storedJobs)),
+        save: vi.fn(async (jobs) => { storedJobs = structuredClone(jobs); }),
+      },
+    });
+    await service.submit(request());
+    await service.status('fal-local-billing');
+
+    const result = await service.result('fal-local-billing');
+
+    expect(billingAdapter.lookup).toHaveBeenCalledWith(['upstream-1']);
+    expect(result).not.toHaveProperty('providerBilling');
+    expect(storedJobs[0].providerBilling).toMatchObject({
+      status: 'confirmed',
+      totalCostNanoUsd: 20_000_000,
+    });
+  });
+
+  it('retries unavailable provider billing after the reconciliation cooldown', async () => {
+    let storedJobs: PersistedFalJob[] = [{
+      ...persistedQueuedJob('fal-local-billing-retry'),
+      children: [{
+        modelId: 'fal-ai/bria/product-shot',
+        requestId: 'upstream-1',
+        status: 'completed',
+      }],
+      providerBilling: {
+        status: 'unavailable',
+        events: [],
+        totalCostNanoUsd: 0,
+        currency: 'USD',
+        checkedAt: '2026-07-22T00:00:00.000Z',
+        reason: 'admin_key_missing',
+      },
+    }];
+    const billingAdapter = {
+      lookup: vi.fn(async () => ({
+        status: 'confirmed' as const,
+        events: [],
+        totalCostNanoUsd: 0,
+        currency: 'USD' as const,
+        checkedAt: '2026-07-22T00:10:00.000Z',
+      })),
+    };
+    const service = createFalQueueService({
+      adapter: createAdapter(),
+      billingAdapter,
+      readKey: async () => 'id:secret',
+      persistence: {
+        load: vi.fn(async () => structuredClone(storedJobs)),
+        save: vi.fn(async (jobs) => { storedJobs = structuredClone(jobs); }),
+      },
+      now: () => Date.parse('2026-07-22T00:10:00.000Z'),
+      billingRetryIntervalMs: 5 * 60_000,
+    });
+
+    await expect(service.listBillingPendingJobs()).resolves.toEqual(['fal-local-billing-retry']);
+    await expect(service.reconcileBilling('fal-local-billing-retry')).resolves.toBe('confirmed');
+    expect(billingAdapter.lookup).toHaveBeenCalledWith(['upstream-1']);
+    expect(storedJobs[0].providerBilling?.status).toBe('confirmed');
   });
 
   it('定向光先解析完整画面结构，再扇出最终出图并聚合结果', async () => {
@@ -303,7 +542,12 @@ describe('Fal 统一作业编排器', () => {
       progress: 94,
     });
     await expect(service.result('fal-local-upscale')).resolves.toEqual({
-      images: [{ url: 'https://fal.media/upstream-2.png', contentType: 'image/png' }],
+      images: [{
+        url: 'https://fal.media/upstream-2.png',
+        contentType: 'image/png',
+        width: 8192,
+        height: 8192,
+      }],
       modelId: 'fal-ai/topaz/upscale/image',
       childRequestIds: ['upstream-1', 'upstream-2'],
     });
@@ -318,3 +562,21 @@ describe('Fal 统一作业编排器', () => {
     await expect(service.submit(request())).rejects.toThrow('Fal 任务提交失败');
   });
 });
+
+function persistedQueuedJob(id: string): PersistedFalJob {
+  return {
+    id,
+    profileId: 'generate',
+    modelId: 'fal-ai/bria/product-shot',
+    request: request({ imageUrls: [] }),
+    plan: { modelId: 'fal-ai/bria/product-shot', invocations: [] },
+    children: [{
+      modelId: 'fal-ai/bria/product-shot',
+      requestId: 'upstream-slow',
+      status: 'queued',
+    }],
+    nextUpscaleFactorIndex: 1,
+    directionalLightFinalStarted: false,
+    canceled: false,
+  };
+}

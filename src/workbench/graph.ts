@@ -48,6 +48,8 @@ export function getSceneTitle(scene: Pick<Scene, 'operation' | 'title'>): string
 export type CanvasNodeActions = {
   onDerive?: (result: Result) => void;
   onSubmitReview?: (resultId: string) => void;
+  onWithdrawReview?: (resultId: string) => void;
+  onReviseResult?: (resultId: string) => void;
   onCreateNode?: (sourceNodeId: string) => void;
   onToggleFavorite?: (resultId: string) => void;
   onToggleAdoption?: (resultId: string) => void;
@@ -222,9 +224,13 @@ function buildEdges(state: StudioState): Edge[] {
     id: `scene-job:${job.id}`,
     source: `scene:${job.sceneId}`,
     target: `job:${job.id}`,
-    animated: job.status === 'queued' || job.status === 'running',
+    animated: job.status === 'preflight'
+      || job.status === 'queued'
+      || job.status === 'running'
+      || job.status === 'postprocessing'
+      || job.status === 'cancel_requested',
     className: `lineage-edge is-${job.status}`,
-    ...(job.status === 'failed' || job.status === 'canceled'
+    ...(job.status === 'failed' || job.status === 'canceled' || job.status === 'expired'
       ? { style: { strokeDasharray: '6 4' } }
       : {}),
   }));

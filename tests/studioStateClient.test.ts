@@ -74,9 +74,11 @@ describe('StudioState browser client', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/studio/state', expect.objectContaining({
       method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+      headers: expect.any(Headers),
       body: JSON.stringify({ schemaVersion: 1, expectedRevision: 4, state }),
     }));
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(new Headers(request.headers).get('content-type')).toBe('application/json');
   });
 
   it('preserves a typed conflict code for the autosave state machine', async () => {

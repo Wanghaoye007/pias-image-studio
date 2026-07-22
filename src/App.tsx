@@ -1,9 +1,88 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { GlobalNav, SecondaryView, type NavKey } from './SecondaryViews';
+import { AuthBoundary, type AuthBoundaryValue } from './auth/AuthBoundary';
+import { listProjects } from './organization/organizationClient';
+import { InvitationAcceptance, readInvitationToken } from './organization/InvitationAcceptance';
+import type { OrganizationProject } from './organization/organizationService';
+import { createBlankProjectStudioState } from './studio/demoState';
 import { usePersistentStudioState } from './studio/usePersistentStudioState';
 import { Workbench } from './workbench/Workbench';
 
 function App() {
+  const [invitationToken, setInvitationToken] = useState(() => readInvitationToken(window.location.hash));
+  if (invitationToken) {
+    return (
+      <InvitationAcceptance
+        onComplete={() => {
+          window.history.replaceState({}, '', `${window.location.pathname}${window.location.search}`);
+          setInvitationToken('');
+        }}
+        token={invitationToken}
+      />
+    );
+  }
+  return (
+    <AuthBoundary>
+      {(auth) => <StudioApplication auth={auth} />}
+    </AuthBoundary>
+  );
+}
+
+function StudioApplication({ auth }: { auth: AuthBoundaryValue }) {
+  const [activeProject, setActiveProject] = useState<OrganizationProject | null | undefined>(
+    auth.session.status === 'authenticated' ? undefined : null,
+  );
+
+  useEffect(() => {
+    if (auth.session.status !== 'authenticated') {
+      setActiveProject(null);
+      return;
+    }
+    if (activeProject?.id === auth.activeProjectId) return;
+    let current = true;
+    setActiveProject(undefined);
+    void listProjects().then((projects) => {
+      if (current) {
+        setActiveProject(projects.find((project) => project.id === auth.activeProjectId) ?? null);
+      }
+    }).catch(() => {
+      if (current) setActiveProject(null);
+    });
+    return () => { current = false; };
+  }, [activeProject?.id, auth.activeProjectId, auth.session.status]);
+
+  if (activeProject === undefined) {
+    return (
+      <main aria-live="polite" className="app-state-screen">
+        <div className="app-state-screen__indicator" />
+        <h1>正在读取项目</h1>
+        <p>正在确认当前项目范围与基础配置</p>
+      </main>
+    );
+  }
+
+  return (
+    <StudioWorkspace
+      activeProject={activeProject}
+      auth={auth}
+      onOpenProject={(project) => {
+        setActiveProject(project);
+        auth.activateProject(project.id);
+      }}
+    />
+  );
+}
+
+function StudioWorkspace({
+  activeProject,
+  auth,
+  onOpenProject,
+}: {
+  activeProject: OrganizationProject | null;
+  auth: AuthBoundaryValue;
+  onOpenProject: (project: OrganizationProject) => void;
+}) {
+  const projectScope = auth.activeProjectId;
   const {
     state,
     setState,
@@ -12,7 +91,12 @@ function App() {
     errorMessage,
     retryLoad,
     retrySave,
-  } = usePersistentStudioState();
+  } = usePersistentStudioState(
+    projectScope,
+    auth.session.status === 'authenticated'
+      ? createBlankProjectStudioState(activeProject ?? { name: '新建图片项目' })
+      : undefined,
+  );
   const [activeNav, setActiveNav] = useState<NavKey>('studio');
 
   if (loadStatus === 'error') {
@@ -37,10 +121,17 @@ function App() {
 
   return (
     <div className={`app-frame ${activeNav === 'studio' ? 'is-workbench' : ''}`}>
-      <GlobalNav activeNav={activeNav} onNavigate={setActiveNav} state={state} />
+      <GlobalNav
+        activeNav={activeNav}
+        authSession={auth.session}
+        onLogout={auth.logout}
+        onNavigate={setActiveNav}
+        state={state}
+      />
       <div className={`workspace ${activeNav === 'studio' ? 'is-workbench' : ''}`}>
         <div className="workspace-panel workspace-panel--workbench" hidden={activeNav !== 'studio'}>
           <Workbench
+            actorId={auth.session.status === 'authenticated' ? auth.session.user.id : 'Mika Tanaka'}
             onReloadState={retryLoad}
             onRetrySave={retrySave}
             saveStatus={saveStatus}
@@ -51,6 +142,13 @@ function App() {
         <div className="workspace-panel workspace-panel--secondary" hidden={activeNav === 'studio'}>
           <SecondaryView
             activeNav={activeNav}
+            activeProject={activeProject}
+            activeProjectId={projectScope}
+            authSession={auth.session}
+            onOpenProject={(project) => {
+              onOpenProject(project);
+              setActiveNav('studio');
+            }}
             onReloadState={retryLoad}
             onRetrySave={retrySave}
             saveStatus={saveStatus}

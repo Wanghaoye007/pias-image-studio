@@ -18,81 +18,99 @@
       "category": "data",
       "severity": "P1",
       "required": true,
-      "status": "partial",
-      "summary": "已确认写入的状态支持刷新和单机服务重启恢复；生产数据库、备份、多实例及关闭前未确认写入保护尚未实现",
-      "evidence": "src/studio/studioStatePersistence.ts; src/studio/studioStatePlugin.ts; tests/studioStatePersistence.test.ts; tests/app.test.tsx; docs/acceptance/evidence/pias-persistence-2026-07-21.png"
+      "status": "pass",
+      "summary": "StudioState 使用 SQLite WAL/FULL 与 BEGIN IMMEDIATE 事务，跨连接 revision 冲突可控；具备离页写入保护、在线校验备份、默认 dry-run 恢复、回滚副本和旧范围文件迁移",
+      "evidence": "src/persistence/sqliteDatabase.ts; src/studio/studioStatePersistence.ts; src/studio/studioStatePlugin.ts; src/studio/usePersistentStudioState.ts; scripts/pias-database.mjs; scripts/migrate-to-sqlite.mjs; scripts/release-preflight-core.mjs; tests/studioStateSqlitePersistence.test.ts; tests/sqliteOperations.test.ts; tests/releasePreflight.test.ts; tests/app.test.tsx; docs/operations/database-runbook.md; docs/operations/release-preflight.md"
     },
     {
       "id": "AUTH-001",
       "category": "permission",
       "severity": "P0",
       "required": true,
-      "status": "missing",
-      "summary": "未实现真实登录、会话、MFA 和服务端角色权限校验",
-      "evidence": "README.md 当前边界; src/App.tsx"
+      "status": "pass",
+      "summary": "密码、MFA、会话、CSRF、Tenant/Project 守卫与服务端命令级 RBAC 已闭环；状态审计和审核人由可信会话覆盖，Fal 任务取消校验可信创建人",
+      "evidence": "src/auth/identityService.ts; src/auth/authPolicy.ts; src/auth/authApiPlugin.ts; src/studio/studioStateAuthorization.ts; src/studio/studioStatePlugin.ts; src/fal/falQueueService.ts; src/fal/falProxyPlugin.ts; tests/identityService.test.ts; tests/authPolicy.test.ts; tests/authApiPlugin.test.ts; tests/studioStateAuthorization.test.ts; tests/authRoleE2E.test.ts; tests/falQueueService.test.ts"
     },
     {
       "id": "ISOLATION-001",
       "category": "permission",
       "severity": "P0",
       "required": true,
-      "status": "missing",
-      "summary": "未实现租户和项目级数据隔离",
-      "evidence": "src/domain.ts:164; StudioState 仅保存名称，不保存主体或访问范围"
+      "status": "pass",
+      "summary": "业务 API、StudioState、素材文件与 Fal 请求映射均绑定可信 Tenant/Project 并按范围哈希分区，原生图片请求也经过会话授权，且具备保守迁移与回滚",
+      "evidence": "src/auth/authPolicy.ts; src/auth/authApiPlugin.ts; src/auth/authClient.ts; src/studio/studioStatePersistence.ts; src/studio/studioStatePlugin.ts; src/assets/assetImageStorage.ts; src/assets/assetImagePlugin.ts; src/fal/falJobPersistence.ts; src/fal/falProxyPlugin.ts; tests/authPolicy.test.ts; tests/authApiPlugin.test.ts; tests/studioStatePersistence.test.ts; tests/assetImageStorage.test.ts; tests/assetImagePlugin.test.ts; tests/falJobPersistence.test.ts; tests/migrateStudioState.test.ts; tests/migrateProjectStorage.test.ts; docs/operations/tenant-state-migration.md"
     },
     {
       "id": "JOB-001",
       "category": "state",
       "severity": "P1",
       "required": true,
-      "status": "partial",
-      "summary": "任务状态缺少预检、后处理、部分成功、取消请求和过期等生产状态",
-      "evidence": "src/domain.ts:1; PRD 任务生命周期要求"
+      "status": "pass",
+      "summary": "任务覆盖预检、排队、运行、后处理、部分成功、取消请求、失败、取消和过期状态",
+      "evidence": "src/domain.ts; src/workbench/Workbench.tsx; tests/domain.test.ts; tests/workbench.test.tsx; tests/studioStateSchema.test.ts"
     },
     {
       "id": "USAGE-001",
       "category": "data",
       "severity": "P1",
       "required": true,
-      "status": "fail",
-      "summary": "运行中任务取消或失败时统一全额释放预占，未按供应商实际成本结算",
-      "evidence": "src/domain.ts settleJob"
+      "status": "partial",
+      "summary": "客户侧已实现不可变 Reserve/Charge/Release 台账、部分成功按输出结算及失败/取消释放；供应商成本已接入私有 Billing Events 对账与自动补偿，但当前凭证对 Admin API 返回 403，生产 Admin Key 尚未通过预检",
+      "evidence": "src/domain.ts; src/studio/studioStateAuthorization.ts; src/fal/falBillingClient.ts; src/fal/falQueueService.ts; src/fal/falRecoveryWorker.ts; scripts/check-fal-billing-access.mjs; scripts/release-preflight-core.mjs; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/workbench.test.tsx; tests/falBillingClient.test.ts; tests/falBillingPreflight.test.ts; tests/releasePreflight.test.ts; tests/falQueueService.test.ts; docs/operations/release-preflight.md"
     },
     {
       "id": "RECOVERY-001",
       "category": "robustness",
       "severity": "P1",
       "required": true,
-      "status": "partial",
-      "summary": "完整 StudioState 与 Fal 请求映射可在单机恢复，但缺少持久队列、Worker 接管和多实例恢复",
-      "evidence": "src/studio/studioStatePersistence.ts; src/fal/falJobPersistence.ts; docs/acceptance/evidence/pias-persistence-2026-07-21.png"
+      "status": "pass",
+      "summary": "Fal 作业、两阶段恢复载荷与租约持久化到按 Tenant/Project 隔离的 SQLite；后台 Worker 支持慢调用续租、同主机跨进程互斥、过期接管和重启后自动推进",
+      "evidence": "src/fal/falQueueService.ts; src/fal/falSqlitePersistence.ts; src/fal/falRecoveryWorker.ts; src/fal/falProxyPlugin.ts; tests/falQueueService.test.ts; tests/falSqliteRecovery.test.ts; tests/sqliteOperations.test.ts; docs/operations/database-runbook.md"
+    },
+    {
+      "id": "OPS-001",
+      "category": "operations",
+      "severity": "P1",
+      "required": true,
+      "status": "pass",
+      "summary": "独立 Node HTTP 服务、静态 SPA/API 边界、安全响应头、版本元数据、live/ready、SIGTERM 优雅停机、启动前双门禁、systemd 自动恢复和数据库回滚步骤已闭环",
+      "evidence": "src/server/productionServer.ts; src/server/healthPlugin.ts; src/server/productionReadiness.ts; src/server/releaseIdentity.ts; vite.server.config.ts; scripts/write-release-metadata.mjs; scripts/release-preflight-core.mjs; deploy/pias.env.example; deploy/pias.service.example; tests/productionServer.test.ts; tests/healthPlugin.test.ts; tests/releaseMetadata.test.ts; tests/releasePreflight.test.ts; docs/operations/deployment-runbook.md; docs/operations/release-preflight.md; docs/operations/database-runbook.md"
     },
     {
       "id": "REVERSE-001",
       "category": "business",
       "severity": "P1",
       "required": true,
-      "status": "partial",
-      "summary": "具备取消、重试、退回和删除场景，但缺少完整撤回、驳回和生产级恢复闭环",
-      "evidence": "src/domain.ts; src/workbench/Workbench.tsx"
+      "status": "pass",
+      "summary": "取消、失败/过期重试、审核撤回、退回与驳回均具备状态守卫；修改后重试创建独立 Job/Result 并保留 retry/supersedes 血缘、独立额度结算、可信角色、5-500 字原因、站内通知和不可变审计",
+      "evidence": "src/domain.ts; src/studio/studioStateAuthorization.ts; src/studio/studioStateSchema.ts; src/workbench/Workbench.tsx; src/SecondaryViews.tsx; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/studioStateSchema.test.ts; tests/workbench.test.tsx; tests/app.test.tsx"
     },
     {
       "id": "REVIEW-001",
       "category": "state",
       "severity": "P1",
       "required": true,
-      "status": "partial",
-      "summary": "审核状态守卫已实现，但操作者为前端固定字符串且不受服务端权限约束",
-      "evidence": "src/SecondaryViews.tsx; src/domain.ts review functions"
+      "status": "pass",
+      "summary": "审核状态机与服务端 review.submit/review.decide 权限联动，审核人和新增审计事件 actor 均由可信会话覆盖，历史审计不可删改",
+      "evidence": "src/domain.ts review functions; src/studio/studioStateAuthorization.ts; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/authRoleE2E.test.ts"
     },
     {
       "id": "UI-001",
       "category": "business",
       "severity": "P2",
       "required": true,
-      "status": "fail",
-      "summary": "新建项目、上传素材、邀请成员和部分表头操作为无响应按钮",
-      "evidence": "src/SecondaryViews.tsx"
+      "status": "pass",
+      "summary": "素材上传、项目创建/切换/刷新恢复、成员邀请/重新签发和成员生命周期编辑均连接真实持久化 API；本机模式明确禁用企业操作，无动作表头入口已移除，桌面与移动布局通过浏览器验收",
+      "evidence": "src/App.tsx; src/SecondaryViews.tsx; src/assets/assetImagePlugin.ts; src/organization/organizationClient.ts; tests/app.test.tsx; tests/organizationClient.test.ts; tests/assetImagePlugin.test.ts; docs/acceptance/evidence/pias-organization-project-2026-07-22.png; docs/acceptance/evidence/pias-organization-admin-2026-07-22.png; docs/acceptance/evidence/pias-member-lifecycle-2026-07-22.png; docs/acceptance/evidence/pias-invitation-resend-2026-07-22.jpg"
+    },
+    {
+      "id": "MEMBER-001",
+      "category": "business",
+      "severity": "P1",
+      "required": true,
+      "status": "partial",
+      "summary": "一次性令牌、重新签发、成员生命周期和邮件 Outbox 代码已闭环；令牌密文、幂等 Webhook、租约、退避、取消与投递审计通过自动化测试，但正式邮件 Relay 与生产域名尚未配置并完成真实收件验证",
+      "evidence": "src/organization/InvitationAcceptance.tsx; src/organization/organizationService.ts; src/organization/organizationPlugin.ts; src/organization/organizationClient.ts; src/organization/invitationEmailDelivery.ts; src/auth/identityService.ts; src/persistence/sqliteDatabase.ts; scripts/sqlite-common.mjs; scripts/release-preflight-core.mjs; tests/app.test.tsx; tests/organizationClient.test.ts; tests/organizationService.test.ts; tests/organizationApiPlugin.test.ts; tests/invitationEmailDelivery.test.ts; tests/authApiPlugin.test.ts; tests/identityService.test.ts; tests/sqliteOperations.test.ts; tests/releasePreflight.test.ts; docs/operations/organization-management.md; docs/operations/release-preflight.md; docs/acceptance/evidence/pias-member-lifecycle-2026-07-22.png; docs/acceptance/evidence/pias-invitation-resend-2026-07-22.jpg"
     },
     {
       "id": "TRACE-001",
@@ -141,8 +159,7 @@
         "--config",
         "vitest.config.ts",
         "--pool=threads",
-        "--maxWorkers=1",
-        "--minWorkers=1"
+        "--maxWorkers=1"
       ],
       "env": {
         "NODE_OPTIONS": "--max-old-space-size=384"

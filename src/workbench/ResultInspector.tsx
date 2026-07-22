@@ -51,6 +51,8 @@ type ResultInspectorProps = {
   onQualityIssue: (issue: QualityIssue) => void;
   onSetPrimary: () => void;
   onSubmitReview: () => void;
+  onWithdrawReview: () => void;
+  onReviseResult: () => void;
   onToggleAdoption: () => void;
   onToggleFavorite: () => void;
 };
@@ -65,10 +67,13 @@ export function ResultInspector({
   onQualityIssue,
   onSetPrimary,
   onSubmitReview,
+  onWithdrawReview,
+  onReviseResult,
   onToggleAdoption,
   onToggleFavorite,
 }: ResultInspectorProps) {
-  const canSubmit = result.reviewStatus === 'draft' || result.reviewStatus === 'returned';
+  const canSubmit = result.reviewStatus === 'draft';
+  const canRevise = result.reviewStatus === 'returned' || result.reviewStatus === 'rejected';
   const isApproved = result.reviewStatus === 'approved';
   const parameters = Object.entries(job.inputSnapshot.parameters);
 
@@ -165,6 +170,10 @@ export function ResultInspector({
             </button>
           )}
           {canSubmit && <button onClick={onSubmitReview} type="button">提交审核</button>}
+          {result.reviewStatus === 'submitted' && (
+            <button onClick={onWithdrawReview} type="button">撤回审核</button>
+          )}
+          {canRevise && <button onClick={onReviseResult} type="button">创建修改版本</button>}
         </section>
       </div>
     </aside>

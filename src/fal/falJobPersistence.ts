@@ -1,6 +1,12 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { FalQueuePersistence, PersistedFalJob } from './falQueueService';
+
+export type FalQueueScope = {
+  tenantId: string;
+  projectId: string;
+};
 
 type PersistedQueueState = {
   version: 1;
@@ -29,4 +35,16 @@ export function createFileFalQueuePersistence(
       await rename(temporaryPath, filePath);
     },
   };
+}
+
+export function createScopedFalQueuePersistence(
+  rootDirectory: string,
+  scope: FalQueueScope,
+): FalQueuePersistence {
+  const scopeKey = createHash('sha256')
+    .update(scope.tenantId)
+    .update('\0')
+    .update(scope.projectId)
+    .digest('hex');
+  return createFileFalQueuePersistence(join(rootDirectory, scopeKey, 'fal-queue-state.json'));
 }

@@ -6,17 +6,36 @@ import type {
   Result,
   Scene,
   SceneEdge,
+  StudioNotification,
   StudioState,
   TaskParameters,
+  UsageLedgerEntry,
 } from '../domain';
 
-const jobStatuses = new Set(['queued', 'running', 'succeeded', 'failed', 'canceled']);
-const reviewStatuses = new Set(['draft', 'submitted', 'approved', 'returned']);
+const jobStatuses = new Set([
+  'preflight',
+  'queued',
+  'running',
+  'postprocessing',
+  'partially_succeeded',
+  'cancel_requested',
+  'succeeded',
+  'failed',
+  'canceled',
+  'expired',
+]);
+const reviewStatuses = new Set(['draft', 'submitted', 'approved', 'returned', 'rejected']);
 const profileIds = new Set(['generate', 'blend', 'angle', 'light', 'remove', 'extract', 'expand', 'upscale']);
 const qualityIssues = new Set([
   'product-deformation', 'text-logo', 'material', 'composition', 'lighting',
   'background', 'dimensions', 'content-safety', 'other',
 ]);
+const usageEntryTypes = new Set(['reserve', 'charge', 'release', 'adjustment']);
+const pricingRuleVersions = new Set(['pias-credit-v1']);
+const notificationTypes = new Set([
+  'review.submitted', 'review.approved', 'review.returned', 'review.rejected', 'review.withdrawn',
+]);
+const notificationRoles = new Set(['creator', 'reviewer']);
 
 export class StudioStateValidationError extends Error {
   constructor(path: string, expectation: string) {
@@ -34,12 +53,56 @@ export function parseStudioState(value: unknown): StudioState {
     selectedSceneId: text(state.selectedSceneId, 'state.selectedSceneId'),
     selectedTool: enumeration(state.selectedTool, 'state.selectedTool', profileIds) as StudioState['selectedTool'],
     usage: parseUsage(state.usage),
+    usageLedger: array(state.usageLedger ?? [], 'state.usageLedger').map(parseUsageLedgerEntry),
     assets: array(state.assets, 'state.assets').map(parseAsset),
     scenes: array(state.scenes, 'state.scenes').map(parseScene),
     edges: array(state.edges, 'state.edges').map(parseEdge),
     jobs: array(state.jobs, 'state.jobs').map(parseJob),
     results: array(state.results, 'state.results').map(parseResult),
     auditEvents: array(state.auditEvents, 'state.auditEvents').map(parseAuditEvent),
+    notifications: array(state.notifications ?? [], 'state.notifications').map(parseNotification),
+  };
+}
+
+function parseNotification(value: unknown, index: number): StudioNotification {
+  const path = `state.notifications[${index}]`;
+  const notification = record(value, path);
+  const recipientUserId = optionalText(notification.recipientUserId, `${path}.recipientUserId`);
+  const recipientRole = notification.recipientRole === undefined
+    ? undefined
+    : enumeration(notification.recipientRole, `${path}.recipientRole`, notificationRoles) as StudioNotification['recipientRole'];
+  if (Boolean(recipientUserId) === Boolean(recipientRole)) {
+    fail(path, '必须且只能指定一种通知收件人');
+  }
+  return compact({
+    id: text(notification.id, `${path}.id`),
+    type: enumeration(notification.type, `${path}.type`, notificationTypes) as StudioNotification['type'],
+    targetId: text(notification.targetId, `${path}.targetId`),
+    message: text(notification.message, `${path}.message`),
+    at: text(notification.at, `${path}.at`),
+    recipientUserId,
+    recipientRole,
+    readAt: optionalText(notification.readAt, `${path}.readAt`),
+  }) as StudioNotification;
+}
+
+function parseUsageLedgerEntry(value: unknown, index: number): UsageLedgerEntry {
+  const path = `state.usageLedger[${index}]`;
+  const entry = record(value, path);
+  return {
+    id: text(entry.id, `${path}.id`),
+    jobId: text(entry.jobId, `${path}.jobId`),
+    profileId: enumeration(entry.profileId, `${path}.profileId`, profileIds) as UsageLedgerEntry['profileId'],
+    entryType: enumeration(entry.entryType, `${path}.entryType`, usageEntryTypes) as UsageLedgerEntry['entryType'],
+    units: nonNegativeNumber(entry.units, `${path}.units`),
+    balanceAfter: nonNegativeNumber(entry.balanceAfter, `${path}.balanceAfter`),
+    pricingRuleVersion: enumeration(
+      entry.pricingRuleVersion,
+      `${path}.pricingRuleVersion`,
+      pricingRuleVersions,
+    ) as UsageLedgerEntry['pricingRuleVersion'],
+    reason: text(entry.reason, `${path}.reason`),
+    at: text(entry.at, `${path}.at`),
   };
 }
 
@@ -117,6 +180,8 @@ function parseJob(value: unknown, index: number): GenerationJob {
     x: finiteNumber(job.x, `${path}.x`),
     y: finiteNumber(job.y, `${path}.y`),
     inputSnapshot: parseInputSnapshot(job.inputSnapshot, `${path}.inputSnapshot`),
+    retryOfJobId: optionalText(job.retryOfJobId, `${path}.retryOfJobId`),
+    supersedesResultId: optionalText(job.supersedesResultId, `${path}.supersedesResultId`),
     externalExecution: job.externalExecution === undefined
       ? undefined
       : parseExternalExecution(job.externalExecution, `${path}.externalExecution`),
@@ -157,6 +222,7 @@ function parseResult(value: unknown, index: number): Result {
     approvedBy: optionalText(result.approvedBy, `${path}.approvedBy`),
     reviewedBy: optionalText(result.reviewedBy, `${path}.reviewedBy`),
     reviewComment: optionalString(result.reviewComment, `${path}.reviewComment`),
+    supersedesResultId: optionalText(result.supersedesResultId, `${path}.supersedesResultId`),
     isFavorite: optionalBoolean(result.isFavorite, `${path}.isFavorite`),
     isAdopted: optionalBoolean(result.isAdopted, `${path}.isAdopted`),
     isPrimary: optionalBoolean(result.isPrimary, `${path}.isPrimary`),

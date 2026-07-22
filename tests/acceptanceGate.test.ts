@@ -28,12 +28,12 @@ function fixture(status: 'pass' | 'fail' | 'partial', severity: 'P0' | 'P1' | 'P
 }
 
 describe('acceptance gate', () => {
-  it('validates the PIAS manifest and keeps production acceptance red while P0 gaps exist', () => {
+  it('validates the PIAS manifest and keeps acceptance yellow while non-P0 gaps exist', () => {
     expect(() => validateManifest(manifest)).not.toThrow();
     const result = evaluateAcceptance(manifest);
 
-    expect(result.conclusion).toBe('red');
-    expect(result.unresolved.filter((item) => item.severity === 'P0')).toHaveLength(2);
+    expect(result.conclusion).toBe('yellow');
+    expect(result.unresolved.filter((item) => item.severity === 'P0')).toEqual([]);
   });
 
   it('returns red for any unresolved P0', () => {

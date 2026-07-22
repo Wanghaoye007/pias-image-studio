@@ -12,7 +12,7 @@
 
 - Fal 模型 ID 固定为 `fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles`。
 - `angle` 工具 ID 保持不变，所有中文显示更新为「多角度」。
-- Fal Key 只能在服务端从 `FAL_KEY`、`FAL_KEY_FILE` 或 `/Users/wangzipeng/Desktop/key.md` 读取。
+- Fal Key 只能在服务端从 `FAL_KEY`、`FAL_KEY_FILE` 或本地开发默认文件 `~/Desktop/key.md` 读取；生产服务禁用默认文件回退。
 - 浏览器、审计、错误响应和 Git 中不得出现 Fal Key 或输入图片 Data URI。
 - 只有 `angle` 任务改用真实 Fal 执行；其他工具继续使用当前模拟执行器。
 - 自动化测试不得进行付费 Fal 调用；最终验收只生成一张真实图片。

@@ -6,6 +6,7 @@
 
 - [AI 业务工具验收与自查标准](AI业务工具验收与自查标准.md)
 - [PIAS 验收自查报告](PIAS验收自查报告_2026-07-21.md)
+- [PIAS 发布整改记录](PIAS发布整改记录.md)
 - [业务逻辑完整性专项 Prompt](prompts/01-业务逻辑完整性自查.md)
 - [代码 Bug 与边界异常专项 Prompt](prompts/02-代码Bug与边界异常自查.md)
 - [数据与状态一致性专项 Prompt](prompts/03-数据与状态一致性自查.md)
@@ -18,6 +19,11 @@ npm run acceptance:report
 
 # 发布期：只有所有必选项通过且自动化检查成功才返回 0
 npm run acceptance
+
+# 生产环境期：配置、数据回滚、密钥、邮件、产物与 Billing 均通过才返回 0
+npm run release:preflight
 ```
 
 业务证据清单位于 `acceptance/manifest.json`。每次整改只能在具备代码、测试、接口、数据库或人工复现证据后修改对应 `status`，禁止为了让命令通过而直接标记 `pass`。
+
+自动整改每轮的实际修改、验证结果、风险和下一优先事项记录在 `PIAS发布整改记录.md`；该记录用于恢复上下文，不替代业务证据清单的发布判定。

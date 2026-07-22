@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { initialStudioState } from '../src/domain';
 import {
   createFileStudioStatePersistence,
+  createScopedStudioStatePersistence,
   StudioStateConflictError,
   StudioStateStorageError,
 } from '../src/studio/studioStatePersistence';
@@ -110,5 +111,32 @@ describe('file StudioState persistence', () => {
 
     await expect(store.load()).rejects.toBeInstanceOf(StudioStateStorageError);
     await expect(store.save(0, initialStudioState())).rejects.toBeInstanceOf(StudioStateStorageError);
+  });
+
+  it('isolates identical project ids across tenants and revisions independently', async () => {
+    const { directory } = await createStorePath();
+    const tenantA = createScopedStudioStatePersistence(directory, {
+      tenantId: 'tenant-a',
+      projectId: 'project-main',
+    });
+    const tenantB = createScopedStudioStatePersistence(directory, {
+      tenantId: 'tenant-b',
+      projectId: 'project-main',
+    });
+    const stateA = initialStudioState();
+    stateA.projectName = 'Tenant A 项目';
+
+    await expect(tenantA.save(0, stateA)).resolves.toMatchObject({ revision: 1 });
+    await expect(tenantB.load()).resolves.toBeNull();
+
+    const stateB = initialStudioState();
+    stateB.projectName = 'Tenant B 项目';
+    await expect(tenantB.save(0, stateB)).resolves.toMatchObject({ revision: 1 });
+    await expect(tenantA.load()).resolves.toMatchObject({ state: { projectName: 'Tenant A 项目' } });
+    await expect(tenantB.load()).resolves.toMatchObject({ state: { projectName: 'Tenant B 项目' } });
+
+    const scopeDirectories = await readdir(directory);
+    expect(scopeDirectories).toHaveLength(2);
+    expect(scopeDirectories.every((name) => /^[a-f0-9]{64}$/.test(name))).toBe(true);
   });
 });

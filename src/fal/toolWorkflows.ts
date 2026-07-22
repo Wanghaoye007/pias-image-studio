@@ -366,16 +366,16 @@ function upscaleFactors(totalFactor: number): number[] {
   return factors;
 }
 
-function topazInput(imageUrl: string, factor: number, sharpen: number): Record<string, unknown> {
+function topazInput(imageUrl: string, factor: number, detail: number): Record<string, unknown> {
   return {
     image_url: imageUrl,
-    model: 'High Fidelity V2',
+    model: 'Recovery V2',
     upscale_factor: factor,
     crop_to_fill: false,
     output_format: 'png',
     subject_detection: 'All',
     face_enhancement: false,
-    sharpen,
+    detail,
   };
 }
 
@@ -386,12 +386,12 @@ function upscalePlan(request: FalToolRequest): FalWorkflowPlan {
   const sourceLongEdge = Math.max(request.sourceWidth ?? 1024, request.sourceHeight ?? 1024);
   if (target <= sourceLongEdge) throw new Error('输入图片已达到目标尺寸');
   const factors = upscaleFactors(target / sourceLongEdge);
-  const sharpen = numberParameter(request.parameters, 'detailLevel', 60, 0, 100, '细节增强') / 100;
+  const detail = numberParameter(request.parameters, 'detailLevel', 60, 0, 100, '细节增强') / 100;
   return {
     modelId: FAL_UPSCALE_MODEL,
     invocations: [{
       modelId: FAL_UPSCALE_MODEL,
-      input: topazInput(source, factors[0], sharpen),
+      input: topazInput(source, factors[0], detail),
     }],
     upscaleFactors: factors,
   };
@@ -461,9 +461,9 @@ export function buildNextUpscaleInvocation(
   factor: number,
   parameters: Record<string, unknown>,
 ): FalInvocation {
-  const sharpen = numberParameter(parameters, 'detailLevel', 60, 0, 100, '细节增强') / 100;
+  const detail = numberParameter(parameters, 'detailLevel', 60, 0, 100, '细节增强') / 100;
   return {
     modelId: FAL_UPSCALE_MODEL,
-    input: topazInput(imageUrl, factor, sharpen),
+    input: topazInput(imageUrl, factor, detail),
   };
 }

@@ -1,7 +1,10 @@
 import type { TaskProfileId } from '../domain';
+import { withCsrfProtection } from '../auth/authClient';
 import type { FalGeneratedImage } from './multipleAngles';
 
 type Fetcher = typeof fetch;
+
+export const FAL_LIFECYCLE_ABORT_REASON = 'pias:lifecycle-unmount';
 
 export type RunFalImageInput = {
   profileId: TaskProfileId;
@@ -29,6 +32,15 @@ type RunFalImageOptions = {
   onExecution?: (execution: { requestId: string; modelId: string }) => void;
   onProgress?: (progress: number) => void;
 };
+
+export type FalImageExecution = {
+  requestId: string;
+  modelId: string;
+};
+
+function shouldCancelRemoteJob(signal?: AbortSignal): boolean {
+  return Boolean(signal?.aborted && signal.reason !== FAL_LIFECYCLE_ABORT_REASON);
+}
 
 function blobToDataUri(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -88,7 +100,54 @@ export async function cancelFalImageJob(
   requestId: string,
   fetcher: Fetcher = fetch,
 ): Promise<void> {
-  await fetcher(`/api/fal/jobs/${encodeURIComponent(requestId)}`, { method: 'DELETE' });
+  await fetcher(
+    `/api/fal/jobs/${encodeURIComponent(requestId)}`,
+    withCsrfProtection({ method: 'DELETE' }),
+  );
+}
+
+async function pollFalImageJob(
+  requestId: string,
+  options: RunFalImageOptions,
+): Promise<FalImageJobResult> {
+  const fetcher = options.fetcher ?? fetch;
+  const pollIntervalMs = options.pollIntervalMs ?? 1200;
+
+  while (true) {
+    const queue = await readJson<{
+      status: 'queued' | 'running' | 'completed';
+      logs: string[];
+      progress: number;
+    }>(await fetcher(`/api/fal/jobs/${encodeURIComponent(requestId)}/status`, withCsrfProtection({
+      signal: options.signal,
+    })));
+    options.onProgress?.(queue.progress);
+    if (queue.status === 'completed') break;
+    await wait(pollIntervalMs, options.signal);
+  }
+
+  return readJson<FalImageJobResult>(await fetcher(
+    `/api/fal/jobs/${encodeURIComponent(requestId)}/result`,
+    withCsrfProtection({ signal: options.signal }),
+  ));
+}
+
+export async function resumeFalImageJob(
+  execution: FalImageExecution,
+  options: RunFalImageOptions = {},
+): Promise<FalImageJobResult> {
+  if (!execution.requestId.trim() || !execution.modelId.trim()) {
+    throw new Error('Fal 图片任务信息不完整');
+  }
+  const fetcher = options.fetcher ?? fetch;
+  try {
+    return await pollFalImageJob(execution.requestId, options);
+  } catch (error) {
+    if (shouldCancelRemoteJob(options.signal)) {
+      await cancelFalImageJob(execution.requestId, fetcher).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function runFalImageJob(
@@ -96,7 +155,6 @@ export async function runFalImageJob(
   options: RunFalImageOptions = {},
 ): Promise<FalImageJobResult> {
   const fetcher = options.fetcher ?? fetch;
-  const pollIntervalMs = options.pollIntervalMs ?? 1200;
   let requestId = '';
 
   try {
@@ -108,7 +166,7 @@ export async function runFalImageJob(
       : undefined;
     const submission = await readJson<{ requestId: string; modelId: string }>(await fetcher(
       '/api/fal/jobs',
-      {
+      withCsrfProtection({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -117,32 +175,15 @@ export async function runFalImageJob(
           ...(maskImageUrl ? { maskImageUrl } : {}),
         }),
         signal: options.signal,
-      },
+      }),
     ));
     requestId = submission.requestId;
     if (!requestId || !submission.modelId) throw new Error('Fal 图片服务未返回任务信息');
     options.onExecution?.({ requestId, modelId: submission.modelId });
     options.onProgress?.(24);
-
-    while (true) {
-      const queue = await readJson<{
-        status: 'queued' | 'running' | 'completed';
-        logs: string[];
-        progress: number;
-      }>(await fetcher(`/api/fal/jobs/${encodeURIComponent(requestId)}/status`, {
-        signal: options.signal,
-      }));
-      options.onProgress?.(queue.progress);
-      if (queue.status === 'completed') break;
-      await wait(pollIntervalMs, options.signal);
-    }
-
-    return readJson<FalImageJobResult>(await fetcher(
-      `/api/fal/jobs/${encodeURIComponent(requestId)}/result`,
-      { signal: options.signal },
-    ));
+    return await pollFalImageJob(requestId, options);
   } catch (error) {
-    if (options.signal?.aborted && requestId) {
+    if (requestId && shouldCancelRemoteJob(options.signal)) {
       await cancelFalImageJob(requestId, fetcher).catch(() => undefined);
     }
     throw error;

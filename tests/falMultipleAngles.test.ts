@@ -43,7 +43,9 @@ describe('Fal 多角度输入契约', () => {
     ['1:1', { width: 1024, height: 1024 }],
     ['4:5', { width: 1024, height: 1280 }],
     ['3:4', { width: 960, height: 1280 }],
+    ['4:3', { width: 1280, height: 960 }],
     ['16:9', { width: 1280, height: 720 }],
+    ['9:16', { width: 720, height: 1280 }],
   ])('把 %s 映射为固定宽高', (ratio, imageSize) => {
     expect(buildMultipleAnglesInput({
       imageUrls: ['https://example.com/product.png'],

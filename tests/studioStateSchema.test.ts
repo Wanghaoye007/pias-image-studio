@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completeJob, createJob, initialStudioState } from '../src/domain';
+import { completeJob, createJob, initialStudioState, submitForReview } from '../src/domain';
 import {
   parseStudioState,
   StudioStateValidationError,
@@ -24,6 +24,19 @@ describe('StudioState runtime schema', () => {
     expect(parseStudioState(structuredClone(state))).toEqual(state);
   });
 
+  it('round-trips a role-scoped review notification and rejects ambiguous recipients', () => {
+    const state = populatedState();
+    const submitted = submitForReview(state, state.results[0].id, 'user-creator');
+
+    expect(parseStudioState(structuredClone(submitted)).notifications.at(-1)).toMatchObject({
+      type: 'review.submitted',
+      recipientRole: 'reviewer',
+    });
+    const invalid = structuredClone(submitted);
+    invalid.notifications[0].recipientUserId = 'user-creator';
+    expect(() => parseStudioState(invalid)).toThrow('必须且只能指定一种通知收件人');
+  });
+
   it('rejects missing required collections with a safe field path', () => {
     const state = initialStudioState() as unknown as Record<string, unknown>;
     delete state.scenes;
@@ -41,6 +54,26 @@ describe('StudioState runtime schema', () => {
     mutate(state);
 
     expect(() => parseStudioState(state)).toThrowError(field);
+  });
+
+  it.each([
+    'preflight',
+    'queued',
+    'running',
+    'postprocessing',
+    'partially_succeeded',
+    'cancel_requested',
+    'succeeded',
+    'failed',
+    'canceled',
+    'expired',
+  ] as const)('accepts the production job status %s', (status) => {
+    const state = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    state.jobs[0].status = status;
+
+    expect(parseStudioState(state).jobs[0].status).toBe(status);
   });
 
   it.each([

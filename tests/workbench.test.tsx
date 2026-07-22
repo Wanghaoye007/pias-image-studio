@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
   approveResult,
+  attachExternalJob,
   completeJob,
   createDerivedScene,
   createJob,
   failJob,
   initialStudioState,
+  returnResult,
   submitForReview,
   type Result,
   type StudioState,
@@ -41,6 +43,7 @@ const deliveryMocks = vi.hoisted(() => ({
 }));
 
 const falClientMocks = vi.hoisted(() => ({
+  FAL_LIFECYCLE_ABORT_REASON: 'pias:lifecycle-unmount',
   runFalImageJob: vi.fn(async (
     _input: unknown,
     options: {
@@ -56,6 +59,21 @@ const falClientMocks = vi.hoisted(() => ({
       seed: 7,
       modelId: 'model-default',
       childRequestIds: ['req-child-default'],
+    };
+  }),
+  resumeFalImageJob: vi.fn(async (
+    _execution: unknown,
+    options: {
+      onProgress?: (progress: number) => void;
+      signal?: AbortSignal;
+    },
+  ) => {
+    options.onProgress?.(94);
+    return {
+      images: [{ url: 'https://fal.media/resumed.png', width: 1024, height: 1024 }],
+      seed: 8,
+      modelId: 'model-resumed',
+      childRequestIds: ['req-child-resumed'],
     };
   }),
 }));
@@ -126,6 +144,7 @@ function createDataTransfer(assetId: string): DataTransfer {
 describe('workbench canvas', () => {
   beforeEach(() => {
     falClientMocks.runFalImageJob.mockReset();
+    falClientMocks.resumeFalImageJob.mockReset();
     falClientMocks.runFalImageJob.mockImplementation(async (_input, options) => {
       options.onExecution?.({ requestId: 'req-default', modelId: 'model-default' });
       options.onProgress?.(55);
@@ -136,7 +155,48 @@ describe('workbench canvas', () => {
         childRequestIds: ['req-child-default'],
       };
     });
+    falClientMocks.resumeFalImageJob.mockImplementation(async (_execution, options) => {
+      options.onProgress?.(94);
+      return {
+        images: [{ url: 'https://fal.media/resumed.png', width: 1024, height: 1024 }],
+        seed: 8,
+        modelId: 'model-resumed',
+        childRequestIds: ['req-child-resumed'],
+      };
+    });
   });
+
+  it('charges only successful outputs when Fal returns a partial result', async () => {
+    falClientMocks.runFalImageJob.mockImplementationOnce(async (_input, options) => {
+      options.onExecution?.({ requestId: 'req-partial', modelId: 'model-partial' });
+      return {
+        images: [
+          { url: 'https://fal.media/partial-1.png', width: 1024, height: 1024 },
+          { url: 'https://fal.media/partial-2.png', width: 1024, height: 1024 },
+        ],
+        seed: 9,
+        modelId: 'model-partial',
+        childRequestIds: ['req-partial'],
+      };
+    });
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'generate',
+      outputCount: 4,
+    });
+    let latestState = queued;
+
+    render(<WorkbenchHarness initialState={queued} onStateChange={(state) => { latestState = state; }} />);
+
+    await waitFor(() => expect(latestState.jobs[0].status).toBe('partially_succeeded'));
+    expect(latestState.jobs[0]).toMatchObject({ reservedCredits: 60, actualCredits: 30 });
+    expect(latestState.usage).toMatchObject({
+      availableCredits: 1970,
+      frozenCredits: 0,
+      spentCredits: 30,
+    });
+  });
+
   it('maps scenes, jobs, and results to separate connected canvas nodes', () => {
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source',
@@ -311,9 +371,14 @@ describe('workbench canvas', () => {
   });
 
   it('provides Chinese labels for canvas node states', () => {
+    expect(getJobStatusLabel('preflight')).toBe('预检中');
     expect(getJobStatusLabel('queued')).toBe('等待中');
     expect(getJobStatusLabel('running')).toBe('生成中');
+    expect(getJobStatusLabel('postprocessing')).toBe('后处理中');
+    expect(getJobStatusLabel('partially_succeeded')).toBe('部分完成');
+    expect(getJobStatusLabel('cancel_requested')).toBe('正在取消');
     expect(getJobStatusLabel('succeeded')).toBe('已完成');
+    expect(getJobStatusLabel('expired')).toBe('已过期');
     expect(getReviewStatusLabel('submitted')).toBe('待审核');
   });
 
@@ -608,7 +673,7 @@ describe('workbench canvas', () => {
     );
 
     expect(screen.getByText('正面 0°')).toBeInTheDocument();
-    expect(screen.getByText('俯视 23°')).toBeInTheDocument();
+    expect(screen.getByText('仰视 23°')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '设置拍摄方位 90°' }));
     expect(onParameterChange).toHaveBeenCalledWith('horizontalAngle', 90);
   });
@@ -827,6 +892,33 @@ describe('workbench canvas', () => {
         generationMetadata: expect.objectContaining({ requestId: 'req-live-1', seed: 91 }),
       }),
     ]);
+  });
+
+  it('刷新后续跑已挂载的 Fal 请求，不重新提交同一任务', async () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'upscale',
+      outputCount: 1,
+      parameters: { upscaleSize: '2048', detailLevel: 60 },
+    });
+    const resumable = attachExternalJob(queued, queued.jobs[0].id, {
+      provider: 'fal',
+      requestId: 'fal-local-existing',
+      modelId: 'fal-ai/topaz/upscale/image',
+    });
+    let latestState = resumable;
+
+    render(<WorkbenchHarness
+      initialState={resumable}
+      onStateChange={(state) => { latestState = state; }}
+    />);
+
+    await waitFor(() => expect(latestState.jobs[0].status).toBe('succeeded'));
+    expect(falClientMocks.resumeFalImageJob).toHaveBeenCalledWith(
+      resumable.jobs[0].externalExecution,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(falClientMocks.runFalImageJob).not.toHaveBeenCalled();
   });
 
   it('fails a rejected Fal image job and releases its reserve', async () => {
@@ -1172,6 +1264,7 @@ describe('workbench canvas', () => {
 
     expect(screen.getByRole('dialog', { name: '融图参数' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '开始生成' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '创作描述' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '融图' })).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.click(screen.getByRole('button', { name: '关闭参数面板' }));
@@ -1200,10 +1293,10 @@ describe('workbench canvas', () => {
     toolButton.focus();
     fireEvent.click(toolButton);
 
-    const description = screen.getByRole('textbox', { name: '创作描述' });
-    expect(description).toHaveFocus();
+    const referencePicker = screen.getByRole('button', { name: '选择参考素材' });
+    expect(referencePicker).toHaveFocus();
 
-    fireEvent.keyDown(description, { key: 'Escape' });
+    fireEvent.keyDown(referencePicker, { key: 'Escape' });
 
     expect(screen.queryByRole('dialog', { name: '融图参数' })).not.toBeInTheDocument();
     expect(toolButton).toHaveFocus();
@@ -1357,7 +1450,7 @@ describe('workbench canvas', () => {
     }));
   });
 
-  it('runs a task and exposes cancellation while it is queued', () => {
+  it('runs a task and exposes cancellation while it is in preflight', () => {
     falClientMocks.runFalImageJob.mockImplementationOnce(() => new Promise(() => undefined));
     render(<WorkbenchHarness />);
     fireEvent.click(screen.getByRole('button', { name: '生成' }));
@@ -1367,8 +1460,8 @@ describe('workbench canvas', () => {
     fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
     fireEvent.click(screen.getByRole('button', { name: /任务队列/ }));
 
-    expect(screen.getAllByText('等待中')).toHaveLength(1);
-    expect(screen.getAllByText('等待调度')).toHaveLength(2);
+    expect(screen.getAllByText('预检中')).toHaveLength(1);
+    expect(screen.getAllByText('正在检查输入')).toHaveLength(2);
     expect(screen.getByRole('button', { name: '取消任务' })).toBeInTheDocument();
   });
 
@@ -1402,6 +1495,7 @@ describe('workbench canvas', () => {
 
     render(<WorkbenchHarness />);
     fireEvent.click(screen.getByRole('button', { name: '生成' }));
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
     fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
     await waitFor(() => expect(screen.getAllByText('正在生成').length).toBeGreaterThan(0));
 
@@ -1550,12 +1644,48 @@ describe('workbench canvas', () => {
     expect(screen.getAllByText('图像服务暂时不可用')).toHaveLength(2);
     fireEvent.click(screen.getAllByRole('button', { name: '重试任务' })[0]);
 
-    expect(screen.getAllByText('等待中')).toHaveLength(1);
-    expect(screen.getAllByText('等待调度')).toHaveLength(2);
+    expect(screen.getAllByText('预检中')).toHaveLength(1);
+    expect(screen.getAllByText('正在检查输入')).toHaveLength(2);
     expect(latestState.jobs).toHaveLength(2);
     expect(latestState.jobs[0]).toMatchObject({ id: queued.jobs[0].id, status: 'failed' });
-    expect(latestState.jobs[1]).toMatchObject({ status: 'queued' });
+    expect(latestState.jobs[1]).toMatchObject({ status: 'preflight' });
+    expect(latestState.jobs[1].retryOfJobId).toBe(latestState.jobs[0].id);
     expect(latestState.jobs[1].id).not.toBe(queued.jobs[0].id);
+  });
+
+  it('creates a review revision from a returned result instead of resubmitting the old file', () => {
+    falClientMocks.runFalImageJob.mockImplementationOnce(() => new Promise(() => undefined));
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+      prompt: '原始提示词',
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    const submitted = submitForReview(settled, settled.results[0].id);
+    const returned = returnResult(
+      submitted,
+      submitted.results[0].id,
+      'Reviewer A',
+      '请保留瓶身结构并提升材质细节',
+    );
+    let latestState = returned;
+    render(<WorkbenchHarness initialState={returned} onStateChange={(state) => { latestState = state; }} />);
+
+    expect(screen.queryByRole('button', { name: '提交审核' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: '创建修改版本' })[0]);
+    const dialog = screen.getByRole('dialog', { name: '创建修改版本' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '修改提示词' }), {
+      target: { value: '保持商品结构，降低高光并提升材质细节' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: '开始生成修改版本' }));
+
+    expect(latestState.results[0].reviewStatus).toBe('returned');
+    expect(latestState.jobs.at(-1)).toMatchObject({
+      retryOfJobId: queued.jobs[0].id,
+      supersedesResultId: returned.results[0].id,
+      inputSnapshot: { prompt: '保持商品结构，降低高光并提升材质细节' },
+    });
   });
 
   it('重试旧多角度任务时自动修正历史越界角度', () => {

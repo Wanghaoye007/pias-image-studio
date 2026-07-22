@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  FAL_LIFECYCLE_ABORT_REASON,
   prepareImageUrlForFal,
+  resumeFalImageJob,
   runFalImageJob,
 } from '../src/fal/falImageClient';
 
@@ -126,6 +128,76 @@ describe('Fal 通用浏览器客户端', () => {
     });
     await Promise.resolve();
     expect(calls).toContain('DELETE /api/fal/jobs/fal-local-cancel');
+  });
+
+  it('页面卸载只停止本页轮询，不取消可恢复的远端任务', async () => {
+    const controller = new AbortController();
+    const calls: string[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (url === '/api/fal/jobs') {
+        return jsonResponse({ requestId: 'fal-local-resumable', modelId: 'model' }, 202);
+      }
+      if (url.endsWith('/status')) {
+        controller.abort(FAL_LIFECYCLE_ABORT_REASON);
+        throw new DOMException('页面已卸载', 'AbortError');
+      }
+      if (init?.method === 'DELETE') return jsonResponse({ canceled: true });
+      throw new Error(`unexpected ${url}`);
+    });
+
+    await expect(runFalImageJob({
+      profileId: 'extract',
+      imageUrls: ['data:image/png;base64,AA=='],
+      prompt: '',
+      ratio: '1:1',
+      outputCount: 1,
+      parameters: {},
+    }, { fetcher, signal: controller.signal, pollIntervalMs: 0 })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    await Promise.resolve();
+    expect(calls).not.toContain('DELETE /api/fal/jobs/fal-local-resumable');
+  });
+
+  it('页面恢复时只轮询已存在的 Fal 请求，不重复提交或上传输入', async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    const progress: number[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method ?? 'GET' });
+      if (url.endsWith('/status')) {
+        return jsonResponse({ status: 'completed', logs: [], progress: 94 });
+      }
+      if (url.endsWith('/result')) {
+        return jsonResponse({
+          images: [{ url: 'https://fal.media/resumed.png', width: 2048, height: 2048 }],
+          modelId: 'fal-ai/topaz/upscale/image',
+          childRequestIds: ['upstream-existing'],
+        });
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+
+    await expect(resumeFalImageJob({
+      requestId: 'fal-local-existing',
+      modelId: 'fal-ai/topaz/upscale/image',
+    }, {
+      fetcher,
+      pollIntervalMs: 0,
+      onProgress: (value) => progress.push(value),
+    })).resolves.toEqual({
+      images: [{ url: 'https://fal.media/resumed.png', width: 2048, height: 2048 }],
+      modelId: 'fal-ai/topaz/upscale/image',
+      childRequestIds: ['upstream-existing'],
+    });
+
+    expect(calls).toEqual([
+      { url: '/api/fal/jobs/fal-local-existing/status', method: 'GET' },
+      { url: '/api/fal/jobs/fal-local-existing/result', method: 'GET' },
+    ]);
+    expect(progress).toEqual([94]);
   });
 
   it('把服务端安全错误原样显示为中文', async () => {

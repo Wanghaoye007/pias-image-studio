@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addAsset,
   attachExternalJob,
   approveResult,
   buildExportFilename,
@@ -16,9 +17,13 @@ import {
   failJob,
   getProfile,
   initialStudioState,
+  markJobPostprocessing,
   moveCanvasItem,
+  requestJobCancellation,
   recordResultExport,
+  rejectResult,
   renameScene,
+  retryResultGeneration,
   returnResult,
   setPrimaryResult,
   setResultQualityIssue,
@@ -26,10 +31,106 @@ import {
   toggleResultAdoption,
   toggleResultFavorite,
   updateJobProgress,
+  withdrawReview,
+  expireJob,
 } from '../src/domain';
 import { FAL_MULTIPLE_ANGLES_MODEL } from '../src/fal/multipleAngles';
 
 describe('Image Studio domain flow', () => {
+  it('uploads a normalized asset and records a traceable audit event', () => {
+    const state = initialStudioState();
+
+    const next = addAsset(state, {
+      brand: '  PIAS  ',
+      product: '  夏季精华  ',
+      skuCode: '  PIAS-SF-009  ',
+      usage: '  商品主图  ',
+      version: '  v1  ',
+      imageUrl: 'data:image/png;base64,UElBUw==',
+    });
+
+    expect(next.assets.at(-1)).toMatchObject({
+      brand: 'PIAS',
+      product: '夏季精华',
+      skuCode: 'PIAS-SF-009',
+      usage: '商品主图',
+      version: 'v1',
+      imageUrl: 'data:image/png;base64,UElBUw==',
+    });
+    expect(next.auditEvents.at(-1)).toMatchObject({
+      type: 'asset.uploaded',
+      targetId: next.assets.at(-1)?.id,
+    });
+    expect(state.assets).toHaveLength(3);
+  });
+
+  it('rejects duplicate SKU codes when uploading an asset', () => {
+    const state = initialStudioState();
+
+    expect(() => addAsset(state, {
+      brand: 'PIAS',
+      product: '重复素材',
+      skuCode: state.assets[0].skuCode.toLowerCase(),
+      usage: '商品主图',
+      version: 'v2',
+      imageUrl: 'data:image/png;base64,RFVQ',
+    })).toThrow('SKU 编码已存在');
+  });
+
+  it('tracks the production job lifecycle from preflight through postprocessing', () => {
+    const preflight = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 2,
+    });
+    expect(preflight.jobs[0]).toMatchObject({ status: 'preflight', progress: 4 });
+
+    const queued = attachExternalJob(preflight, preflight.jobs[0].id, {
+      provider: 'fal', modelId: 'fal-ai/bria/product-shot', requestId: 'req-lifecycle',
+    });
+    expect(queued.jobs[0]).toMatchObject({ status: 'queued', progress: 24 });
+    expect(queued.scenes[0].status).toBe('queued');
+
+    const running = updateJobProgress(queued, queued.jobs[0].id, 62);
+    expect(running.jobs[0]).toMatchObject({ status: 'running', progress: 62 });
+
+    const postprocessing = markJobPostprocessing(running, running.jobs[0].id);
+    expect(postprocessing.jobs[0]).toMatchObject({ status: 'postprocessing', progress: 96 });
+  });
+
+  it('marks a job partially succeeded when fewer outputs are returned', () => {
+    const preflight = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 3,
+    });
+    const attached = attachExternalJob(preflight, preflight.jobs[0].id, {
+      provider: 'fal', modelId: 'fal-ai/bria/product-shot', requestId: 'req-partial',
+    });
+    const settled = completeJobWithResults(attached, attached.jobs[0].id, {
+      actualCredits: 15,
+      images: [{ url: 'https://fal.media/one.png', width: 1024, height: 1024 }],
+    });
+
+    expect(settled.jobs[0]).toMatchObject({ status: 'partially_succeeded', progress: 100 });
+    expect(settled.auditEvents.at(-1)?.type).toBe('job.partially_succeeded');
+  });
+
+  it('records cancellation requested before final cancellation and supports expiration', () => {
+    const preflight = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const cancellationRequested = requestJobCancellation(preflight, preflight.jobs[0].id);
+    expect(cancellationRequested.jobs[0]).toMatchObject({ status: 'cancel_requested' });
+    expect(cancellationRequested.usage.frozenCredits).toBe(15);
+
+    const canceled = cancelJob(cancellationRequested, cancellationRequested.jobs[0].id);
+    expect(canceled.jobs[0]).toMatchObject({ status: 'canceled' });
+    expect(canceled.usage.frozenCredits).toBe(0);
+
+    const another = createJob(canceled, {
+      sceneId: 'scene-source', profileId: 'upscale', outputCount: 1,
+    });
+    const expired = expireJob(another, another.jobs.at(-1)!.id, '供应商任务已过期');
+    expect(expired.jobs.at(-1)).toMatchObject({ status: 'expired', errorMessage: '供应商任务已过期' });
+  });
+
   it('freezes estimated usage when a generation job is accepted', () => {
     const state = initialStudioState();
 
@@ -40,7 +141,7 @@ describe('Image Studio domain flow', () => {
     });
 
     expect(next.jobs.at(-1)).toMatchObject({
-      status: 'queued',
+      status: 'preflight',
       sceneId: 'scene-source',
       profileId: 'blend',
       reservedCredits: 72,
@@ -55,6 +156,43 @@ describe('Image Studio domain flow', () => {
     });
     expect(next.usage.availableCredits).toBe(1928);
     expect(next.usage.frozenCredits).toBe(72);
+    expect(next.usageLedger).toEqual([
+      expect.objectContaining({
+        entryType: 'reserve',
+        jobId: next.jobs[0].id,
+        units: 72,
+        balanceAfter: 1928,
+        pricingRuleVersion: 'pias-credit-v1',
+      }),
+    ]);
+  });
+
+  it('records immutable charge and release entries that reconcile to the usage summary', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source',
+      profileId: 'generate',
+      outputCount: 4,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 2,
+      actualCredits: 30,
+    });
+
+    expect(settled.usageLedger.map((entry) => ({
+      entryType: entry.entryType,
+      units: entry.units,
+      balanceAfter: entry.balanceAfter,
+    }))).toEqual([
+      { entryType: 'reserve', units: 60, balanceAfter: 1940 },
+      { entryType: 'charge', units: 30, balanceAfter: 1940 },
+      { entryType: 'release', units: 30, balanceAfter: 1970 },
+    ]);
+    expect(settled.usage).toMatchObject({
+      availableCredits: 1970,
+      frozenCredits: 0,
+      spentCredits: 30,
+    });
+    expect(settled.usageLedger).toHaveLength(3);
   });
 
   it('keeps a remove mask in the job snapshot without copying it into result metadata', () => {
@@ -93,7 +231,7 @@ describe('Image Studio domain flow', () => {
       actualCredits: 45,
     });
 
-    expect(settled.jobs[0]).toMatchObject({ status: 'succeeded', actualCredits: 45 });
+    expect(settled.jobs[0]).toMatchObject({ status: 'partially_succeeded', actualCredits: 45 });
     expect(settled.scenes.find((scene) => scene.id === 'scene-source')?.resultIds).toHaveLength(3);
     expect(settled.usage.frozenCredits).toBe(0);
     expect(settled.usage.spentCredits).toBe(45);
@@ -213,7 +351,7 @@ describe('Image Studio domain flow', () => {
     const firstDone = completeJob(firstRunning, firstRunning.jobs[0].id, {
       successfulOutputs: 1, actualCredits: 15,
     });
-    expect(firstDone.scenes[0].status).toBe('queued');
+    expect(firstDone.scenes[0].status).toBe('preflight');
 
     const secondRunning = updateJobProgress(firstDone, firstDone.jobs[1].id, 58);
     expect(secondRunning.scenes[0].status).toBe('running');
@@ -240,7 +378,7 @@ describe('Image Studio domain flow', () => {
     expect(second.jobs.at(-1)!.y).toBe(branched.scenes.at(-1)!.y + 360);
   });
 
-  it('treats zero successful outputs as failure and releases the full reserve', () => {
+  it('treats zero successful outputs as failure and settles reported provider usage', () => {
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source', profileId: 'generate', outputCount: 2,
     });
@@ -254,10 +392,10 @@ describe('Image Studio domain flow', () => {
       errorMessage: '任务未生成可用结果',
     });
     expect(failed.results).toHaveLength(0);
-    expect(failed.usage).toMatchObject({ availableCredits: 2000, frozenCredits: 0, spentCredits: 0 });
+    expect(failed.usage).toMatchObject({ availableCredits: 1985, frozenCredits: 0, spentCredits: 15 });
   });
 
-  it('allows a submitted result to be returned with a reason and resubmitted', () => {
+  it('returns a submitted result with a reason and requires a new version', () => {
     const queued = createJob(initialStudioState(), {
       sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
     });
@@ -275,11 +413,125 @@ describe('Image Studio domain flow', () => {
     });
     expect(returned.auditEvents.at(-1)?.type).toBe('review.returned');
 
-    const resubmitted = submitForReview(returned, resultId);
-    expect(resubmitted.results[0]).toMatchObject({
-      reviewStatus: 'submitted',
-      reviewComment: undefined,
+    expect(() => submitForReview(returned, resultId)).toThrow('新版本');
+  });
+
+  it('supports explicit rejection and withdrawal with immutable review audit history', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
     });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    const resultId = settled.results[0].id;
+    const submitted = submitForReview(settled, resultId);
+    const withdrawn = withdrawReview(submitted, resultId, 'Creator A');
+
+    expect(withdrawn.results[0]).toMatchObject({ reviewStatus: 'draft' });
+    expect(withdrawn.auditEvents.at(-1)).toMatchObject({
+      type: 'review.withdrawn',
+      actor: 'Creator A',
+      targetId: resultId,
+    });
+    expect(withdrawn.notifications.at(-1)).toMatchObject({
+      type: 'review.withdrawn',
+      recipientRole: 'reviewer',
+      targetId: resultId,
+    });
+
+    const resubmitted = submitForReview(withdrawn, resultId);
+    const rejected = rejectResult(
+      resubmitted,
+      resultId,
+      'Reviewer A',
+      '商品结构已改变，不可用于交付',
+    );
+    expect(rejected.results[0]).toMatchObject({
+      reviewStatus: 'rejected',
+      reviewedBy: 'Reviewer A',
+      reviewComment: '商品结构已改变，不可用于交付',
+    });
+    expect(rejected.auditEvents.at(-1)?.type).toBe('review.rejected');
+    expect(rejected.notifications.at(-1)).toMatchObject({
+      type: 'review.rejected',
+      recipientUserId: 'Mika Tanaka',
+      message: '审核已拒绝：商品结构已改变，不可用于交付',
+    });
+  });
+
+  it('enforces the 5-500 character reason contract for return and rejection', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    const submitted = submitForReview(settled, settled.results[0].id);
+
+    expect(() => returnResult(submitted, submitted.results[0].id, 'Reviewer A', '过亮'))
+      .toThrow('5-500');
+    expect(() => rejectResult(submitted, submitted.results[0].id, 'Reviewer A', 'x'.repeat(501)))
+      .toThrow('5-500');
+  });
+
+  it('creates a modified review retry as a new job and preserves version lineage', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+      parameters: { quality: '标准' },
+    });
+    const settled = completeJob(queued, queued.jobs[0].id, {
+      successfulOutputs: 1, actualCredits: 15,
+    });
+    const submitted = submitForReview(settled, settled.results[0].id);
+    const returned = returnResult(
+      submitted,
+      submitted.results[0].id,
+      'Reviewer A',
+      '请提高材质细节后重新生成',
+    );
+
+    const retried = retryResultGeneration(returned, returned.results[0].id, {
+      prompt: '保持商品结构，提高材质细节',
+      parameters: { quality: '精细' },
+    });
+    const retryJob = retried.jobs.at(-1)!;
+    expect(retryJob).toMatchObject({
+      retryOfJobId: queued.jobs[0].id,
+      supersedesResultId: returned.results[0].id,
+      inputSnapshot: {
+        prompt: '保持商品结构，提高材质细节',
+        parameters: { quality: '精细' },
+      },
+    });
+    expect(retried.jobs[0].inputSnapshot.parameters).toEqual({ quality: '标准' });
+    expect(retried.auditEvents.at(-1)?.details).toMatchObject({
+      retryOfJobId: queued.jobs[0].id,
+      supersedesResultId: returned.results[0].id,
+    });
+
+    const completedRetry = completeJob(retried, retryJob.id, {
+      successfulOutputs: 1,
+      actualCredits: 15,
+    });
+    expect(completedRetry.results.at(-1)?.supersedesResultId).toBe(returned.results[0].id);
+    expect(completedRetry.results[0].reviewStatus).toBe('returned');
+  });
+
+  it('rejects duplicate active retries for the same terminal job', () => {
+    const queued = createJob(initialStudioState(), {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+    });
+    const failed = failJob(queued, queued.jobs[0].id, '供应商超时');
+    const firstRetry = createJob(failed, {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+      retryOfJobId: failed.jobs[0].id,
+    });
+
+    expect(firstRetry.jobs.at(-1)?.retryOfJobId).toBe(failed.jobs[0].id);
+    expect(() => createJob(firstRetry, {
+      sceneId: 'scene-source', profileId: 'generate', outputCount: 1,
+      retryOfJobId: failed.jobs[0].id,
+    })).toThrow('已有进行中的重试任务');
   });
 
   it('moves a selected result through review approval without changing lineage', () => {
@@ -332,7 +584,7 @@ describe('Image Studio domain flow', () => {
     expect(() => completeJob(queued, jobId, { successfulOutputs: 3, actualCredits: 30 })).toThrow('产出数量');
     expect(() => completeJob(queued, jobId, { successfulOutputs: 1, actualCredits: -1 })).toThrow('额度');
     expect(() => completeJob(queued, jobId, { successfulOutputs: 1, actualCredits: 31 })).toThrow('额度');
-    expect(queued.jobs[0].status).toBe('queued');
+    expect(queued.jobs[0].status).toBe('preflight');
     expect(queued.usage.availableCredits).toBe(1970);
     expect(queued.usage.frozenCredits).toBe(30);
   });

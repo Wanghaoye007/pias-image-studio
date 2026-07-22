@@ -50,7 +50,7 @@
 
 - 服务模块负责读取并解析 Key、校验请求、构造 Fal 输入、提交队列、查询状态、读取结果和取消任务。
 - Vite 插件同时挂载到开发服务和预览服务，暴露同源 JSON API；前端永远不接触 Fal 凭证。
-- Key 读取优先级为 `FAL_KEY`、`FAL_KEY_FILE` 指向的文件、默认文件 `/Users/wangzipeng/Desktop/key.md`。文件可包含裸 Key 或 `FAL_KEY=...`，解析后只保存在服务端内存。
+- 本地开发的 Key 读取优先级为 `FAL_KEY`、`FAL_KEY_FILE` 指向的文件、默认文件 `~/Desktop/key.md`；生产服务禁用默认文件回退。文件可包含裸 Key 或 `FAL_KEY=...`，解析后只保存在服务端内存。
 
 本地 API 契约：
 
