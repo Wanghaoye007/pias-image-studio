@@ -1082,3 +1082,46 @@
 ### 下一轮优先事项
 
 同步 PR #1 并等待最新远端 CI；外部 P1 仍未就绪时，继续验证请求中止/超大正文处理、反向代理部署样例与恢复演练是否存在可离线修复的发布风险。
+
+## 2026-07-22 10:57 CST - 超大请求与可恢复部署闭环
+
+### 本轮完成内容
+
+- 通过独立生产服务、完整登录/MFA/CSRF 和真实 HTTP socket 复现 Fal 请求超过 40 MiB 时连接被主动关闭，客户端只能收到 `UND_ERR_SOCKET`、无法获得业务错误的问题。
+- Fal 读取器超限后停止缓存并继续排空请求体，不再销毁连接；客户端稳定收到 `413 FAL_BODY_TOO_LARGE` 中文 JSON，内存占用不再随剩余正文增长。
+- 新增 Nginx TLS 反向代理样例，只回源 `127.0.0.1:4173`，保留 `Origin`/`Sec-Fetch-Site`，按认证、组织、StudioState、素材和 Fal 路由设置正文上限与超时预算；代理提前拦截时仍返回可解析的 `413 REQUEST_BODY_TOO_LARGE` JSON。
+- 部署手册补充 Nginx 语法检查、原子 reload、外网 HTTPS 验证和隔离目录数据库恢复演练要求。
+
+### 修改文件
+
+- `src/fal/falProxyPlugin.ts`
+- `tests/productionServer.test.ts`
+- `tests/deploymentArtifacts.test.ts`
+- `deploy/nginx-pias.conf.example`
+- `docs/operations/deployment-runbook.md`
+- `README.md`
+
+### 测试和构建结果
+
+- 红灯证据：新增生产网络测试在旧实现上失败，错误为 `fetch failed / UND_ERR_SOCKET`；修复后返回稳定结构化 `413`。
+- 生产服务聚焦回归 10 项通过；部署契约与 SQLite 实际备份/恢复/rollback 演练 3 项通过。
+- 全量回归：47 个测试文件、411 项测试通过；`npm run lint`、`npm run typecheck`、前端与独立 Node 双产物构建通过。
+- `npm audit --omit=dev --audit-level=high` 为 0 漏洞；所有前端 JS 块继续低于 500 kB。
+- 当前构建因尚未提交按事实标记 `dirty=true`；提交后必须重新构建并确认 `dirty=false`。
+
+### 风险控制
+
+- 超限后只停止缓存剩余正文，Node 继续消费网络流；40 MiB 内存上限不变，客户端协议从连接错误恢复为可处理的 JSON 错误。
+- Nginx 样例不含真实域名、证书或密钥，不增加 CORS 放行，回源端口仍不暴露公网。
+- 恢复演练使用测试临时数据库，验证生成 `.rollback-*` 和 `integrity: ok`；未触碰生产数据库、素材、邮件或 Fal 付费接口。
+- 当前机器未安装 Nginx，配置由自动化契约测试覆盖；正式主机仍须执行 `nginx -t` 后才可 reload。
+
+### 剩余问题
+
+- P1 `USAGE-001`：仍缺具备 Billing Events 权限的生产 Fal Admin Key。
+- P1 `MEMBER-001`：仍缺生产 HTTPS 域名、邮件 Relay、发件人域名和专用邮箱真实收件证据。
+- P2 `CI-GOV-001`：私有仓库当前套餐不支持分支保护，远端检查暂不能设为不可绕过的必需项。
+
+### 下一轮优先事项
+
+形成干净提交并同步 PR #1，核验远端 CI 与发布候选；外部 P1 未到位时继续审查日志脱敏、错误可观测性和进程异常恢复等可离线上线风险，不重复已完成的入口与部署工作。

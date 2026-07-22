@@ -101,6 +101,6 @@ npm run acceptance:report
 
 `npm run release:preflight` 是生产环境硬门禁，校验 Node、HTTPS、安全 Cookie、SQLite/回滚备份、身份与密钥权限、邮件配置、发布产物和 Fal Billing 权限，任一失败即返回非零；`release:preflight:report` 始终返回零，仅用于查看机器可读阻塞码。`npm run acceptance` 是业务验收硬门禁：只在自动化检查通过且 `acceptance/manifest.json` 中所有必选业务证据均为 `pass` 时返回成功。两个硬门禁都通过才允许发布。
 
-生产构建同时生成前端 `dist/` 与独立 Node 服务 `dist-server/server.mjs`；正式服务使用 `npm start`，不依赖 Vite Preview。单机生产目录、环境模板、systemd 启停、健康检查与回滚步骤见 [`docs/operations/deployment-runbook.md`](docs/operations/deployment-runbook.md)。
+生产构建同时生成前端 `dist/` 与独立 Node 服务 `dist-server/server.mjs`；正式服务使用 `npm start`，不依赖 Vite Preview。单机生产目录、环境模板、systemd 启停、Nginx TLS 反向代理、健康检查与回滚步骤见 [`docs/operations/deployment-runbook.md`](docs/operations/deployment-runbook.md)。
 
 验收制度、PIAS 实查报告和可复用 Prompt 位于 [`docs/acceptance`](docs/acceptance)。当前 MVP 的生产验收结论以该目录中的项目报告为准。

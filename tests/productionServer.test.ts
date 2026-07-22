@@ -91,6 +91,41 @@ describe('standalone production server', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
+  it('returns structured 413 when a Fal request exceeds the body limit', async () => {
+    const fixture = await createFixture();
+    const application = await createProductionServer({
+      env: fixture.env,
+      host: '127.0.0.1',
+      port: 0,
+      logger: () => undefined,
+    });
+    servers.push(application);
+    const { origin } = await application.start();
+    const headers = await authenticatedHeaders(origin);
+    const body = JSON.stringify({
+      profileId: 'extract',
+      imageUrls: [`data:image/png;base64,${'A'.repeat((40 * 1024 * 1024) + 1)}`],
+    });
+
+    const response = await fetch(`${origin}/api/fal/jobs`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'content-type': 'application/json',
+        origin: 'https://studio.pias.test',
+      },
+      body,
+    });
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'FAL_BODY_TOO_LARGE',
+        message: '输入图片超过本地服务限制',
+      },
+    });
+  });
+
   it('rate limits login work even when an attacker rotates email addresses', async () => {
     const fixture = await createFixture();
     const application = await createProductionServer({
@@ -273,8 +308,10 @@ async function authenticatedHeaders(origin: string): Promise<Record<string, stri
     body: JSON.stringify({ code: generateTotp('JBSWY3DPEHPK3PXP') }),
   });
   const session = cookieFromResponse(verified, 'pias_session');
+  const csrf = cookieFromResponse(verified, 'pias_csrf');
   return {
-    cookie: `pias_session=${session}`,
+    cookie: `pias_session=${session}; pias_csrf=${csrf}`,
+    'x-pias-csrf': csrf,
     'x-pias-project-id': 'project-a',
   };
 }

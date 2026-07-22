@@ -57,6 +57,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now pias
 ```
 
+5. 将 [`deploy/nginx-pias.conf.example`](../../deploy/nginx-pias.conf.example) 复制到 Nginx 站点配置，替换域名和证书路径。该样例只回源 `127.0.0.1:4173`，按接口限制请求体，代理层拦截的超限请求统一返回 `413 REQUEST_BODY_TOO_LARGE` JSON，并原样传递应用同源判定所需的 `Origin` 与 `Sec-Fetch-Site`。先执行语法检查，再原子加载配置：
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+确认公网 HTTP 自动跳转 HTTPS，HTTPS 响应中没有重复或放宽的 CORS 头，并从外部网络验证 `/api/health/live` 与登录页。若实际应用端口不是 `4173`，必须同时修改 `PIAS_PORT` 和所有 `proxy_pass`，且回源地址仍须为 loopback。
+
 ## 健康检查
 
 负载均衡只使用就绪端点接流量，进程监控使用存活端点：
@@ -79,5 +88,7 @@ curl --fail --silent http://127.0.0.1:4173/api/health/ready
 3. 若 schema 未变化，可保留当前数据库；若 schema 或数据写入不兼容，按 [`database-runbook.md`](database-runbook.md) 使用本次发布前备份 dry-run 后恢复。
 4. 重新运行上一个版本的 `release:preflight`，启动单实例，确认 live、ready、登录、项目读取和一项非付费写入后再恢复流量。
 5. 保留失败版本、数据库和日志作为调查证据，不在回滚窗口内删除。
+
+每次正式发布前至少在隔离目录演练一次数据库恢复：运行 backup、restore dry-run、restore `--apply`，确认命令生成 `.rollback-*` 且恢复后 `integrity: ok`。演练不得指向生产数据库；真实生产恢复仍必须先停止全部 PIAS 实例。
 
 若 `release:preflight`、`acceptance`、ready、真实邮件或 Billing 任一项失败，发布立即中止并保持旧版本服务。

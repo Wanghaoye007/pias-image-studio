@@ -47,23 +47,31 @@ function readJsonBody(request: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    let settled = false;
     request.on('data', (chunk: Buffer) => {
+      if (settled) return;
       size += chunk.length;
       if (size > maxBodyBytes) {
+        settled = true;
         reject(new FalServiceError('输入图片超过本地服务限制', 'FAL_BODY_TOO_LARGE', 413));
-        request.destroy();
         return;
       }
       chunks.push(chunk);
     });
     request.on('end', () => {
+      if (settled) return;
+      settled = true;
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       } catch {
         reject(new FalServiceError('请求内容不是有效 JSON', 'FAL_INVALID_JSON', 400));
       }
     });
-    request.on('error', reject);
+    request.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
   });
 }
 
