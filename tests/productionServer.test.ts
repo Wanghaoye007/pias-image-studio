@@ -73,6 +73,50 @@ describe('standalone production server', () => {
     expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
   });
 
+  it('assigns a server request id and logs only bounded request metadata', async () => {
+    const fixture = await createFixture();
+    const messages: string[] = [];
+    const application = await createProductionServer({
+      env: fixture.env,
+      host: '127.0.0.1',
+      port: 0,
+      logger: (message) => messages.push(message),
+    });
+    servers.push(application);
+    const { origin } = await application.start();
+
+    const response = await fetch(`${origin}/api/health/live?token=must-not-be-logged`, {
+      headers: {
+        cookie: 'pias_session=must-not-be-logged',
+        'x-request-id': 'attacker-controlled-id',
+      },
+    });
+    expect(response.status).toBe(200);
+    const requestId = response.headers.get('x-request-id');
+    expect(requestId).toMatch(/^[a-f0-9-]{36}$/);
+    expect(requestId).not.toBe('attacker-controlled-id');
+    await fetch(`${origin}/api/must-not-be-logged`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const parsedMessages = messages
+      .map((message) => JSON.parse(message) as Record<string, unknown>);
+    const requestLog = parsedMessages
+      .find((entry) => entry.event === 'pias_http_request');
+    expect(requestLog).toMatchObject({
+      requestId,
+      method: 'GET',
+      path: '/api/health/live',
+      status: 200,
+    });
+    expect(parsedMessages).toContainEqual(expect.objectContaining({
+      event: 'pias_http_request',
+      path: '/api/other',
+      status: 401,
+    }));
+    expect(JSON.stringify(parsedMessages)).not.toContain('must-not-be-logged');
+    expect(JSON.stringify(parsedMessages)).not.toContain('attacker-controlled-id');
+  });
+
   it('prevents authenticated API state from being stored by intermediary caches', async () => {
     const fixture = await createFixture();
     const application = await createProductionServer({

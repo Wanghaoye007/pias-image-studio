@@ -103,4 +103,6 @@ npm run acceptance:report
 
 生产构建同时生成前端 `dist/` 与独立 Node 服务 `dist-server/server.mjs`；正式服务使用 `npm start`，不依赖 Vite Preview。单机生产目录、环境模板、systemd 启停、Nginx TLS 反向代理、健康检查与回滚步骤见 [`docs/operations/deployment-runbook.md`](docs/operations/deployment-runbook.md)。
 
+生产 HTTP 响应携带服务端生成的 `X-Request-ID`。访问日志使用脱敏单行 JSON 和固定路由模板，禁止记录 Query、Cookie、Prompt、图片 URL、Error message 或 stack；systemd 样例将日志写入 journald，检索、告警与保留规则见部署手册。
+
 验收制度、PIAS 实查报告和可复用 Prompt 位于 [`docs/acceptance`](docs/acceptance)。当前 MVP 的生产验收结论以该目录中的项目报告为准。

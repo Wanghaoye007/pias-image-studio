@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,6 +13,10 @@ import { loadInvitationEmailConfig } from '../organization/invitationEmailDelive
 import { organizationPlugin } from '../organization/organizationPlugin';
 import { studioStatePlugin } from '../studio/studioStatePlugin';
 import { healthPlugin } from './healthPlugin';
+import {
+  type ProductionLogWriter,
+  writeProductionLog,
+} from './productionLog';
 import { createProductionReadinessCheck } from './productionReadiness';
 import { loadReleaseIdentity } from './releaseIdentity';
 
@@ -46,7 +51,7 @@ type ProductionServerOptions = {
   env?: ProductionEnvironment;
   host?: string;
   port?: number;
-  logger?: (message: string) => void;
+  logger?: ProductionLogWriter;
 };
 
 export type ProductionServer = {
@@ -73,7 +78,7 @@ export async function createProductionServer(
     connectionsCheckingInterval: productionHttpLimits.connectionsCheckingInterval,
     maxHeaderSize: productionHttpLimits.maxHeaderSize,
   }, (request, response) => {
-    dispatchMiddleware(middlewareStack, request, response);
+    dispatchMiddleware(middlewareStack, request, response, options.logger);
   });
   httpServer.maxHeadersCount = productionHttpLimits.maxHeadersCount;
   httpServer.maxRequestsPerSocket = productionHttpLimits.maxRequestsPerSocket;
@@ -109,8 +114,10 @@ export async function createProductionServer(
       leaseTtlMs: positiveInteger(env.PIAS_FAL_LEASE_TTL_MS, 15_000),
       billingRetryIntervalMs: positiveInteger(env.PIAS_FAL_BILLING_RETRY_MS, 300_000),
       readKey: () => readFalKey({ env, defaultFile: '' }),
+      logger: options.logger,
     }),
   ];
+  middlewareStack.push(createRequestObservabilityMiddleware(options.logger));
   middlewareStack.push(securityHeadersMiddleware);
   middlewareStack.push(createRequestBoundaryMiddleware(config.publicOrigin));
   middlewareStack.push(createLoginRateLimitMiddleware());
@@ -167,13 +174,12 @@ export async function createProductionServer(
         throw new Error('SERVER_ADDRESS_INVALID');
       }
       startedOrigin = `http://${formatHost(config.host)}:${address.port}`;
-      options.logger?.(JSON.stringify({
-        event: 'pias_server_started',
+      writeProductionLog(options.logger, 'pias_server_started', {
         host: config.host,
         port: address.port,
         version: release.version,
         revision: release.revision,
-      }));
+      });
       return { origin: startedOrigin };
     },
     close() {
@@ -251,6 +257,36 @@ function securityHeadersMiddleware(
   response.setHeader('x-permitted-cross-domain-policies', 'none');
   response.setHeader('content-security-policy', contentSecurityPolicy);
   next();
+}
+
+const requestIdKey = Symbol('pias.request-id');
+type ObservedRequest = IncomingMessage & { [requestIdKey]?: string };
+
+function createRequestObservabilityMiddleware(
+  logger: ProductionLogWriter | undefined,
+  now: () => number = Date.now,
+): Connect.NextHandleFunction {
+  return (request, response, next) => {
+    const requestId = randomUUID();
+    const startedAt = now();
+    (request as ObservedRequest)[requestIdKey] = requestId;
+    response.setHeader('x-request-id', requestId);
+    let logged = false;
+    const logCompletion = (aborted: boolean) => {
+      if (logged) return;
+      logged = true;
+      writeProductionLog(logger, 'pias_http_request', {
+        requestId,
+        method: request.method ?? 'GET',
+        path: logPathname(request.url),
+        status: aborted && !response.writableEnded ? 499 : response.statusCode,
+        durationMs: Math.max(0, now() - startedAt),
+      });
+    };
+    response.once('finish', () => logCompletion(false));
+    response.once('close', () => logCompletion(true));
+    next();
+  };
 }
 
 function createLoginRateLimitMiddleware(
@@ -381,10 +417,16 @@ function dispatchMiddleware(
   stack: Connect.NextHandleFunction[],
   request: IncomingMessage,
   response: ServerResponse,
+  logger?: ProductionLogWriter,
 ) {
   const dispatch = (index: number, error?: unknown) => {
     if (response.writableEnded) return;
     if (error) {
+      writeProductionLog(logger, 'pias_http_failure', {
+        requestId: (request as ObservedRequest)[requestIdKey] ?? 'unassigned',
+        method: request.method ?? 'GET',
+        path: logPathname(request.url),
+      }, error);
       response.statusCode = 500;
       response.setHeader('content-type', 'application/json; charset=utf-8');
       response.setHeader('cache-control', 'no-store');
@@ -415,6 +457,54 @@ function dispatchMiddleware(
     }
   };
   dispatch(0);
+}
+
+function safePathname(value: string | undefined): string {
+  try {
+    return new URL(value ?? '/', 'http://127.0.0.1').pathname;
+  } catch {
+    return '/invalid-request-target';
+  }
+}
+
+const staticLogPaths = new Set([
+  '/api/health/live',
+  '/api/health/ready',
+  '/api/auth/login',
+  '/api/auth/mfa',
+  '/api/auth/session',
+  '/api/auth/logout',
+  '/api/organization/projects',
+  '/api/organization/invitations',
+  '/api/organization/invitations/preview',
+  '/api/organization/invitations/accept',
+  '/api/organization/members',
+  '/api/studio/state',
+  '/api/assets/images',
+  '/api/fal/jobs',
+]);
+
+function logPathname(value: string | undefined): string {
+  const pathname = safePathname(value);
+  if (staticLogPaths.has(pathname)) return pathname;
+  if (/^\/api\/organization\/invitations\/[^/]+\/(?:revoke|resend)$/.test(pathname)) {
+    return '/api/organization/invitations/:invitationId/:action';
+  }
+  if (/^\/api\/organization\/members\/[^/]+$/.test(pathname)) {
+    return '/api/organization/members/:userId';
+  }
+  if (/^\/api\/assets\/images\//.test(pathname)) {
+    return '/api/assets/images/:asset';
+  }
+  if (/^\/api\/fal\/jobs\/[^/]+\/(?:status|result)$/.test(pathname)) {
+    return '/api/fal/jobs/:jobId/:view';
+  }
+  if (/^\/api\/fal\/jobs\/[^/]+$/.test(pathname)) {
+    return '/api/fal/jobs/:jobId';
+  }
+  if (pathname.startsWith('/api/')) return '/api/other';
+  if (pathname.startsWith('/assets/')) return '/assets/:file';
+  return '/app';
 }
 
 async function invokePluginHook(

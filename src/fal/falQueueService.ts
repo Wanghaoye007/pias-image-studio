@@ -237,6 +237,7 @@ export function createFalQueueService(options: {
   leaseTtlMs?: number;
   billingRetryIntervalMs?: number;
   now?: () => number;
+  onOperationalError?: (event: string, error: unknown) => void;
 }) {
   let configured: Promise<void> | undefined;
   let hydrated: Promise<void> | undefined;
@@ -271,7 +272,7 @@ export function createFalQueueService(options: {
           savedJobs.filter(isPersistedJob).forEach((job) => jobs.set(job.id, job));
         })
         .catch((error) => {
-          console.warn('Fal 任务恢复失败，将使用空队列', error);
+          options.onOperationalError?.('pias_fal_queue_hydration_failed', error);
         })
       : Promise.resolve();
     return hydrated;
@@ -292,7 +293,7 @@ export function createFalQueueService(options: {
       .catch(() => undefined)
       .then(() => options.persistence?.save(snapshot));
     persistenceWrite = write.catch((error) => {
-        console.warn('Fal 任务状态保存失败', error);
+        options.onOperationalError?.('pias_fal_queue_persistence_failed', error);
       });
     return strict ? write : persistenceWrite;
   };

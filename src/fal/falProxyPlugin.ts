@@ -25,6 +25,10 @@ import {
   listSqliteFalScopeKeys,
 } from './falSqlitePersistence';
 import type { FalToolRequest } from './toolWorkflows';
+import {
+  type ProductionLogWriter,
+  writeProductionLog,
+} from '../server/productionLog';
 
 const apiRoot = '/api/fal/jobs';
 const maxBodyBytes = 40 * 1024 * 1024;
@@ -144,6 +148,7 @@ export function falImageProxyPlugin(options: {
   billingRetryIntervalMs?: number;
   adapter?: FalQueueAdapter;
   readKey?: () => Promise<string>;
+  logger?: ProductionLogWriter;
 } = {}): Plugin {
   const legacyFile = process.env.PIAS_FAL_JOB_STATE_FILE
     || '/tmp/pias-image-studio/fal-queue-state.json';
@@ -176,6 +181,9 @@ export function falImageProxyPlugin(options: {
     leaseTtlMs,
     billingRetryIntervalMs,
     workerId,
+    onOperationalError: (event: string, error: unknown) => {
+      writeProductionLog(options.logger, event, { component: 'fal_queue' }, error);
+    },
   };
   const getSqliteService = (scopeKey: string) => {
     let scopedService = cache.get(scopeKey);
@@ -227,7 +235,14 @@ export function falImageProxyPlugin(options: {
       if (typeof service !== 'function') return [service];
       return Array.from(cache.values());
     },
-    onError: (error) => console.warn('Fal 后台恢复失败', error),
+    onError: (error) => {
+      writeProductionLog(
+        options.logger,
+        'pias_fal_recovery_failed',
+        { component: 'fal_recovery' },
+        error,
+      );
+    },
   });
   const mount = (server: { middlewares: { use: (handler: Connect.NextHandleFunction) => void }; httpServer?: { once(event: 'close', listener: () => void): unknown } | null }) => {
     server.middlewares.use(middleware);

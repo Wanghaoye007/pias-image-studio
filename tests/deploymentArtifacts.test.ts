@@ -18,4 +18,14 @@ describe('production deployment artifacts', () => {
     expect(config).toContain('"code":"REQUEST_BODY_TOO_LARGE"');
     expect(config).not.toMatch(/proxy_pass\s+https?:\/\/(?!127\.0\.0\.1:4173)/);
   });
+
+  it('routes structured service logs to journald with a stable identifier', async () => {
+    const service = await readFile('deploy/pias.service.example', 'utf8');
+
+    expect(service).toContain('StandardOutput=journal');
+    expect(service).toContain('StandardError=journal');
+    expect(service).toContain('SyslogIdentifier=pias');
+    expect(service).toContain('Restart=on-failure');
+    expect(service).toContain('KillSignal=SIGTERM');
+  });
 });

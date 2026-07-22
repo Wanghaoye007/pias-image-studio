@@ -561,6 +561,29 @@ describe('Fal 统一作业编排器', () => {
     vi.mocked(adapter.submit).mockRejectedValue(new Error('Authorization id:secret failed'));
     await expect(service.submit(request())).rejects.toThrow('Fal 任务提交失败');
   });
+
+  it('routes persistence failures through the operational error hook', async () => {
+    const onOperationalError = vi.fn();
+    const service = createFalQueueService({
+      adapter: createAdapter(),
+      readKey: async () => 'id:secret',
+      persistence: {
+        load: vi.fn()
+          .mockRejectedValueOnce(new Error('database path must-not-be-logged'))
+          .mockResolvedValue([]),
+        save: vi.fn(async () => undefined),
+      },
+      onOperationalError,
+    });
+
+    await expect(service.submit(request())).resolves.toMatchObject({
+      requestId: expect.any(String),
+    });
+    expect(onOperationalError).toHaveBeenCalledWith(
+      'pias_fal_queue_hydration_failed',
+      expect.any(Error),
+    );
+  });
 });
 
 function persistedQueuedJob(id: string): PersistedFalJob {

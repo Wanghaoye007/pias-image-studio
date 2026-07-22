@@ -1125,3 +1125,54 @@
 ### 下一轮优先事项
 
 形成干净提交并同步 PR #1，核验远端 CI 与发布候选；外部 P1 未到位时继续审查日志脱敏、错误可观测性和进程异常恢复等可离线上线风险，不重复已完成的入口与部署工作。
+
+## 2026-07-22 11:21 CST - 生产日志与故障定位闭环
+
+### 本轮完成内容
+
+- 为每个生产 HTTP 请求生成服务端 UUID `X-Request-ID`，请求完成日志记录关联 ID、方法、固定路由模板、状态和耗时。
+- 动态 Fal Job、成员、邀请和素材路径使用参数模板；未知 API 统一记录 `/api/other`，SPA 与静态资源也不写客户端可控原始路径。
+- 新增严格白名单的单行 JSON 序列化器。Error 只保留符合规则的稳定 `errorCode`，不输出 message、stack、Query、Cookie、Prompt、图片/Data URL 或客户端 Request ID。
+- 中间件未处理异常新增 `pias_http_failure` 诊断事件；Fal 恢复 Worker、队列加载和持久化错误改走同一脱敏通道，不再 `console.warn` 原始 Error。
+- 日志传输器自身抛错时被隔离，不会打断 HTTP 响应、Worker 清理或进程关闭。
+- systemd 样例固定输出到 journald 并使用 `SyslogIdentifier=pias`；部署手册补充 request ID 检索、5xx/队列/ready 告警以及日志 30 天、业务审计 365 天的保留边界。
+
+### 修改文件
+
+- `src/server/productionLog.ts`
+- `src/server/productionServer.ts`
+- `src/fal/falProxyPlugin.ts`
+- `src/fal/falQueueService.ts`
+- `tests/productionLog.test.ts`
+- `tests/productionServer.test.ts`
+- `tests/falQueueService.test.ts`
+- `tests/deploymentArtifacts.test.ts`
+- `deploy/pias.service.example`
+- `docs/operations/deployment-runbook.md`
+- `README.md`
+
+### 测试和构建结果
+
+- 先以失败测试确认响应缺少 request ID、无请求完成日志、原始路径可进入日志、logger 抛错会中断调用以及 systemd 未声明 journald 输出，再逐项修复。
+- 聚焦回归：生产日志、独立服务、Fal 队列/代理和部署产物 5 个测试文件、36 项测试通过。
+- 全量回归：48 个测试文件、417 项测试通过；`npm run lint`、`npm run typecheck`、前端和独立 Node 双产物构建通过。
+- `npm audit --omit=dev --audit-level=high` 为 0 漏洞；前端块大小保持不变，服务 bundle 为 130.16 kB。
+- 构建后的独立进程完成 live、未知 API、日志脱敏和 SIGTERM 验收：退出码 0，request ID 格式有效，未知路径为 `/api/other`，测试机密未进入 stdout；隔离证据位于 `/tmp/pias-log-smoke-V0gnFb`。
+- 当前构建因尚未提交按事实标记 `dirty=true`；提交后需重新构建并确认 `dirty=false`。
+
+### 风险控制
+
+- 日志字段使用代码白名单而不是事后正则清洗；即使 Error message 包含 Key 或文件路径也不会被序列化。
+- 不信任客户端 `X-Request-ID`，避免日志注入和跨请求关联污染；对外响应只返回服务端新生成 ID。
+- 实进程验收使用临时 SQLite、身份和占位邮件密钥，不调用 Fal、不发送邮件、不触碰生产数据；临时目录保留供复核。
+- SIGTERM 继续复用原有顺序：停止接收连接、等待在途 HTTP、停止 Worker 当前轮次、关闭 SQLite；未发现需要改变进程退出语义的证据。
+
+### 剩余问题
+
+- P1 `USAGE-001`：仍缺具备 Billing Events 权限的生产 Fal Admin Key。
+- P1 `MEMBER-001`：仍缺生产 HTTPS 域名、邮件 Relay、发件人域名和专用邮箱真实收件证据。
+- P2 `CI-GOV-001`：私有仓库当前套餐不支持分支保护，远端检查暂不能设为不可绕过的必需项。
+
+### 下一轮优先事项
+
+形成干净提交并同步 PR #1，核验远端 CI 和发布候选；外部 P1 未到位时继续检查资源耗尽、磁盘空间/SQLite WAL 增长、备份保留自动化和上线后监控探针等可离线风险。

@@ -66,6 +66,18 @@ sudo systemctl reload nginx
 
 确认公网 HTTP 自动跳转 HTTPS，HTTPS 响应中没有重复或放宽的 CORS 头，并从外部网络验证 `/api/health/live` 与登录页。若实际应用端口不是 `4173`，必须同时修改 `PIAS_PORT` 和所有 `proxy_pass`，且回源地址仍须为 loopback。
 
+## 日志与故障定位
+
+systemd 样例将标准输出和标准错误写入 journald，并固定 `SyslogIdentifier=pias`。应用日志为单行 JSON：每个 HTTP 响应带服务端生成的 `X-Request-ID`，对应完成日志只包含 `requestId`、固定路由模板、方法、状态和耗时；启动日志只包含监听地址与发布版本。内部异常及 Fal Worker/持久化异常仅记录稳定 `errorCode`，不记录 Error message、stack、Query、Cookie、Prompt、图片/Data URL、用户输入或客户端提供的 Request ID。
+
+```bash
+journalctl -u pias -o cat --since '30 minutes ago'
+journalctl -u pias -o cat --since today | jq -Rc 'fromjson? | select(.requestId == "<request-id>")'
+journalctl -u pias -o cat --since today | jq -Rc 'fromjson? | select(.status >= 500 or (.event | endswith("_failed")))'
+```
+
+生产主机必须启用持久 journal，并由运维统一设置容量上限和 30 天保留期；PIAS 业务审计记录仍按 365 天策略保留，不得用系统访问日志替代。监控至少告警：5xx 比例持续升高、连续 `429`、异常 `403` 峰值、`pias_fal_recovery_failed`、`pias_fal_queue_hydration_failed`、`pias_fal_queue_persistence_failed` 以及 ready 连续失败。日志采集器不得补采请求正文或 Cookie。
+
 ## 健康检查
 
 负载均衡只使用就绪端点接流量，进程监控使用存活端点：
