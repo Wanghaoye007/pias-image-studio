@@ -17,6 +17,31 @@ import { loadReleaseIdentity } from './releaseIdentity';
 
 type ProductionEnvironment = Record<string, string | undefined>;
 
+const loginRateLimit = 20;
+const loginRateWindowMs = 60_000;
+export const productionHttpLimits = Object.freeze({
+  requestTimeout: 60_000,
+  headersTimeout: 15_000,
+  keepAliveTimeout: 5_000,
+  connectionsCheckingInterval: 1_000,
+  maxHeaderSize: 16 * 1024,
+  maxHeadersCount: 100,
+  maxRequestsPerSocket: 1_000,
+});
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+].join('; ');
+
 type ProductionServerOptions = {
   env?: ProductionEnvironment;
   host?: string;
@@ -41,9 +66,17 @@ export async function createProductionServer(
     revision: 'unknown',
   });
   const middlewareStack: Connect.NextHandleFunction[] = [];
-  const httpServer = createServer((request, response) => {
+  const httpServer = createServer({
+    requestTimeout: productionHttpLimits.requestTimeout,
+    headersTimeout: productionHttpLimits.headersTimeout,
+    keepAliveTimeout: productionHttpLimits.keepAliveTimeout,
+    connectionsCheckingInterval: productionHttpLimits.connectionsCheckingInterval,
+    maxHeaderSize: productionHttpLimits.maxHeaderSize,
+  }, (request, response) => {
     dispatchMiddleware(middlewareStack, request, response);
   });
+  httpServer.maxHeadersCount = productionHttpLimits.maxHeadersCount;
+  httpServer.maxRequestsPerSocket = productionHttpLimits.maxRequestsPerSocket;
   const plugins: Plugin[] = [
     healthPlugin({
       release,
@@ -79,6 +112,8 @@ export async function createProductionServer(
     }),
   ];
   middlewareStack.push(securityHeadersMiddleware);
+  middlewareStack.push(createRequestBoundaryMiddleware(config.publicOrigin));
+  middlewareStack.push(createLoginRateLimitMiddleware());
   const previewServer = {
     middlewares: {
       use(handler: Connect.NextHandleFunction) {
@@ -172,6 +207,7 @@ function validateConfig(
     assetDirectory: required(env.PIAS_ASSET_DIR, 'ASSET_STORAGE_REQUIRED'),
     artifactDirectory: required(env.PIAS_RELEASE_ARTIFACT_DIR, 'BUILD_ARTIFACT_REQUIRED'),
     authConfigFile: required(env.PIAS_AUTH_CONFIG_FILE, 'AUTH_CONFIG_REQUIRED'),
+    publicOrigin: requirePublicOrigin(env.PIAS_PUBLIC_BASE_URL),
   };
 }
 
@@ -185,16 +221,142 @@ function positiveInteger(value: string | undefined, fallback: number): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function requirePublicOrigin(value: string | undefined): string {
+  const input = required(value, 'PUBLIC_BASE_URL_REQUIRED');
+  try {
+    const url = new URL(input);
+    if (url.protocol !== 'https:' || url.username || url.password) {
+      throw new Error('invalid origin');
+    }
+    return url.origin;
+  } catch {
+    throw new Error('PUBLIC_BASE_URL_INVALID');
+  }
+}
+
 function securityHeadersMiddleware(
-  _request: IncomingMessage,
+  request: IncomingMessage,
   response: ServerResponse,
   next: () => void,
 ) {
+  const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
+  if (pathname.startsWith('/api/')) response.setHeader('cache-control', 'no-store');
   response.setHeader('x-content-type-options', 'nosniff');
   response.setHeader('x-frame-options', 'DENY');
   response.setHeader('referrer-policy', 'no-referrer');
   response.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+  response.setHeader('strict-transport-security', 'max-age=31536000');
+  response.setHeader('cross-origin-opener-policy', 'same-origin');
+  response.setHeader('cross-origin-resource-policy', 'same-origin');
+  response.setHeader('x-permitted-cross-domain-policies', 'none');
+  response.setHeader('content-security-policy', contentSecurityPolicy);
   next();
+}
+
+function createLoginRateLimitMiddleware(
+  now: () => number = Date.now,
+): Connect.NextHandleFunction {
+  let windowStartedAt = 0;
+  let attempts = 0;
+  return (request, response, next) => {
+    const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
+    if (request.method !== 'POST' || pathname !== '/api/auth/login') {
+      next();
+      return;
+    }
+    const currentTime = now();
+    if (!windowStartedAt || currentTime - windowStartedAt >= loginRateWindowMs) {
+      windowStartedAt = currentTime;
+      attempts = 0;
+    }
+    if (attempts >= loginRateLimit) {
+      request.resume();
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((windowStartedAt + loginRateWindowMs - currentTime) / 1_000),
+      );
+      response.statusCode = 429;
+      response.setHeader('retry-after', retryAfterSeconds.toString());
+      response.setHeader('content-type', 'application/json; charset=utf-8');
+      response.end(JSON.stringify({
+        error: { code: 'AUTH_RATE_LIMITED', message: '登录尝试过多，请稍后再试' },
+      }));
+      return;
+    }
+    attempts += 1;
+    next();
+  };
+}
+
+function createRequestBoundaryMiddleware(publicOrigin: string): Connect.NextHandleFunction {
+  return (request, response, next) => {
+    const method = request.method ?? 'GET';
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      next();
+      return;
+    }
+    const origin = singleHeader(request, 'origin');
+    const fetchSite = singleHeader(request, 'sec-fetch-site').toLowerCase();
+    if ((origin && origin !== publicOrigin) || fetchSite === 'cross-site') {
+      request.resume();
+      writeSecurityError(
+        response,
+        403,
+        'SECURITY_ORIGIN_REJECTED',
+        '请求来源不受信任',
+      );
+      return;
+    }
+    const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
+    if (requiresJsonBody(method, pathname) && requestMediaType(request) !== 'application/json') {
+      request.resume();
+      writeSecurityError(
+        response,
+        415,
+        'SECURITY_JSON_REQUIRED',
+        '请求必须使用 application/json',
+      );
+      return;
+    }
+    next();
+  };
+}
+
+function requiresJsonBody(method: string, pathname: string): boolean {
+  if (method === 'POST' && ['/api/auth/login', '/api/auth/mfa', '/api/fal/jobs'].includes(pathname)) {
+    return true;
+  }
+  if (pathname === '/api/studio/state') return method === 'PUT';
+  if (method === 'POST' && [
+    '/api/organization/projects',
+    '/api/organization/invitations',
+    '/api/organization/invitations/preview',
+    '/api/organization/invitations/accept',
+  ].includes(pathname)) {
+    return true;
+  }
+  return method === 'PATCH'
+    && /^\/api\/organization\/members\/user-[a-f0-9-]{36}$/.test(pathname);
+}
+
+function requestMediaType(request: IncomingMessage): string {
+  return singleHeader(request, 'content-type').split(';', 1)[0].trim().toLowerCase();
+}
+
+function singleHeader(request: IncomingMessage, name: string): string {
+  const value = request.headers[name];
+  return Array.isArray(value) ? value[0] ?? '' : value ?? '';
+}
+
+function writeSecurityError(
+  response: ServerResponse,
+  statusCode: number,
+  code: string,
+  message: string,
+) {
+  response.statusCode = statusCode;
+  response.setHeader('content-type', 'application/json; charset=utf-8');
+  response.end(JSON.stringify({ error: { code, message } }));
 }
 
 function apiNotFoundMiddleware(

@@ -34,6 +34,14 @@ npm audit --omit=dev --audit-level=high
 
 构建同时生成 `dist-server/server.mjs`。该独立 Node HTTP 服务复用与开发环境相同的认证、组织、素材、StudioState 和 Fal 中间件，提供静态 SPA fallback、JSON API 边界、安全响应头、live/ready 和 SIGTERM 优雅停机，不依赖 Vite Preview。完成测试和验收后可执行 `npm prune --omit=dev`，运行时仅保留生产依赖。
 
+### 入口安全约束
+
+- `PIAS_PUBLIC_BASE_URL` 必须是生产 HTTPS 地址。带 `Origin` 的写请求必须与其 Origin 完全一致；`Sec-Fetch-Site: cross-site` 一律拒绝。反向代理必须原样传递 `Origin` 和 `Sec-Fetch-Site`，不得为应用 API 添加 CORS 放行头。
+- 登录、MFA、组织管理、StudioState 写入和 Fal 提交只接受 `application/json`；素材上传继续使用受控的 PNG/JPEG/WebP 类型。反向代理不得把 `text/plain` 改写为 JSON。
+- 单实例登录入口最多接受 20 次密码校验/分钟，超过后返回 `429` 与 `Retry-After`；按邮箱的渐进锁定仍同时生效。监控应对持续 `AUTH_RATE_LIMITED` 告警，但不得记录密码或请求正文。
+- Node 服务限制完整请求 60 秒、请求头 15 秒、单次头部 16 KiB/100 个字段、Keep-Alive 空闲 5 秒及单连接 1000 次请求。反向代理的超时和头部上限不得宽于应用层。
+- 所有响应发送 CSP、HSTS、`nosniff`、禁止嵌入、Referrer/Permissions Policy 与跨源隔离头；所有 `/api/` 默认 `Cache-Control: no-store`，仅内容哈希素材由路由覆盖为私有不可变缓存。
+
 2. 按 [`database-runbook.md`](database-runbook.md) 创建本次数据库备份，并让 `PIAS_RELEASE_BACKUP_FILE` 指向该备份。
 3. 加载 `/etc/pias/pias.env` 后执行双门禁：
 

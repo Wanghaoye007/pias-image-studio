@@ -1040,3 +1040,45 @@
 ### 下一轮优先事项
 
 继续审查不依赖生产凭证的部署与供应链风险；外部配置到位后优先完成 Fal Billing Events 对账和真实邀请邮件收件验证。仓库套餐支持分支保护时，将 `Lint, test, and build` 设为合并前必需检查。
+
+## 2026-07-22 10:23 CST - 生产入口安全闭环
+
+### 本轮完成内容
+
+- 为独立 Node 服务增加生产 CSP、HSTS、COOP/CORP、禁止嵌入、`nosniff`、Referrer/Permissions Policy 等统一响应头。
+- 所有 `/api/` 默认使用 `Cache-Control: no-store`；内容哈希素材仍由素材路由覆盖为私有不可变缓存。
+- 写请求携带的 Origin 必须与 `PIAS_PUBLIC_BASE_URL` 完全一致，`Sec-Fetch-Site: cross-site` 直接拒绝；登录、MFA、组织管理、StudioState 与 Fal JSON 写入只接受 `application/json`。
+- 在按邮箱渐进锁定之外增加单实例 20 次/分钟登录总量门，阻断轮换邮箱持续触发同步 scrypt；超限返回稳定 `429` 与 `Retry-After`。
+- 固定 Node HTTP 入口预算：完整请求 60 秒、头部 15 秒、Keep-Alive 5 秒、16 KiB/100 个请求头及单连接 1000 次请求。
+- README 与部署手册同步反向代理、安全头、Origin、媒体类型、限流和超时约束。
+
+### 修改文件
+
+- `src/server/productionServer.ts`
+- `tests/productionServer.test.ts`
+- `README.md`
+- `docs/operations/deployment-runbook.md`
+
+### 测试和构建结果
+
+- 先以真实独立服务复现三类红灯：安全响应头缺失、认证状态 JSON 未声明禁缓存、轮换邮箱绕过登录成本预算；随后复现跨站 JSON 与 `text/plain` JSON 均被登录端点接受。
+- 生产服务聚焦回归 9 项通过；全量回归 46 个测试文件、409 项测试通过。
+- `npm run repo:check`、`npm run lint`、`npm run typecheck`、前端与独立 Node 双产物构建全部通过；所有前端 JS 块继续低于 500 kB。
+- `npm audit --omit=dev --audit-level=high` 为 0 漏洞。
+- 使用临时 SQLite、临时身份与占位密钥启动构建后的独立生产服务；浏览器确认登录页、脚本和样式加载成功，无横向溢出，控制台零错误零警告。
+
+### 风险控制
+
+- Origin 校验只拒绝明确不匹配或浏览器明确标记为跨站的写请求；无 Origin 的同机运维请求仍可执行，现有同源客户端协议不变。
+- JSON 媒体类型门不作用于 PNG/JPEG/WebP 素材上传；API 默认禁缓存不覆盖内容哈希素材的私有缓存策略。
+- 浏览器验收未使用真实数据库、用户、密钥或域名，未发邮件、未调用 Fal、未公开部署，临时服务已关闭。
+
+### 剩余问题
+
+- P1 `USAGE-001`：仍缺具备 Billing Events 权限的生产 Fal Admin Key。
+- P1 `MEMBER-001`：仍缺生产 HTTPS 域名、邮件 Relay、发件人域名和专用邮箱真实收件证据。
+- P2 `CI-GOV-001`：私有仓库当前套餐不支持分支保护，远端检查暂不能设为不可绕过的必需项。
+
+### 下一轮优先事项
+
+同步 PR #1 并等待最新远端 CI；外部 P1 仍未就绪时，继续验证请求中止/超大正文处理、反向代理部署样例与恢复演练是否存在可离线修复的发布风险。

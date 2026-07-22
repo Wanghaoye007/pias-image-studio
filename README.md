@@ -49,7 +49,7 @@ Key 只在服务端进程读取，不会进入浏览器构建产物。
 
 ## 安全整改进展
 
-身份与授权核心已经实现密码策略、scrypt 哈希、连续失败渐进锁定、TOTP MFA 防重放、30 分钟闲置/12 小时绝对会话过期、会话撤销、成员停用失效、角色权限矩阵及 Tenant/Project 范围判断。`/api/auth/login`、`/api/auth/mfa`、`/api/auth/session` 和 `/api/auth/logout` 已使用 Strict Cookie、HttpOnly Session 与双重 CSRF；中文登录/MFA/退出界面、会话恢复门禁和全部业务 API 的会话/CSRF 守卫已经接入。素材上传、Fal 提交/取消和 StudioState 变更均执行服务端命令权限；审核人、新增审计 actor 与 Fal 创建人来自可信会话，既有审计历史不可删改。配置文件强制权限为 `0600` 且禁止明文密码。
+身份与授权核心已经实现密码策略、scrypt 哈希、连续失败渐进锁定、TOTP MFA 防重放、30 分钟闲置/12 小时绝对会话过期、会话撤销、成员停用失效、角色权限矩阵及 Tenant/Project 范围判断。`/api/auth/login`、`/api/auth/mfa`、`/api/auth/session` 和 `/api/auth/logout` 已使用 Strict Cookie、HttpOnly Session 与双重 CSRF；中文登录/MFA/退出界面、会话恢复门禁和全部业务 API 的会话/CSRF 守卫已经接入。生产入口额外校验写请求 Origin 与 JSON 媒体类型，限制登录总量、请求/头部时长和连接预算，并统一发送 CSP、HSTS、跨源隔离头及 API `no-store`。素材上传、Fal 提交/取消和 StudioState 变更均执行服务端命令权限；审核人、新增审计 actor 与 Fal 创建人来自可信会话，既有审计历史不可删改。配置文件强制权限为 `0600` 且禁止明文密码。
 
 ## 当前边界
 
