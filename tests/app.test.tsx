@@ -182,27 +182,31 @@ describe('Content Studio 中文应用框架', () => {
 
   it('右侧编辑面板贯穿画布高度且 Prompt 支持纵向拖拽', () => {
     const styles = readFileSync(`${process.cwd()}/src/client/styles/soft-glass.css`, 'utf8');
-    const releaseLayer = styles.slice(styles.lastIndexOf('/* Image MVP release convergence */'));
+    const finalLayer = styles.slice(styles.lastIndexOf('/* Image MVP docked panel compatibility */'));
 
-    expect(releaseLayer).toMatch(/\.context-panel\s*\{[^}]*top:\s*0;[^}]*right:\s*0;[^}]*bottom:\s*0;/s);
-    expect(releaseLayer).toMatch(/\.context-panel textarea\s*\{[^}]*resize:\s*vertical;/s);
-    expect(releaseLayer).toMatch(/\.canvas-stage\.is-panel-open \.react-flow\s*\{[^}]*right:\s*360px;/s);
-    expect(releaseLayer).toMatch(
+    expect(styles.lastIndexOf('/* Image MVP docked panel compatibility */'))
+      .toBeGreaterThan(styles.lastIndexOf('/* Content Studio 2026 workbench redesign layer. */'));
+    expect(finalLayer).toMatch(/\.context-panel,\s*\.context-panel\[data-tool="light"\][^{]*\{[^}]*top:\s*0;[^}]*right:\s*0;[^}]*bottom:\s*0;/s);
+    expect(finalLayer).toMatch(/\.context-panel textarea\s*\{[^}]*resize:\s*vertical;/s);
+    expect(finalLayer).toMatch(/\.canvas-stage\.is-panel-open \.react-flow\s*\{[^}]*right:\s*380px;/s);
+    expect(finalLayer).toMatch(
       /\.segmented--counts button\[aria-pressed="false"\]\s*\{[^}]*background:\s*transparent;/s,
     );
-    expect(releaseLayer).toMatch(
+    expect(finalLayer).toMatch(
       /\.segmented--counts button\[aria-pressed="true"\]\s*\{[^}]*background:\s*rgb\(47 111 237 \/ 34%\);/s,
     );
   });
 
   it('结果详情位于画布节点之上并形成独立交互层', () => {
     const styles = readFileSync(`${process.cwd()}/src/client/styles/soft-glass.css`, 'utf8');
-    const releaseLayer = styles.slice(styles.lastIndexOf('/* Image MVP release convergence */'));
+    const finalLayer = styles.slice(styles.lastIndexOf('/* Image MVP docked panel compatibility */'));
 
-    expect(releaseLayer).toMatch(
+    expect(finalLayer).toMatch(
       /\.canvas-stage\.is-showing-result-overlay > \.react-flow\s*\{[^}]*z-index:\s*0\s*!important;[^}]*isolation:\s*isolate;/s,
     );
-    expect(releaseLayer).toMatch(/\.result-inspector\s*\{[^}]*z-index:\s*1000;/s);
+    expect(finalLayer).toMatch(
+      /\.result-inspector\s*\{[^}]*z-index:\s*1000;[^}]*rgb\(18 21 28 \/ 97%\);/s,
+    );
   });
 
   it('默认打开节点画布，并提供中文全局导航', async () => {

@@ -458,6 +458,7 @@ describe('workbench canvas', () => {
     const onClose = vi.fn();
     render(
       <NodeTypePicker
+        activeTool="blend"
         position={{ x: 640, y: 360 }}
         onClose={onClose}
         onSelect={onSelect}
@@ -468,8 +469,19 @@ describe('workbench canvas', () => {
     expect(within(picker).getAllByRole('button')).toHaveLength(9);
     expect(within(picker).getByRole('button', { name: '生成' })).toBeInTheDocument();
     expect(within(picker).getByRole('button', { name: '超分' })).toBeInTheDocument();
+    expect(within(picker).getByRole('button', { name: '融图' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(picker).getAllByText('生成')).toHaveLength(1);
     expect(within(picker).queryByText('选择下一步操作')).not.toBeInTheDocument();
+
+    fireEvent.change(within(picker).getByRole('searchbox', { name: '搜索节点' }), {
+      target: { value: '超分' },
+    });
+    expect(within(picker).getByRole('button', { name: '超分' })).toBeInTheDocument();
+    expect(within(picker).queryByRole('button', { name: '融图' })).not.toBeInTheDocument();
+
+    fireEvent.change(within(picker).getByRole('searchbox', { name: '搜索节点' }), {
+      target: { value: '' },
+    });
 
     fireEvent.click(within(picker).getByRole('button', { name: '融图' }));
     expect(onSelect).toHaveBeenCalledWith('blend');
@@ -1304,18 +1316,23 @@ describe('workbench canvas', () => {
     expect(screen.getByRole('button', { name: '融图' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('brings the selected node into view when an image-surface tool opens', () => {
+  it('brings the selected node into view after the docked editor finishes opening', async () => {
     reactFlowMocks.fitView.mockClear();
+    reactFlowMocks.setViewport.mockClear();
     render(<WorkbenchHarness />);
 
     fireEvent.click(screen.getByRole('button', { name: '扩图' }));
 
-    expect(reactFlowMocks.fitView).toHaveBeenCalledWith({
-      duration: 260,
-      maxZoom: 1,
-      nodes: [{ id: 'scene:scene-source' }],
-      padding: { top: '64px', right: '456px', bottom: '64px', left: '24px' },
+    expect(reactFlowMocks.fitView).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(reactFlowMocks.fitView).toHaveBeenCalledWith({
+        duration: 260,
+        maxZoom: 1,
+        nodes: [{ id: 'scene:scene-source' }],
+        padding: { top: '48px', right: '32px', bottom: '72px', left: '120px' },
+      });
     });
+    expect(reactFlowMocks.setViewport).not.toHaveBeenCalled();
   });
 
   it('moves keyboard focus into the parameter dialog and returns it to its tool trigger on Escape', () => {

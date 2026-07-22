@@ -205,7 +205,7 @@ function WorkbenchContent({
   onRetrySave = () => undefined,
   onReloadState = () => undefined,
 }: WorkbenchProps) {
-  const { fitView, getViewport, screenToFlowPosition, setViewport } = useReactFlow();
+  const { fitView, screenToFlowPosition } = useReactFlow();
   const [interaction, dispatchInteraction] = useReducer(
     reduceWorkbenchInteraction,
     `scene:${state.selectedSceneId}`,
@@ -568,7 +568,7 @@ function WorkbenchContent({
     canvasPosition: { x: number; y: number },
   ) => {
     const stageBounds = getUsableStageBounds(canvasStageRef.current);
-    const picker = placeNodePicker(screenPoint, stageBounds, { width: 320, height: 420 }, 16);
+    const picker = placeNodePicker(screenPoint, stageBounds, { width: 320, height: 488 }, 16);
     dispatchInteraction({ type: 'BEGIN_NODE_CONNECTION', sourceNodeId });
     dispatchInteraction({
       type: 'SHOW_NODE_PICKER',
@@ -606,8 +606,7 @@ function WorkbenchContent({
       cancelDraftNode();
       return;
     }
-    const target = event.target;
-    if (!(target instanceof Element) || !target.classList.contains('react-flow__pane')) {
+    if (!isCanvasNodeCreationDropTarget(event.target, canvasStageRef.current)) {
       cancelDraftNode();
       return;
     }
@@ -615,7 +614,8 @@ function WorkbenchContent({
     const pointer = 'changedTouches' in event ? event.changedTouches[0] : event;
     const screenPoint = { x: pointer.clientX, y: pointer.clientY };
     const stageBounds = getUsableStageBounds(canvasStageRef.current);
-    const picker = placeNodePicker(screenPoint, stageBounds, { width: 320, height: 420 }, 16);
+    const picker = placeNodePicker(screenPoint, stageBounds, { width: 320, height: 488 }, 16);
+    dispatchInteraction({ type: 'BEGIN_NODE_CONNECTION', sourceNodeId: connectionState.fromNode.id });
     dispatchInteraction({
       type: 'SHOW_NODE_PICKER',
       screenPosition: picker.position,
@@ -676,6 +676,19 @@ function WorkbenchContent({
     return () => window.clearTimeout(timeoutId);
   }, [fitView, graph.nodes.length]);
 
+  useEffect(() => {
+    if (!interaction.panelOpen || !selectedNodeId) return;
+    const timeoutId = window.setTimeout(() => {
+      void fitView({
+        duration: 260,
+        maxZoom: 1,
+        nodes: [{ id: selectedNodeId }],
+        padding: { top: '48px', right: '32px', bottom: '72px', left: '120px' },
+      });
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [fitView, interaction.panelOpen, selectedNodeId]);
+
   const handleToolSelect = (tool: TaskProfileId, trigger: HTMLButtonElement) => {
     markUserGesture();
     toolTriggerRef.current = trigger;
@@ -694,23 +707,6 @@ function WorkbenchContent({
       dispatchInteraction({
         type: 'SET_PANEL_PLACEMENT',
         placement: panelPlacement,
-      });
-    }
-    if (selectedNodeId) {
-      void fitView({
-        duration: 260,
-        maxZoom: 1,
-        nodes: [{ id: selectedNodeId }],
-        padding: panelPlacement === 'left'
-          ? { top: '64px', right: '24px', bottom: '64px', left: '456px' }
-          : { top: '64px', right: '456px', bottom: '64px', left: '24px' },
-      }).then((didFit) => {
-        if (!didFit) return;
-        const viewport = getViewport();
-        void setViewport({
-          ...viewport,
-          x: viewport.x + (panelPlacement === 'left' ? 140 : -140),
-        }, { duration: 120 });
       });
     }
   };
@@ -1149,6 +1145,7 @@ function WorkbenchContent({
         )}
         {interaction.mode === 'choosing-node-type' && interaction.draftNode && (
           <NodeTypePicker
+            activeTool={activeTool}
             onClose={cancelDraftNode}
             onSelect={handleDraftToolSelect}
             position={interaction.draftNode.screenPosition}
@@ -1451,6 +1448,24 @@ function getDroppableNodeId(target: EventTarget): string {
   const nodeId = target.closest<HTMLElement>('.react-flow__node')?.dataset.id ?? '';
   const parsed = parseCanvasNodeId(nodeId);
   return parsed && parsed.kind !== 'job' ? nodeId : '';
+}
+
+function isCanvasNodeCreationDropTarget(target: EventTarget | null, stage: HTMLElement | null): boolean {
+  if (!(target instanceof Element) || !stage?.contains(target)) return false;
+  return !target.closest([
+    '.react-flow__node',
+    '.react-flow__controls',
+    '.react-flow__minimap',
+    '.tool-palette',
+    '.canvas-command-bar',
+    '.context-panel',
+    '.node-type-picker',
+    '.asset-picker',
+    '.task-tray',
+    '.result-compare-tray',
+    '.result-inspector',
+    '.node-command-dialog',
+  ].join(','));
 }
 
 function getUsableStageBounds(stage: HTMLElement | null) {

@@ -118,6 +118,13 @@ try {
       && !globalThis.getComputedStyle(four).backgroundColor.includes('47, 111, 237'),
     );
   });
+  await page.waitForFunction(() => {
+    const panel = globalThis.document.querySelector('[aria-label="生成参数"]');
+    const sourceNode = Array.from(globalThis.document.querySelectorAll('.react-flow__node'))
+      .find((node) => node.querySelector('img[alt="E2E 商品图"]'));
+    if (!panel || !sourceNode) return false;
+    return sourceNode.getBoundingClientRect().right <= panel.getBoundingClientRect().left - 12;
+  });
   if (captureEvidence) {
     await page.screenshot({
       path: join(evidenceDirectory, 'image-mvp-workbench-editor-2026-07-23.png'),
@@ -148,6 +155,12 @@ try {
   const inspector = page.getByRole('complementary', { name: '结果详情' });
   await inspector.getByText('E2E 商品图 / v1').waitFor();
   await inspector.getByText('生成 1').waitFor();
+  await page.waitForFunction(() => {
+    const element = globalThis.document.querySelector('[aria-label="结果详情"]');
+    if (!element) return false;
+    const styles = globalThis.getComputedStyle(element);
+    return styles.opacity === '1' && styles.backgroundColor.includes('0.97');
+  });
   const inspectorOwnsTopLayer = await inspector.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
     const topElement = globalThis.document.elementFromPoint(
