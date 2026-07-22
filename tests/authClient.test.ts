@@ -7,7 +7,7 @@ import {
   logout,
   setActiveProjectId,
   withCsrfProtection,
-} from '../src/auth/authClient';
+} from '../src/client/auth/authClient';
 
 const user = {
   id: 'user-1',

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { completeJob, createJob, initialStudioState, submitForReview } from '../src/domain';
+import { completeJob, createJob, initialStudioState, submitForReview } from '../src/shared/domain';
 import {
   parseStudioState,
   StudioStateValidationError,
-} from '../src/studio/studioStateSchema';
+} from '../src/shared/studio/studioStateSchema';
 
 function populatedState() {
   const queued = createJob(initialStudioState(), {

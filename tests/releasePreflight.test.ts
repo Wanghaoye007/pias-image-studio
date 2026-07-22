@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runReleasePreflight } from '../scripts/release-preflight-core.mjs';
-import { openPiasDatabase } from '../src/persistence/sqliteDatabase';
+import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
 
 const directories: string[] = [];
 

@@ -4,7 +4,7 @@ import {
   prepareImageUrlForFal,
   resumeFalImageJob,
   runFalImageJob,
-} from '../src/fal/falImageClient';
+} from '../src/client/fal/falImageClient';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

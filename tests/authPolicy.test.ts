@@ -4,7 +4,7 @@ import {
   requirePermission,
   type AuthContext,
   type Permission,
-} from '../src/auth/authPolicy';
+} from '../src/server/auth/authPolicy';
 
 function context(role: AuthContext['role'], projectIds = ['project-a']): AuthContext {
   return {

@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AuthContext } from '../src/auth/authPolicy';
-import { generateTotp, IdentityService } from '../src/auth/identityService';
+import type { AuthContext } from '../src/server/auth/authPolicy';
+import { generateTotp, IdentityService } from '../src/server/auth/identityService';
 import {
   OrganizationError,
   createOrganizationService,
-} from '../src/organization/organizationService';
-import { openPiasDatabase } from '../src/persistence/sqliteDatabase';
+} from '../src/server/organization/organizationService';
+import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
 
 const directories: string[] = [];
 const now = '2026-07-22T06:30:00.000Z';

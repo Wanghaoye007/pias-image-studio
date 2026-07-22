@@ -6,8 +6,8 @@ import {
   type FalQueueAdapter,
   type FalQueuePersistence,
   type PersistedFalJob,
-} from '../src/fal/falQueueService';
-import type { FalToolRequest } from '../src/fal/toolWorkflows';
+} from '../src/worker/fal/falQueueService';
+import type { FalToolRequest } from '../src/shared/fal/toolWorkflows';
 
 function request(overrides: Partial<FalToolRequest> = {}): FalToolRequest {
   return {

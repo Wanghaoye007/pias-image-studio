@@ -4,15 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { initialStudioState } from '../src/domain';
-import { createScopedFalQueuePersistence } from '../src/fal/falJobPersistence';
-import { createSqliteFalQueuePersistence } from '../src/fal/falSqlitePersistence';
-import type { PersistedFalJob } from '../src/fal/falQueueService';
-import { openPiasDatabase, scopeStorageKey } from '../src/persistence/sqliteDatabase';
+import { initialStudioState } from '../src/shared/domain';
+import { createScopedFalQueuePersistence } from '../src/worker/fal/falJobPersistence';
+import { createSqliteFalQueuePersistence } from '../src/worker/fal/falSqlitePersistence';
+import type { PersistedFalJob } from '../src/worker/fal/falQueueService';
+import { openPiasDatabase, scopeStorageKey } from '../src/server/persistence/sqliteDatabase';
 import {
   createScopedStudioStatePersistence,
   createSqliteStudioStatePersistence,
-} from '../src/studio/studioStatePersistence';
+} from '../src/server/studio/studioStatePersistence';
 
 const directories: string[] = [];
 const scope = { tenantId: 'tenant-a', projectId: 'project-a' };

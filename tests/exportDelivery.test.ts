@@ -3,14 +3,14 @@ import {
   buildManifestArtifacts,
   resolveOutputDimensions,
   serializeManifestCsv,
-} from '../src/exportDelivery';
+} from '../src/client/export/exportDelivery';
 import {
   approveResult,
   completeJob,
   createJob,
   initialStudioState,
   submitForReview,
-} from '../src/domain';
+} from '../src/shared/domain';
 
 describe('production delivery artifacts', () => {
   it('never upscales while honoring the selected maximum edge', () => {

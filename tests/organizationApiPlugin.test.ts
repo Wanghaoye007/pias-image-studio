@@ -4,10 +4,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AuthContext } from '../src/auth/authPolicy';
-import { createOrganizationMiddleware } from '../src/organization/organizationPlugin';
-import { createOrganizationService } from '../src/organization/organizationService';
-import { openPiasDatabase } from '../src/persistence/sqliteDatabase';
+import type { AuthContext } from '../src/server/auth/authPolicy';
+import { createOrganizationMiddleware } from '../src/server/organization/organizationPlugin';
+import { createOrganizationService } from '../src/server/organization/organizationService';
+import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
 
 const directories: string[] = [];
 const context: AuthContext = {

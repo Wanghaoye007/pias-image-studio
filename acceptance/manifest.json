@@ -11,7 +11,7 @@
       "required": true,
       "status": "pass",
       "summary": "八类图片任务可从画布提交到 Fal 队列并生成结果",
-      "evidence": "src/workbench/Workbench.tsx; src/fal/falQueueService.ts; tests/workbench.test.tsx"
+      "evidence": "src/client/workbench/Workbench.tsx; src/worker/fal/falQueueService.ts; tests/workbench.test.tsx"
     },
     {
       "id": "DATA-001",
@@ -20,7 +20,7 @@
       "required": true,
       "status": "pass",
       "summary": "StudioState 使用 SQLite WAL/FULL 与 BEGIN IMMEDIATE 事务，跨连接 revision 冲突可控；具备离页写入保护、在线校验备份、默认 dry-run 恢复、回滚副本和旧范围文件迁移",
-      "evidence": "src/persistence/sqliteDatabase.ts; src/studio/studioStatePersistence.ts; src/studio/studioStatePlugin.ts; src/studio/usePersistentStudioState.ts; scripts/pias-database.mjs; scripts/migrate-to-sqlite.mjs; scripts/release-preflight-core.mjs; tests/studioStateSqlitePersistence.test.ts; tests/sqliteOperations.test.ts; tests/releasePreflight.test.ts; tests/app.test.tsx; docs/operations/database-runbook.md; docs/operations/release-preflight.md"
+      "evidence": "src/server/persistence/sqliteDatabase.ts; src/server/studio/studioStatePersistence.ts; src/server/studio/studioStatePlugin.ts; src/client/studio/usePersistentStudioState.ts; scripts/pias-database.mjs; scripts/migrate-to-sqlite.mjs; scripts/release-preflight-core.mjs; tests/studioStateSqlitePersistence.test.ts; tests/sqliteOperations.test.ts; tests/releasePreflight.test.ts; tests/app.test.tsx; docs/operations/database-runbook.md; docs/operations/release-preflight.md"
     },
     {
       "id": "AUTH-001",
@@ -29,7 +29,7 @@
       "required": true,
       "status": "pass",
       "summary": "密码、MFA、会话、CSRF、Tenant/Project 守卫与服务端命令级 RBAC 已闭环；状态审计和审核人由可信会话覆盖，Fal 任务取消校验可信创建人",
-      "evidence": "src/auth/identityService.ts; src/auth/authPolicy.ts; src/auth/authApiPlugin.ts; src/studio/studioStateAuthorization.ts; src/studio/studioStatePlugin.ts; src/fal/falQueueService.ts; src/fal/falProxyPlugin.ts; tests/identityService.test.ts; tests/authPolicy.test.ts; tests/authApiPlugin.test.ts; tests/studioStateAuthorization.test.ts; tests/authRoleE2E.test.ts; tests/falQueueService.test.ts"
+      "evidence": "src/server/auth/identityService.ts; src/server/auth/authPolicy.ts; src/server/auth/authApiPlugin.ts; src/server/studio/studioStateAuthorization.ts; src/server/studio/studioStatePlugin.ts; src/worker/fal/falQueueService.ts; src/server/fal/falProxyPlugin.ts; tests/identityService.test.ts; tests/authPolicy.test.ts; tests/authApiPlugin.test.ts; tests/studioStateAuthorization.test.ts; tests/authRoleE2E.test.ts; tests/falQueueService.test.ts"
     },
     {
       "id": "ISOLATION-001",
@@ -38,7 +38,7 @@
       "required": true,
       "status": "pass",
       "summary": "业务 API、StudioState、素材文件与 Fal 请求映射均绑定可信 Tenant/Project 并按范围哈希分区，原生图片请求也经过会话授权，且具备保守迁移与回滚",
-      "evidence": "src/auth/authPolicy.ts; src/auth/authApiPlugin.ts; src/auth/authClient.ts; src/studio/studioStatePersistence.ts; src/studio/studioStatePlugin.ts; src/assets/assetImageStorage.ts; src/assets/assetImagePlugin.ts; src/fal/falJobPersistence.ts; src/fal/falProxyPlugin.ts; tests/authPolicy.test.ts; tests/authApiPlugin.test.ts; tests/studioStatePersistence.test.ts; tests/assetImageStorage.test.ts; tests/assetImagePlugin.test.ts; tests/falJobPersistence.test.ts; tests/migrateStudioState.test.ts; tests/migrateProjectStorage.test.ts; docs/operations/tenant-state-migration.md"
+      "evidence": "src/server/auth/authPolicy.ts; src/server/auth/authApiPlugin.ts; src/client/auth/authClient.ts; src/server/studio/studioStatePersistence.ts; src/server/studio/studioStatePlugin.ts; src/server/assets/assetImageStorage.ts; src/server/assets/assetImagePlugin.ts; src/worker/fal/falJobPersistence.ts; src/server/fal/falProxyPlugin.ts; tests/authPolicy.test.ts; tests/authApiPlugin.test.ts; tests/studioStatePersistence.test.ts; tests/assetImageStorage.test.ts; tests/assetImagePlugin.test.ts; tests/falJobPersistence.test.ts; tests/migrateStudioState.test.ts; tests/migrateProjectStorage.test.ts; docs/operations/tenant-state-migration.md"
     },
     {
       "id": "JOB-001",
@@ -47,7 +47,7 @@
       "required": true,
       "status": "pass",
       "summary": "任务覆盖预检、排队、运行、后处理、部分成功、取消请求、失败、取消和过期状态",
-      "evidence": "src/domain.ts; src/workbench/Workbench.tsx; tests/domain.test.ts; tests/workbench.test.tsx; tests/studioStateSchema.test.ts"
+      "evidence": "src/shared/domain.ts; src/client/workbench/Workbench.tsx; tests/domain.test.ts; tests/workbench.test.tsx; tests/studioStateSchema.test.ts"
     },
     {
       "id": "USAGE-001",
@@ -56,7 +56,7 @@
       "required": true,
       "status": "partial",
       "summary": "客户侧已实现不可变 Reserve/Charge/Release 台账、部分成功按输出结算及失败/取消释放；供应商成本已接入私有 Billing Events 对账与自动补偿，但当前凭证对 Admin API 返回 403，生产 Admin Key 尚未通过预检",
-      "evidence": "src/domain.ts; src/studio/studioStateAuthorization.ts; src/fal/falBillingClient.ts; src/fal/falQueueService.ts; src/fal/falRecoveryWorker.ts; scripts/check-fal-billing-access.mjs; scripts/release-preflight-core.mjs; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/workbench.test.tsx; tests/falBillingClient.test.ts; tests/falBillingPreflight.test.ts; tests/releasePreflight.test.ts; tests/falQueueService.test.ts; docs/operations/release-preflight.md"
+      "evidence": "src/shared/domain.ts; src/server/studio/studioStateAuthorization.ts; src/server/fal/falBillingClient.ts; src/worker/fal/falQueueService.ts; src/worker/fal/falRecoveryWorker.ts; scripts/check-fal-billing-access.mjs; scripts/release-preflight-core.mjs; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/workbench.test.tsx; tests/falBillingClient.test.ts; tests/falBillingPreflight.test.ts; tests/releasePreflight.test.ts; tests/falQueueService.test.ts; docs/operations/release-preflight.md"
     },
     {
       "id": "RECOVERY-001",
@@ -65,7 +65,7 @@
       "required": true,
       "status": "pass",
       "summary": "Fal 作业、两阶段恢复载荷与租约持久化到按 Tenant/Project 隔离的 SQLite；后台 Worker 支持慢调用续租、同主机跨进程互斥、过期接管和重启后自动推进",
-      "evidence": "src/fal/falQueueService.ts; src/fal/falSqlitePersistence.ts; src/fal/falRecoveryWorker.ts; src/fal/falProxyPlugin.ts; tests/falQueueService.test.ts; tests/falSqliteRecovery.test.ts; tests/sqliteOperations.test.ts; docs/operations/database-runbook.md"
+      "evidence": "src/worker/fal/falQueueService.ts; src/worker/fal/falSqlitePersistence.ts; src/worker/fal/falRecoveryWorker.ts; src/server/fal/falProxyPlugin.ts; tests/falQueueService.test.ts; tests/falSqliteRecovery.test.ts; tests/sqliteOperations.test.ts; docs/operations/database-runbook.md"
     },
     {
       "id": "OPS-001",
@@ -83,7 +83,7 @@
       "required": true,
       "status": "pass",
       "summary": "取消、失败/过期重试、审核撤回、退回与驳回均具备状态守卫；修改后重试创建独立 Job/Result 并保留 retry/supersedes 血缘、独立额度结算、可信角色、5-500 字原因、站内通知和不可变审计",
-      "evidence": "src/domain.ts; src/studio/studioStateAuthorization.ts; src/studio/studioStateSchema.ts; src/workbench/Workbench.tsx; src/SecondaryViews.tsx; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/studioStateSchema.test.ts; tests/workbench.test.tsx; tests/app.test.tsx"
+      "evidence": "src/shared/domain.ts; src/server/studio/studioStateAuthorization.ts; src/shared/studio/studioStateSchema.ts; src/client/workbench/Workbench.tsx; src/client/pages/SecondaryViews.tsx; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/studioStateSchema.test.ts; tests/workbench.test.tsx; tests/app.test.tsx"
     },
     {
       "id": "REVIEW-001",
@@ -92,7 +92,7 @@
       "required": true,
       "status": "pass",
       "summary": "审核状态机与服务端 review.submit/review.decide 权限联动，审核人和新增审计事件 actor 均由可信会话覆盖，历史审计不可删改",
-      "evidence": "src/domain.ts review functions; src/studio/studioStateAuthorization.ts; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/authRoleE2E.test.ts"
+      "evidence": "src/shared/domain.ts review functions; src/server/studio/studioStateAuthorization.ts; tests/domain.test.ts; tests/studioStateAuthorization.test.ts; tests/authRoleE2E.test.ts"
     },
     {
       "id": "UI-001",
@@ -101,7 +101,7 @@
       "required": true,
       "status": "pass",
       "summary": "素材上传、项目创建/切换/刷新恢复、成员邀请/重新签发和成员生命周期编辑均连接真实持久化 API；本机模式明确禁用企业操作，无动作表头入口已移除，桌面与移动布局通过浏览器验收",
-      "evidence": "src/App.tsx; src/SecondaryViews.tsx; src/assets/assetImagePlugin.ts; src/organization/organizationClient.ts; tests/app.test.tsx; tests/organizationClient.test.ts; tests/assetImagePlugin.test.ts; docs/acceptance/evidence/pias-organization-project-2026-07-22.png; docs/acceptance/evidence/pias-organization-admin-2026-07-22.png; docs/acceptance/evidence/pias-member-lifecycle-2026-07-22.png; docs/acceptance/evidence/pias-invitation-resend-2026-07-22.jpg"
+      "evidence": "src/client/App.tsx; src/client/pages/SecondaryViews.tsx; src/server/assets/assetImagePlugin.ts; src/client/organization/organizationClient.ts; tests/app.test.tsx; tests/organizationClient.test.ts; tests/assetImagePlugin.test.ts; docs/acceptance/evidence/pias-organization-project-2026-07-22.png; docs/acceptance/evidence/pias-organization-admin-2026-07-22.png; docs/acceptance/evidence/pias-member-lifecycle-2026-07-22.png; docs/acceptance/evidence/pias-invitation-resend-2026-07-22.jpg"
     },
     {
       "id": "MEMBER-001",
@@ -110,7 +110,7 @@
       "required": true,
       "status": "partial",
       "summary": "一次性令牌、重新签发、成员生命周期和邮件 Outbox 代码已闭环；令牌密文、幂等 Webhook、租约、退避、取消与投递审计通过自动化测试，但正式邮件 Relay 与生产域名尚未配置并完成真实收件验证",
-      "evidence": "src/organization/InvitationAcceptance.tsx; src/organization/organizationService.ts; src/organization/organizationPlugin.ts; src/organization/organizationClient.ts; src/organization/invitationEmailDelivery.ts; src/auth/identityService.ts; src/persistence/sqliteDatabase.ts; scripts/sqlite-common.mjs; scripts/release-preflight-core.mjs; tests/app.test.tsx; tests/organizationClient.test.ts; tests/organizationService.test.ts; tests/organizationApiPlugin.test.ts; tests/invitationEmailDelivery.test.ts; tests/authApiPlugin.test.ts; tests/identityService.test.ts; tests/sqliteOperations.test.ts; tests/releasePreflight.test.ts; docs/operations/organization-management.md; docs/operations/release-preflight.md; docs/acceptance/evidence/pias-member-lifecycle-2026-07-22.png; docs/acceptance/evidence/pias-invitation-resend-2026-07-22.jpg"
+      "evidence": "src/client/organization/InvitationAcceptance.tsx; src/server/organization/organizationService.ts; src/server/organization/organizationPlugin.ts; src/client/organization/organizationClient.ts; src/worker/organization/invitationEmailDelivery.ts; src/server/auth/identityService.ts; src/server/persistence/sqliteDatabase.ts; scripts/sqlite-common.mjs; scripts/release-preflight-core.mjs; tests/app.test.tsx; tests/organizationClient.test.ts; tests/organizationService.test.ts; tests/organizationApiPlugin.test.ts; tests/invitationEmailDelivery.test.ts; tests/authApiPlugin.test.ts; tests/identityService.test.ts; tests/sqliteOperations.test.ts; tests/releasePreflight.test.ts; docs/operations/organization-management.md; docs/operations/release-preflight.md; docs/acceptance/evidence/pias-member-lifecycle-2026-07-22.png; docs/acceptance/evidence/pias-invitation-resend-2026-07-22.jpg"
     },
     {
       "id": "TRACE-001",
@@ -119,7 +119,7 @@
       "required": true,
       "status": "pass",
       "summary": "结果保留模型、请求 ID、参数、种子、时间和上游来源",
-      "evidence": "src/domain.ts ResultGenerationMetadata; src/fal/falJobRunner.ts"
+      "evidence": "src/shared/domain.ts ResultGenerationMetadata; src/worker/fal/falQueueService.ts"
     },
     {
       "id": "LINEAGE-001",
@@ -128,7 +128,7 @@
       "required": true,
       "status": "pass",
       "summary": "结果派生场景和版本血缘具有状态守卫与审计事件",
-      "evidence": "src/domain.ts createDerivedScene; tests/domain.test.ts"
+      "evidence": "src/shared/domain.ts createDerivedScene; tests/domain.test.ts"
     },
     {
       "id": "EXPORT-001",
@@ -137,7 +137,7 @@
       "required": true,
       "status": "pass",
       "summary": "生产导出限制为已批准结果并生成清单和审计记录",
-      "evidence": "src/domain.ts export functions; tests/domain.test.ts"
+      "evidence": "src/shared/domain.ts export functions; tests/domain.test.ts"
     }
   ],
   "automation": [

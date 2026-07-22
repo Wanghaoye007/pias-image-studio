@@ -2,10 +2,10 @@ import { StrictMode } from 'react';
 import { readFileSync } from 'node:fs';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import App from '../src/App';
-import { getAuditTargetLabel } from '../src/SecondaryViews';
-import { initialStudioState } from '../src/domain';
-import { createDemoStudioState } from '../src/studio/demoState';
+import App from '../src/client/App';
+import { getAuditTargetLabel } from '../src/client/pages/SecondaryViews';
+import { initialStudioState } from '../src/shared/domain';
+import { createDemoStudioState } from '../src/client/studio/demoState';
 
 const deliveryMocks = vi.hoisted(() => ({
   downloadProductionDelivery: vi.fn(() => Promise.resolve(['result.png', 'manifest.csv', 'manifest.json'])),
@@ -49,16 +49,16 @@ const organizationClientMocks = vi.hoisted(() => ({
   updateMember: vi.fn(),
 }));
 
-vi.mock('../src/exportDelivery', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../src/exportDelivery')>()),
+vi.mock('../src/client/export/exportDelivery', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/client/export/exportDelivery')>()),
   ...deliveryMocks,
 }));
 
-vi.mock('../src/fal/falImageClient', () => falClientMocks);
-vi.mock('../src/assets/assetImageClient', () => assetImageClientMocks);
-vi.mock('../src/studio/studioStateClient', () => stateClientMocks);
-vi.mock('../src/auth/authClient', () => authClientMocks);
-vi.mock('../src/organization/organizationClient', () => organizationClientMocks);
+vi.mock('../src/client/fal/falImageClient', () => falClientMocks);
+vi.mock('../src/client/assets/assetImageClient', () => assetImageClientMocks);
+vi.mock('../src/client/studio/studioStateClient', () => stateClientMocks);
+vi.mock('../src/client/auth/authClient', () => authClientMocks);
+vi.mock('../src/client/organization/organizationClient', () => organizationClientMocks);
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -149,7 +149,7 @@ describe('PIAS 中文应用框架', () => {
     });
   });
   it('参数面板方向与画布落点语义保持一致', () => {
-    const styles = readFileSync(`${process.cwd()}/src/styles.css`, 'utf8');
+    const styles = readFileSync(`${process.cwd()}/src/client/styles/styles.css`, 'utf8');
 
     expect(styles).toMatch(
       /\.context-panel\[data-placement="left"\]\s*\{[^}]*left:\s*76px;[^}]*right:\s*auto;/s,
@@ -160,7 +160,7 @@ describe('PIAS 中文应用框架', () => {
   });
 
   it('移动端样式明确隐藏新增节点编辑控件', () => {
-    const styles = readFileSync(`${process.cwd()}/src/styles.css`, 'utf8');
+    const styles = readFileSync(`${process.cwd()}/src/client/styles/styles.css`, 'utf8');
     const mobileRules = styles.slice(styles.indexOf('@media (max-width: 767px)'));
 
     expect(mobileRules).toMatch(
@@ -170,7 +170,7 @@ describe('PIAS 中文应用框架', () => {
   });
 
   it('选中节点拖拽时使用收敛阴影且不显示外圈亮光', () => {
-    const styles = readFileSync(`${process.cwd()}/src/soft-glass.css`, 'utf8');
+    const styles = readFileSync(`${process.cwd()}/src/client/styles/soft-glass.css`, 'utf8');
 
     expect(styles).toMatch(
       /\.react-flow__node\.selected\.dragging \.canvas-node\s*\{[^}]*border-color:\s*rgb\(242 244 247 \/ 38%\);[^}]*box-shadow:\s*var\(--highlight-inset\),\s*0 8px 18px rgb\(0 0 0 \/ 26%\);/s,

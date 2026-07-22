@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { generateTotp, hashPassword } from '../src/auth/identityService';
-import { openPiasDatabase } from '../src/persistence/sqliteDatabase';
+import { generateTotp, hashPassword } from '../src/server/auth/identityService';
+import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
 import { createProductionServer } from '../src/server/productionServer';
 
 const directories: string[] = [];

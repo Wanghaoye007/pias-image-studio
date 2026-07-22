@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseFalKey } from '../src/fal/falCredentials';
+import { parseFalKey } from '../src/server/fal/falCredentials';
 import {
   buildMultipleAnglesInput,
   FAL_MULTIPLE_ANGLES_MODEL,
-} from '../src/fal/multipleAngles';
+} from '../src/shared/fal/multipleAngles';
 
 describe('Fal 多角度输入契约', () => {
   it('使用官方模型 ID，并把工作台参数映射为 Fal 输入', () => {

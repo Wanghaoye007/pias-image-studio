@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createInitialInteractionState,
   reduceWorkbenchInteraction,
-} from '../src/workbench/interactionMachine';
+} from '../src/client/workbench/interactionMachine';
 
 describe('workbench interaction machine', () => {
   it('opens a tool against the selected node and enters its editing mode', () => {

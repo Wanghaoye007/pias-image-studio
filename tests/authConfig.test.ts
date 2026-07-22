@@ -2,8 +2,8 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadIdentityServiceFromConfig } from '../src/auth/authConfig';
-import { hashPassword } from '../src/auth/identityService';
+import { loadIdentityServiceFromConfig } from '../src/server/auth/authConfig';
+import { hashPassword } from '../src/server/auth/identityService';
 
 const directories: string[] = [];
 

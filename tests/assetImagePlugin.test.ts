@@ -3,8 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createAssetImageMiddleware,
-} from '../src/assets/assetImagePlugin';
-import type { AssetImageStorage } from '../src/assets/assetImageStorage';
+} from '../src/server/assets/assetImagePlugin';
+import type { AssetImageStorage } from '../src/server/assets/assetImageStorage';
 
 function createStorage(): AssetImageStorage {
   return {

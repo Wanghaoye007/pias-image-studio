@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { readFalKey } from '../src/fal/falCredentials';
+import { readFalKey } from '../src/server/fal/falCredentials';
 
 describe('Fal credential loading', () => {
   let fileReader: ReturnType<typeof vi.fn<(path: string, encoding: 'utf8') => Promise<string>>>;

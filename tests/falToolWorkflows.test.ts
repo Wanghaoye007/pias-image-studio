@@ -4,7 +4,7 @@ import {
   buildFalWorkflowPlan,
   normalizeFalResult,
   type FalToolRequest,
-} from '../src/fal/toolWorkflows';
+} from '../src/shared/fal/toolWorkflows';
 
 function request(overrides: Partial<FalToolRequest> = {}): FalToolRequest {
   return {

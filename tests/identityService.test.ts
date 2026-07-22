@@ -6,7 +6,7 @@ import {
   hashPassword,
   validatePasswordPolicy,
   type AuthUser,
-} from '../src/auth/identityService';
+} from '../src/server/auth/identityService';
 
 const strongPassword = 'PIAS-release-2026!';
 const totpSecret = 'JBSWY3DPEHPK3PXP';

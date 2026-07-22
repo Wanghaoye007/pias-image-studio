@@ -14,20 +14,20 @@ import {
   submitForReview,
   type Result,
   type StudioState,
-} from '../src/domain';
+} from '../src/shared/domain';
 import {
   ResultCanvasNode,
   SceneCanvasNode,
   getJobStatusLabel,
   getReviewStatusLabel,
-} from '../src/workbench/CanvasNodes';
-import { DraftTaskNode } from '../src/workbench/DraftTaskNode';
-import { RemoveMaskOverlay } from '../src/workbench/CanvasOverlays';
-import { buildCanvasGraph, getOperationLabel } from '../src/workbench/graph';
-import { NodeTypePicker } from '../src/workbench/NodeTypePicker';
-import { ResultCompare } from '../src/workbench/ResultCompare';
-import { SceneRail } from '../src/workbench/SceneRail';
-import { Workbench } from '../src/workbench/Workbench';
+} from '../src/client/workbench/CanvasNodes';
+import { DraftTaskNode } from '../src/client/workbench/DraftTaskNode';
+import { RemoveMaskOverlay } from '../src/client/workbench/CanvasOverlays';
+import { buildCanvasGraph, getOperationLabel } from '../src/client/workbench/graph';
+import { NodeTypePicker } from '../src/client/workbench/NodeTypePicker';
+import { ResultCompare } from '../src/client/workbench/ResultCompare';
+import { SceneRail } from '../src/client/workbench/SceneRail';
+import { Workbench } from '../src/client/workbench/Workbench';
 
 const reactFlowMocks = vi.hoisted(() => ({
   fitView: vi.fn(() => Promise.resolve(true)),
@@ -78,12 +78,12 @@ const falClientMocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock('../src/exportDelivery', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../src/exportDelivery')>()),
+vi.mock('../src/client/export/exportDelivery', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/client/export/exportDelivery')>()),
   ...deliveryMocks,
 }));
 
-vi.mock('../src/fal/falImageClient', () => falClientMocks);
+vi.mock('../src/client/fal/falImageClient', () => falClientMocks);
 
 vi.mock('@xyflow/react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();

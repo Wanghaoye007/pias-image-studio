@@ -4,14 +4,14 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import sirv from 'sirv';
 import type { Connect, Plugin } from 'vite';
-import { assetImagePlugin } from '../assets/assetImagePlugin';
-import { authApiPlugin } from '../auth/authApiPlugin';
-import { loadIdentityServiceFromConfig } from '../auth/authConfig';
-import { readFalKey } from '../fal/falCredentials';
-import { falImageProxyPlugin } from '../fal/falProxyPlugin';
-import { loadInvitationEmailConfig } from '../organization/invitationEmailDelivery';
-import { organizationPlugin } from '../organization/organizationPlugin';
-import { studioStatePlugin } from '../studio/studioStatePlugin';
+import { assetImagePlugin } from './assets/assetImagePlugin';
+import { authApiPlugin } from './auth/authApiPlugin';
+import { loadIdentityServiceFromConfig } from './auth/authConfig';
+import { readFalKey } from './fal/falCredentials';
+import { falImageProxyPlugin } from './fal/falProxyPlugin';
+import { loadInvitationEmailConfig } from '../worker/organization/invitationEmailDelivery';
+import { organizationPlugin } from './organization/organizationPlugin';
+import { studioStatePlugin } from './studio/studioStatePlugin';
 import { healthPlugin } from './healthPlugin';
 import {
   type ProductionLogWriter,

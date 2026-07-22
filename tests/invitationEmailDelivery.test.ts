@@ -2,15 +2,15 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AuthContext } from '../src/auth/authPolicy';
-import { IdentityService } from '../src/auth/identityService';
+import type { AuthContext } from '../src/server/auth/authPolicy';
+import { IdentityService } from '../src/server/auth/identityService';
 import {
   createInvitationEmailDelivery,
   loadInvitationEmailConfig,
-} from '../src/organization/invitationEmailDelivery';
-import { createOrganizationService } from '../src/organization/organizationService';
-import { organizationPlugin } from '../src/organization/organizationPlugin';
-import { openPiasDatabase } from '../src/persistence/sqliteDatabase';
+} from '../src/worker/organization/invitationEmailDelivery';
+import { createOrganizationService } from '../src/server/organization/organizationService';
+import { organizationPlugin } from '../src/server/organization/organizationPlugin';
+import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
 
 const directories: string[] = [];
 const baseNow = '2026-07-22T08:00:00.000Z';

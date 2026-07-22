@@ -6,8 +6,8 @@ import {
   createAuthApiMiddleware,
   getRequestAuthContext,
   getRequestProjectScope,
-} from '../src/auth/authApiPlugin';
-import { hashPassword, IdentityService, type AuthUser } from '../src/auth/identityService';
+} from '../src/server/auth/authApiPlugin';
+import { hashPassword, IdentityService, type AuthUser } from '../src/server/auth/identityService';
 import {
   approveResult,
   completeJob,
@@ -15,13 +15,13 @@ import {
   initialStudioState,
   submitForReview,
   type StudioState,
-} from '../src/domain';
-import { authorizeStudioStateWrite } from '../src/studio/studioStateAuthorization';
+} from '../src/shared/domain';
+import { authorizeStudioStateWrite } from '../src/server/studio/studioStateAuthorization';
 import type {
   PersistedStudioSnapshot,
   StudioStatePersistence,
-} from '../src/studio/studioStatePersistence';
-import { createStudioStateMiddleware } from '../src/studio/studioStatePlugin';
+} from '../src/server/studio/studioStatePersistence';
+import { createStudioStateMiddleware } from '../src/server/studio/studioStatePlugin';
 
 const password = 'PIAS-release-2026!';
 const projectId = 'project-a';

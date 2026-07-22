@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthBoundary } from '../src/auth/AuthBoundary';
+import { AuthBoundary } from '../src/client/auth/AuthBoundary';
 
 const authClientMocks = vi.hoisted(() => ({
   completeMfa: vi.fn(),
@@ -11,7 +11,7 @@ const authClientMocks = vi.hoisted(() => ({
   setActiveProjectId: vi.fn(),
 }));
 
-vi.mock('../src/auth/authClient', () => authClientMocks);
+vi.mock('../src/client/auth/authClient', () => authClientMocks);
 
 const user = {
   id: 'user-1',

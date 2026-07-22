@@ -5,7 +5,7 @@ import {
   isUserViewportGesture,
   placeNodePicker,
   shouldApplyAutoFocus,
-} from '../src/workbench/viewportDirector';
+} from '../src/client/workbench/viewportDirector';
 
 describe('viewport director', () => {
   const viewport = { left: 240, right: 1440, top: 48, bottom: 900 };

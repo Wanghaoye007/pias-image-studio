@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   createFileAssetImageStorage,
   createScopedAssetImageStorage,
-} from '../src/assets/assetImageStorage';
+} from '../src/server/assets/assetImageStorage';
 
 const directories: string[] = [];
 

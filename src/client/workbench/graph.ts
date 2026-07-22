@@ -1,0 +1,260 @@
+import type { Edge, Node } from '@xyflow/react';
+import {
+  getProfile,
+  type Result,
+  type Scene,
+  type StudioState,
+  type TaskParameters,
+  type TaskProfileId,
+} from '../../shared/domain';
+import type { DraftNodeCreation, InteractionMode } from './interactionMachine';
+
+const operationLabels: Record<string, string> = {
+  Generate: '生成',
+  Blend: '融图',
+  'Directional Light': '定向光',
+  'Quick Angle': '多角度',
+  '快速视角': '多角度',
+  Expand: '扩图',
+  Upscale: '超分',
+  Remove: '去除',
+  Extract: '抠图',
+};
+const knownChineseOperations = new Set([
+  '生成',
+  '融图',
+  '定向光',
+  '多角度',
+  '扩图',
+  '超分',
+  '去除',
+  '抠图',
+  '商品素材',
+  '其他处理',
+]);
+
+export function getOperationLabel(operation: string): string {
+  if (operationLabels[operation]) return operationLabels[operation];
+  return knownChineseOperations.has(operation) ? operation : '其他处理';
+}
+
+export function getSceneTitle(scene: Pick<Scene, 'operation' | 'title'>): string {
+  const operationLabel = getOperationLabel(scene.operation);
+  return operationLabel === scene.operation
+    ? scene.title
+    : scene.title.replace(scene.operation, operationLabel);
+}
+
+export type CanvasNodeActions = {
+  onDerive?: (result: Result) => void;
+  onSubmitReview?: (resultId: string) => void;
+  onWithdrawReview?: (resultId: string) => void;
+  onReviseResult?: (resultId: string) => void;
+  onCreateNode?: (sourceNodeId: string) => void;
+  onToggleFavorite?: (resultId: string) => void;
+  onToggleAdoption?: (resultId: string) => void;
+  onSetPrimary?: (resultId: string) => void;
+  onToggleCompare?: (resultId: string) => void;
+  onOpenDetails?: (resultId: string) => void;
+};
+
+export type SceneNodeData = {
+  kind: 'scene';
+  scene: StudioState['scenes'][number];
+  results: Result[];
+  selected: boolean;
+  actions?: CanvasNodeActions;
+  activeTool: TaskProfileId;
+  interactionMode?: InteractionMode;
+  parameters?: TaskParameters;
+  ratio?: string;
+  maskImageUrl?: string;
+  onMaskChange?: (maskImageUrl: string) => void;
+  onParameterChange?: (key: string, value: string | number | boolean) => void;
+};
+
+export type JobNodeData = {
+  kind: 'job';
+  job: StudioState['jobs'][number];
+  profile: ReturnType<typeof getProfile>;
+  previewImageUrl: string;
+};
+
+export type ResultNodeData = {
+  kind: 'result';
+  result: Result;
+  selected: boolean;
+  compareSelected?: boolean;
+  actions: CanvasNodeActions;
+  activeTool?: TaskProfileId;
+  interactionMode?: InteractionMode;
+  parameters?: TaskParameters;
+  ratio?: string;
+  maskImageUrl?: string;
+  onMaskChange?: (maskImageUrl: string) => void;
+  onParameterChange?: (key: string, value: string | number | boolean) => void;
+};
+
+export type DraftTaskNodeData = {
+  kind: 'draft-task';
+  tool: TaskProfileId;
+  sourceNodeId: string;
+  onCancel?: () => void;
+};
+
+export type CanvasGraphInteraction = {
+  mode: InteractionMode;
+  parameters: TaskParameters;
+  ratio: string;
+  maskImageUrl?: string;
+  dropTargetNodeId?: string;
+  compareResultIds?: string[];
+  draftNode?: DraftNodeCreation | null;
+  onCancelDraft?: () => void;
+  onParameterChange: (key: string, value: string | number | boolean) => void;
+  onMaskChange?: (maskImageUrl: string) => void;
+};
+
+export type CanvasGraph = {
+  nodes: Node<SceneNodeData | JobNodeData | ResultNodeData | DraftTaskNodeData>[];
+  edges: Edge[];
+};
+
+export function buildCanvasGraph(
+  state: StudioState,
+  selectedNodeId: string,
+  activeTool: TaskProfileId,
+  actions: CanvasNodeActions = {},
+  interaction?: CanvasGraphInteraction,
+): CanvasGraph {
+  const sceneNodes: Node<SceneNodeData>[] = state.scenes.map((scene) => ({
+    id: `scene:${scene.id}`,
+    type: 'scene',
+    position: { x: scene.x, y: scene.y },
+    className: interaction?.dropTargetNodeId === `scene:${scene.id}` ? 'is-asset-drop-target' : undefined,
+    data: {
+      kind: 'scene',
+      scene: {
+        ...scene,
+        operation: getOperationLabel(scene.operation),
+        title: getSceneTitle(scene),
+      },
+      results: state.results.filter((result) => scene.resultIds.includes(result.id)),
+      selected: selectedNodeId === `scene:${scene.id}`,
+      actions,
+      activeTool,
+      ...(interaction ? {
+        interactionMode: interaction.mode,
+        parameters: interaction.parameters,
+        ratio: interaction.ratio,
+        maskImageUrl: interaction.maskImageUrl,
+        onParameterChange: interaction.onParameterChange,
+        onMaskChange: interaction.onMaskChange,
+      } : {}),
+    },
+  }));
+  const jobNodes: Node<JobNodeData>[] = state.jobs.map((job) => ({
+    id: `job:${job.id}`,
+    type: 'job',
+    position: { x: job.x, y: job.y },
+    className: interaction?.dropTargetNodeId === `job:${job.id}` ? 'is-asset-drop-target' : undefined,
+    data: {
+      kind: 'job',
+      job,
+      profile: getProfile(job.profileId),
+      previewImageUrl: state.scenes.find((scene) => scene.id === job.sceneId)?.imageUrl ?? '',
+    },
+  }));
+  const resultNodes: Node<ResultNodeData>[] = state.results.map((result) => ({
+    id: `result:${result.id}`,
+    type: 'result',
+    position: { x: result.x, y: result.y },
+    className: interaction?.dropTargetNodeId === `result:${result.id}` ? 'is-asset-drop-target' : undefined,
+    data: {
+      kind: 'result',
+      result,
+      selected: selectedNodeId === `result:${result.id}`,
+      compareSelected: interaction?.compareResultIds?.includes(result.id) ?? false,
+      actions,
+      activeTool,
+      ...(interaction ? {
+        interactionMode: interaction.mode,
+        parameters: interaction.parameters,
+        ratio: interaction.ratio,
+        maskImageUrl: interaction.maskImageUrl,
+        onParameterChange: interaction.onParameterChange,
+        onMaskChange: interaction.onMaskChange,
+      } : {}),
+    },
+  }));
+
+  const draftNode = interaction?.draftNode?.selectedTool
+    ? {
+        id: 'draft:task',
+        type: 'draft-task',
+        position: interaction.draftNode.canvasPosition,
+        draggable: false,
+        selectable: false,
+        data: {
+          kind: 'draft-task' as const,
+          tool: interaction.draftNode.selectedTool,
+          sourceNodeId: interaction.draftNode.sourceNodeId,
+          onCancel: interaction.onCancelDraft,
+        },
+      }
+    : null;
+  const draftEdge = interaction?.draftNode?.selectedTool
+    ? {
+        id: 'draft-edge',
+        source: interaction.draftNode.sourceNodeId,
+        target: 'draft:task',
+        animated: true,
+        className: 'draft-edge',
+      }
+    : null;
+
+  return {
+    nodes: [...sceneNodes, ...jobNodes, ...resultNodes, ...(draftNode ? [draftNode] : [])],
+    edges: [...buildEdges(state), ...(draftEdge ? [draftEdge] : [])],
+  };
+}
+
+function buildEdges(state: StudioState): Edge[] {
+  const jobEdges: Edge[] = state.jobs.map((job) => ({
+    id: `scene-job:${job.id}`,
+    source: `scene:${job.sceneId}`,
+    target: `job:${job.id}`,
+    animated: job.status === 'preflight'
+      || job.status === 'queued'
+      || job.status === 'running'
+      || job.status === 'postprocessing'
+      || job.status === 'cancel_requested',
+    className: `lineage-edge is-${job.status}`,
+    ...(job.status === 'failed' || job.status === 'canceled' || job.status === 'expired'
+      ? { style: { strokeDasharray: '6 4' } }
+      : {}),
+  }));
+  const resultEdges: Edge[] = state.results.map((result) => ({
+    id: `job-result:${result.id}`,
+    source: `job:${result.jobId}`,
+    target: `result:${result.id}`,
+    className: 'lineage-edge is-succeeded',
+  }));
+  const derivedEdges: Edge[] = state.edges.map((edge) => ({
+    id: edge.id,
+    source: `result:${resolveDerivedResultId(state, edge.source, edge.target)}`,
+    target: `scene:${edge.target}`,
+    label: getOperationLabel(edge.label),
+    className: 'lineage-edge is-succeeded',
+  }));
+
+  return [...jobEdges, ...resultEdges, ...derivedEdges];
+}
+
+function resolveDerivedResultId(state: StudioState, sourceId: string, targetSceneId: string): string {
+  if (state.results.some((result) => result.id === sourceId)) {
+    return sourceId;
+  }
+
+  return state.scenes.find((scene) => scene.id === targetSceneId)?.sourceResultId ?? sourceId;
+}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { setActiveProjectId } from '../src/auth/authClient';
+import { setActiveProjectId } from '../src/client/auth/authClient';
 import {
   acceptInvitation,
   createInvitation,
@@ -11,7 +11,7 @@ import {
   resendInvitation,
   revokeInvitation,
   updateMember,
-} from '../src/organization/organizationClient';
+} from '../src/client/organization/organizationClient';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

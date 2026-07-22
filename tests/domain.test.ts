@@ -33,8 +33,8 @@ import {
   updateJobProgress,
   withdrawReview,
   expireJob,
-} from '../src/domain';
-import { FAL_MULTIPLE_ANGLES_MODEL } from '../src/fal/multipleAngles';
+} from '../src/shared/domain';
+import { FAL_MULTIPLE_ANGLES_MODEL } from '../src/shared/fal/multipleAngles';
 
 describe('Image Studio domain flow', () => {
   it('uploads a normalized asset and records a traceable audit event', () => {

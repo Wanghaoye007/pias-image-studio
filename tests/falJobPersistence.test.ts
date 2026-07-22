@@ -2,8 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createScopedFalQueuePersistence } from '../src/fal/falJobPersistence';
-import type { PersistedFalJob } from '../src/fal/falQueueService';
+import { createScopedFalQueuePersistence } from '../src/worker/fal/falJobPersistence';
+import type { PersistedFalJob } from '../src/worker/fal/falQueueService';
 
 const directories: string[] = [];
 

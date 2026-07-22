@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AuthContext } from '../src/auth/authPolicy';
+import type { AuthContext } from '../src/server/auth/authPolicy';
 import {
   approveResult,
   completeJob,
@@ -9,11 +9,11 @@ import {
   rejectResult,
   submitForReview,
   withdrawReview,
-} from '../src/domain';
+} from '../src/shared/domain';
 import {
   authorizeStudioStateWrite,
   StudioStateCommandError,
-} from '../src/studio/studioStateAuthorization';
+} from '../src/server/studio/studioStateAuthorization';
 
 const scope = { tenantId: 'tenant-a', projectId: 'project-a' };
 

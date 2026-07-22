@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openPiasDatabase } from '../src/persistence/sqliteDatabase';
+import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
 import {
   createHealthMiddleware,
   type HealthReadiness,

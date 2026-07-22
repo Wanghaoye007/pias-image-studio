@@ -2,21 +2,21 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openPiasDatabase, type PiasDatabase } from '../src/persistence/sqliteDatabase';
+import { openPiasDatabase, type PiasDatabase } from '../src/server/persistence/sqliteDatabase';
 import {
   createSqliteFalJobLeaseStore,
   createSqliteFalJobPayloadStore,
   createSqliteFalQueuePersistence,
-} from '../src/fal/falSqlitePersistence';
+} from '../src/worker/fal/falSqlitePersistence';
 import {
   createFalQueueService,
   type FalQueueAdapter,
   type PersistedFalJob,
-} from '../src/fal/falQueueService';
+} from '../src/worker/fal/falQueueService';
 import {
   createFalRecoveryWorker,
   runFalRecoveryCycle,
-} from '../src/fal/falRecoveryWorker';
+} from '../src/worker/fal/falRecoveryWorker';
 
 const directories: string[] = [];
 const databases: PiasDatabase[] = [];

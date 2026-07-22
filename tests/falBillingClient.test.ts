@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createFalBillingClient } from '../src/fal/falBillingClient';
+import { createFalBillingClient } from '../src/server/fal/falBillingClient';
 
 describe('Fal billing events client', () => {
   it('reconciles request-level billing events with an isolated admin key', async () => {

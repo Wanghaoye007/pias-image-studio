@@ -1,16 +1,16 @@
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
-import { initialStudioState } from '../src/domain';
+import { initialStudioState } from '../src/shared/domain';
 import {
   createStudioStateMiddleware,
-} from '../src/studio/studioStatePlugin';
+} from '../src/server/studio/studioStatePlugin';
 import {
   StudioStateConflictError,
   StudioStateStorageError,
   type PersistedStudioSnapshot,
   type StudioStatePersistence,
-} from '../src/studio/studioStatePersistence';
+} from '../src/server/studio/studioStatePersistence';
 
 async function invoke(
   middleware: ReturnType<typeof createStudioStateMiddleware>,

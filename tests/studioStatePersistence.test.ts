@@ -2,13 +2,13 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { initialStudioState } from '../src/domain';
+import { initialStudioState } from '../src/shared/domain';
 import {
   createFileStudioStatePersistence,
   createScopedStudioStatePersistence,
   StudioStateConflictError,
   StudioStateStorageError,
-} from '../src/studio/studioStatePersistence';
+} from '../src/server/studio/studioStatePersistence';
 
 const temporaryDirectories: string[] = [];
 

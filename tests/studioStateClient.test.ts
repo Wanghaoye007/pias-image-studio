@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { initialStudioState } from '../src/domain';
+import { initialStudioState } from '../src/shared/domain';
 import {
   loadStudioState,
   saveStudioState,
   StudioStateClientError,
-} from '../src/studio/studioStateClient';
+} from '../src/client/studio/studioStateClient';
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

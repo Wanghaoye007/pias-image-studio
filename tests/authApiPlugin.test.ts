@@ -7,13 +7,13 @@ import {
   createAuthMiddlewareStack,
   getRequestAuthContext,
   getRequestProjectScope,
-} from '../src/auth/authApiPlugin';
+} from '../src/server/auth/authApiPlugin';
 import {
   IdentityService,
   generateTotp,
   hashPassword,
   type AuthUser,
-} from '../src/auth/identityService';
+} from '../src/server/auth/identityService';
 
 const password = 'PIAS-release-2026!';
 const secret = 'JBSWY3DPEHPK3PXP';

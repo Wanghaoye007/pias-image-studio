@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
-import { createFalProxyMiddleware } from '../src/fal/falProxyPlugin';
-import { FalServiceError, type FalQueueService } from '../src/fal/falQueueService';
+import { createFalProxyMiddleware } from '../src/server/fal/falProxyPlugin';
+import { FalServiceError, type FalQueueService } from '../src/worker/fal/falQueueService';
 
 async function invoke(
   middleware: ReturnType<typeof createFalProxyMiddleware>,

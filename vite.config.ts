@@ -1,15 +1,15 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import packageDocument from './package.json';
-import { assetImagePlugin } from './src/assets/assetImagePlugin';
-import { authApiPlugin } from './src/auth/authApiPlugin';
-import { loadIdentityServiceFromConfig } from './src/auth/authConfig';
-import { falImageProxyPlugin } from './src/fal/falProxyPlugin';
-import { organizationPlugin } from './src/organization/organizationPlugin';
+import { assetImagePlugin } from './src/server/assets/assetImagePlugin';
+import { authApiPlugin } from './src/server/auth/authApiPlugin';
+import { loadIdentityServiceFromConfig } from './src/server/auth/authConfig';
+import { falImageProxyPlugin } from './src/server/fal/falProxyPlugin';
+import { organizationPlugin } from './src/server/organization/organizationPlugin';
 import { healthPlugin } from './src/server/healthPlugin';
 import { createProductionReadinessCheck } from './src/server/productionReadiness';
 import { loadReleaseIdentity } from './src/server/releaseIdentity';
-import { studioStatePlugin } from './src/studio/studioStatePlugin';
+import { studioStatePlugin } from './src/server/studio/studioStatePlugin';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'PIAS_');
