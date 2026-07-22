@@ -87,11 +87,17 @@ PIAS_RELEASE_SERVER_FILE=/opt/pias/dist-server/server.mjs
 ## 验证
 
 ```bash
-npm test
+npm run repo:check
+npm run lint
+npm run typecheck
+npm test -- --run
 npm run build
+npm audit --omit=dev --audit-level=high
 npm run release:preflight:report
 npm run acceptance:report
 ```
+
+`.github/workflows/release-quality.yml` 会在 PR、`main` 与 `codex/**` 分支推送时使用 Node.js 24 重复执行仓库卫生、静态检查、全量测试、双产物构建和生产依赖审计，并将 `dist/`、`dist-server/` 作为七天有效的候选产物归档。工作流只授予只读仓库权限，官方 Actions 固定到完整提交 SHA，Checkout 不保留 Git 凭证。
 
 `npm run release:preflight` 是生产环境硬门禁，校验 Node、HTTPS、安全 Cookie、SQLite/回滚备份、身份与密钥权限、邮件配置、发布产物和 Fal Billing 权限，任一失败即返回非零；`release:preflight:report` 始终返回零，仅用于查看机器可读阻塞码。`npm run acceptance` 是业务验收硬门禁：只在自动化检查通过且 `acceptance/manifest.json` 中所有必选业务证据均为 `pass` 时返回成功。两个硬门禁都通过才允许发布。
 

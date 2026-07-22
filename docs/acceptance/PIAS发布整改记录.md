@@ -989,3 +989,51 @@
 ### 下一轮优先事项
 
 推送本轮包体优化并重新执行发布报告；随后补齐远端 CI 质量门，使 PR 自动执行 lint、typecheck、全量测试、构建、依赖审计和敏感信息检查，避免发布正确性只依赖本机验收。
+
+## 2026-07-22 09:58 CST - 远端 CI 与仓库卫生硬门禁
+
+### 本轮完成内容
+
+- 新增 GitHub Actions `Release quality` 工作流，在 PR、`main`、`codex/**` 推送及手动触发时执行完整发布质量门。
+- 工作流固定 Node.js 24，使用 `npm ci` 和 npm 缓存，串行执行仓库卫生、lint、typecheck、全量测试、双产物构建和生产依赖审计。
+- Checkout、Setup Node 与 Upload Artifact 固定到官方完整提交 SHA；Checkout 不保留 Git 凭证，`GITHUB_TOKEN` 仅授予 `contents: read`。
+- 同一分支的新运行自动取消旧运行，避免过期提交浪费执行时间；成功产物归档 `dist/`、`dist-server/` 七天。
+- 新增本地/CI 共用的 `repo:check`：拒绝跟踪本地分析、视频、构建目录、环境文件、数据库、超过 5 MB 的文件、个人绝对路径及常见密钥形态。
+- README 与部署手册同步远端和本地质量门命令，明确 PR 检查与生产双门禁的职责边界。
+
+### 修改文件
+
+- `.github/workflows/release-quality.yml`
+- `scripts/repository-hygiene-core.mjs`
+- `scripts/repository-hygiene-core.d.mts`
+- `scripts/check-repository-hygiene.mjs`
+- `tests/repositoryHygiene.test.ts`
+- `tests/ciWorkflow.test.ts`
+- `package.json`
+- `README.md`
+- `docs/operations/deployment-runbook.md`
+
+### 测试和构建结果
+
+- 先以缺失扫描器和缺失工作流建立红灯，再实现仓库规则和 CI 契约；2 个专项文件、12 项测试通过。
+- `npm run repo:check` 扫描 194 个已跟踪文件，通过且无敏感内容或禁入文件。
+- `npm run lint` 与 `npm run typecheck` 通过。
+- 全量回归：46 个测试文件、405 项测试通过。
+- 前端与独立 Node 服务双产物构建通过，所有 JS 块继续低于 500 kB。
+- `npm audit --omit=dev --audit-level=high` 为 0 漏洞。
+
+### 风险控制
+
+- CI 不注入 Fal、邮件或生产身份密钥，不执行付费请求、部署、数据库迁移或外部写入。
+- 工作流最小权限且固定官方 Action SHA，降低令牌滥用和可变标签供应链风险。
+- 仓库扫描只读取 Git 跟踪文件；失败输出仅包含文件路径和稳定错误码，不打印命中的敏感内容。
+
+### 剩余问题
+
+- P1 `USAGE-001`：仍缺具备 Billing Events 权限的生产 Fal Admin Key。
+- P1 `MEMBER-001`：仍缺生产 HTTPS 域名、邮件 Relay、发件人域名和专用邮箱真实收件证据。
+- CI 尚需推送后由 GitHub 实际解析并完成首轮远端运行。
+
+### 下一轮优先事项
+
+提交并推送 CI，等待 PR #1 的远端 `Release quality / Lint, test, and build` 结论；若失败直接读取日志修复。远端通过后，将其设置为合并前必需检查（若仓库权限允许），再审查剩余可离线安全风险。

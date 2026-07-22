@@ -22,11 +22,15 @@
 
 ```bash
 npm ci
-npm test
+npm run repo:check
+npm run lint
+npm run typecheck
+npm test -- --run
 npm run build
+npm audit --omit=dev --audit-level=high
 ```
 
-构建会生成 `dist/release.json`，包含版本、Git revision、构建时间和工作树状态。脏工作树仍可构建用于测试，但生产预检会以 `BUILD_METADATA_DIRTY` 拒绝发布。
+以上命令必须与 PR 的 `Release quality / Lint, test, and build` 检查同时通过。构建会生成 `dist/release.json`，包含版本、Git revision、构建时间和工作树状态。脏工作树仍可构建用于测试，但生产预检会以 `BUILD_METADATA_DIRTY` 拒绝发布。
 
 构建同时生成 `dist-server/server.mjs`。该独立 Node HTTP 服务复用与开发环境相同的认证、组织、素材、StudioState 和 Fal 中间件，提供静态 SPA fallback、JSON API 边界、安全响应头、live/ready 和 SIGTERM 优雅停机，不依赖 Vite Preview。完成测试和验收后可执行 `npm prune --omit=dev`，运行时仅保留生产依赖。
 
