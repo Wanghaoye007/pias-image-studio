@@ -1,19 +1,24 @@
-import { ChevronRight, X } from 'lucide-react';
+import { ChevronRight, Search, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { taskProfiles, type TaskProfileId } from '../../shared/domain';
 import { toolIcons } from './ToolPalette';
 
 type NodeTypePickerProps = {
+  activeTool?: TaskProfileId;
   position: { x: number; y: number };
   onClose: () => void;
   onSelect: (tool: TaskProfileId) => void;
 };
 
-const nodeGroups: Array<{
-  label: string;
-  tools: TaskProfileId[];
-}> = [
-  { label: '创作与重构', tools: ['generate', 'blend', 'angle', 'light'] },
-  { label: '编辑与增强', tools: ['remove', 'extract', 'expand', 'upscale'] },
+const nodeOrder: TaskProfileId[] = [
+  'generate',
+  'blend',
+  'angle',
+  'light',
+  'remove',
+  'extract',
+  'expand',
+  'upscale',
 ];
 
 const nodeDescriptions: Record<TaskProfileId, string> = {
@@ -27,7 +32,38 @@ const nodeDescriptions: Record<TaskProfileId, string> = {
   upscale: '提升分辨率与细节',
 };
 
-export function NodeTypePicker({ position, onClose, onSelect }: NodeTypePickerProps) {
+const nodeAliases: Record<TaskProfileId, string> = {
+  generate: 'models model create image generate 生成 模型',
+  blend: 'blend merge reference 融图 融合',
+  angle: 'angle camera spin view 多角度 机位',
+  light: 'light lighting relight 定向光 光照',
+  remove: 'remove erase clean 去除 擦除',
+  extract: 'extract cutout subject 抠图 分离',
+  expand: 'resize expand outpaint 扩图 延展',
+  upscale: 'upscale enhance resolution 超分 增强',
+};
+
+const nestedTools = new Set<TaskProfileId>(['generate', 'expand']);
+
+export function NodeTypePicker({ activeTool = 'generate', position, onClose, onSelect }: NodeTypePickerProps) {
+  const [query, setQuery] = useState('');
+  const visibleProfiles = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return nodeOrder
+      .map((id) => taskProfiles.find((profile) => profile.id === id))
+      .filter((profile): profile is NonNullable<typeof profile> => {
+        if (!profile) return false;
+        if (!normalizedQuery) return true;
+        const haystack = [
+          profile.label,
+          profile.description,
+          nodeDescriptions[profile.id],
+          nodeAliases[profile.id],
+        ].join(' ').toLowerCase();
+        return haystack.includes(normalizedQuery);
+      });
+  }, [query]);
+
   return (
     <section
       aria-label="节点类型选择器"
@@ -35,11 +71,18 @@ export function NodeTypePicker({ position, onClose, onSelect }: NodeTypePickerPr
       role="dialog"
       style={{ left: position.x, top: position.y }}
     >
-      <header>
-        <div>
-          <strong>添加处理节点</strong>
-          <small>从当前画面继续创作</small>
-        </div>
+      <header className="node-type-picker__topbar">
+        <label className="node-type-picker__search">
+          <Search aria-hidden="true" size={16} />
+          <input
+            aria-label="搜索节点"
+            autoComplete="off"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索"
+            type="search"
+            value={query}
+          />
+        </label>
         <button
           aria-label="关闭节点类型选择器"
           className="icon-button"
@@ -50,37 +93,33 @@ export function NodeTypePicker({ position, onClose, onSelect }: NodeTypePickerPr
           <X aria-hidden="true" size={17} />
         </button>
       </header>
-      <div className="node-type-picker__grid">
-        {nodeGroups.map((group) => (
-          <section className="node-type-picker__group" key={group.label}>
-            <small>{group.label}</small>
-            <div>
-              {group.tools.map((tool) => {
-                const profile = taskProfiles.find((item) => item.id === tool);
-                if (!profile) return null;
-                const Icon = toolIcons[profile.id];
-                return (
-                  <button
-                    aria-label={profile.label}
-                    data-tool={profile.id}
-                    key={profile.id}
-                    onClick={() => onSelect(profile.id)}
-                    type="button"
-                  >
-                    <span className="node-type-picker__icon" style={{ '--tool-accent': profile.accent } as React.CSSProperties}>
-                      <Icon aria-hidden="true" size={17} />
-                    </span>
-                    <span className="node-type-picker__copy">
-                      <strong>{profile.label}</strong>
-                      <small>{nodeDescriptions[profile.id]}</small>
-                    </span>
-                    <ChevronRight aria-hidden="true" className="node-type-picker__chevron" size={15} />
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+      <div className="node-type-picker__menu">
+        {visibleProfiles.map((profile) => {
+          const Icon = toolIcons[profile.id];
+          return (
+            <button
+              aria-label={profile.label}
+              aria-pressed={activeTool === profile.id}
+              className={activeTool === profile.id ? 'is-active' : ''}
+              data-tool={profile.id}
+              key={profile.id}
+              onClick={() => onSelect(profile.id)}
+              title={nodeDescriptions[profile.id]}
+              type="button"
+            >
+              <span className="node-type-picker__icon" style={{ '--tool-accent': profile.accent } as React.CSSProperties}>
+                <Icon aria-hidden="true" size={18} />
+              </span>
+              <span className="node-type-picker__copy">
+                <strong>{profile.label}</strong>
+              </span>
+              {nestedTools.has(profile.id) && <ChevronRight aria-hidden="true" className="node-type-picker__chevron" size={16} />}
+            </button>
+          );
+        })}
+        {visibleProfiles.length === 0 && (
+          <p className="node-type-picker__empty">没有匹配的节点</p>
+        )}
       </div>
     </section>
   );
