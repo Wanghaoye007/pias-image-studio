@@ -36,6 +36,15 @@ describe('acceptance gate', () => {
     expect(result.unresolved.filter((item) => item.severity === 'P0')).toEqual([]);
   });
 
+  it('isolates the Vitest automation from a production deployment environment', () => {
+    const testAutomation = manifest.automation.find((item: { id: string }) => item.id === 'AUTO-TEST');
+
+    expect(testAutomation?.env).toMatchObject({
+      NODE_ENV: 'test',
+      NODE_OPTIONS: '--max-old-space-size=384',
+    });
+  });
+
   it('returns red for any unresolved P0', () => {
     expect(evaluateAcceptance(fixture('fail', 'P0')).conclusion).toBe('red');
   });

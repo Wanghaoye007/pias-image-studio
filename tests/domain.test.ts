@@ -34,6 +34,7 @@ import {
   withdrawReview,
   expireJob,
 } from '../src/shared/domain';
+import { createBlankProjectStudioState } from '../src/client/studio/demoState';
 import { FAL_MULTIPLE_ANGLES_MODEL } from '../src/shared/fal/multipleAngles';
 
 describe('Image Studio domain flow', () => {
@@ -62,6 +63,26 @@ describe('Image Studio domain flow', () => {
       targetId: next.assets.at(-1)?.id,
     });
     expect(state.assets).toHaveLength(3);
+  });
+
+  it('首张素材替换新项目的空白占位节点并成为当前对象', () => {
+    const blank = createBlankProjectStudioState({ name: '图片 MVP' });
+    const withAsset = addAsset(blank, {
+      brand: 'Content Studio', product: '首张商品图', skuCode: 'FIRST-001',
+      usage: '商品主图', version: 'v1', imageUrl: '/api/assets/images/first.png',
+    });
+    const next = createSceneFromAsset(withAsset, {
+      assetId: withAsset.assets[0].id,
+      position: { x: 80, y: 120 },
+    });
+
+    expect(next.scenes).toHaveLength(1);
+    expect(next.selectedSceneId).toBe('scene-source');
+    expect(next.scenes[0]).toMatchObject({
+      id: 'scene-source', title: '首张商品图', skuCode: 'FIRST-001',
+      imageUrl: '/api/assets/images/first.png', sourceAssetId: withAsset.assets[0].id,
+      status: 'source',
+    });
   });
 
   it('rejects duplicate SKU codes when uploading an asset', () => {
@@ -682,7 +703,7 @@ describe('Image Studio domain flow', () => {
     expect(getProfile('angle').label).toBe('多角度');
     expect(getProfile('remove').label).toBe('去除');
     expect(getProfile('extract').label).toBe('抠图');
-    expect(getProfile('light').label).toBe('定向光');
+    expect(getProfile('light').label).toBe('修改光影');
     expect(getProfile('expand').label).toBe('扩图');
     expect(getProfile('upscale').label).toBe('超分');
   });

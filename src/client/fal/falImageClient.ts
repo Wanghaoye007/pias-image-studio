@@ -100,10 +100,10 @@ export async function cancelFalImageJob(
   requestId: string,
   fetcher: Fetcher = fetch,
 ): Promise<void> {
-  await fetcher(
+  await readJson<{ canceled: boolean }>(await fetcher(
     `/api/fal/jobs/${encodeURIComponent(requestId)}`,
     withCsrfProtection({ method: 'DELETE' }),
-  );
+  ));
 }
 
 async function pollFalImageJob(

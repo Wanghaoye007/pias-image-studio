@@ -230,7 +230,7 @@ export const taskProfiles: TaskProfile[] = [
   { id: 'generate', label: '生成', description: '生成', labelJa: '生成', costPerOutput: 15, defaultOutputs: 4, accent: '#2f6fed' },
   { id: 'blend', label: '融图', description: '融图', labelJa: '融图', costPerOutput: 18, defaultOutputs: 4, accent: '#0b8a74' },
   { id: 'angle', label: '多角度', description: '多角度', labelJa: '多角度', costPerOutput: 22, defaultOutputs: 4, accent: '#7a5c2e' },
-  { id: 'light', label: '定向光', description: '定向光', labelJa: '定向光', costPerOutput: 14, defaultOutputs: 4, accent: '#d58a00' },
+  { id: 'light', label: '修改光影', description: '修改光影', labelJa: '修改光影', costPerOutput: 14, defaultOutputs: 4, accent: '#d58a00' },
   { id: 'remove', label: '去除', description: '去除', labelJa: '去除', costPerOutput: 12, defaultOutputs: 1, accent: '#bd3f3f' },
   { id: 'extract', label: '抠图', description: '抠图', labelJa: '抠图', costPerOutput: 12, defaultOutputs: 1, accent: '#39525f' },
   { id: 'expand', label: '扩图', description: '扩图', labelJa: '扩图', costPerOutput: 12, defaultOutputs: 4, accent: '#bd3f3f' },
@@ -596,8 +596,9 @@ export function createSceneFromAsset(
     throw new Error(`素材不存在：${input.assetId}`);
   }
 
+  const placeholder = getReplaceableBlankScene(state);
   const scene: Scene = {
-    id: getNextSceneId(state),
+    id: placeholder?.id ?? getNextSceneId(state),
     title: asset.product,
     skuCode: asset.skuCode,
     operation: '商品素材',
@@ -612,12 +613,30 @@ export function createSceneFromAsset(
   return {
     ...state,
     selectedSceneId: scene.id,
-    scenes: [...state.scenes, scene],
+    scenes: placeholder
+      ? state.scenes.map((item) => item.id === placeholder.id ? scene : item)
+      : [...state.scenes, scene],
     auditEvents: [
       ...state.auditEvents,
       audit('scene.created_from_asset', scene.id, 'Mika Tanaka'),
     ],
   };
+}
+
+export function getAssetPlacementSceneId(state: StudioState): string {
+  return getReplaceableBlankScene(state)?.id ?? getNextSceneId(state);
+}
+
+function getReplaceableBlankScene(state: StudioState): Scene | undefined {
+  if (state.scenes.length !== 1 || state.jobs.length > 0 || state.results.length > 0 || state.edges.length > 0) {
+    return undefined;
+  }
+  const scene = state.scenes[0];
+  return scene.operation === '空白场景'
+    && !scene.imageUrl
+    && scene.resultIds.length === 0
+    ? scene
+    : undefined;
 }
 
 export function createBlankScene(

@@ -272,7 +272,9 @@ export function createFalQueueService(options: {
           savedJobs.filter(isPersistedJob).forEach((job) => jobs.set(job.id, job));
         })
         .catch((error) => {
+          hydrated = undefined;
           options.onOperationalError?.('content_studio_fal_queue_hydration_failed', error);
+          throw new FalServiceError('任务记录恢复失败，请稍后重试', 'FAL_PERSIST_FAILED', 503);
         })
       : Promise.resolve();
     return hydrated;
@@ -660,10 +662,17 @@ export function createFalQueueService(options: {
           );
         }
         await ensureConfigured();
-        job.canceled = true;
-        await Promise.allSettled(job.children.map((child) => options.adapter.cancel(child.modelId, {
+        const cancellations = await Promise.allSettled(job.children.map((child) => options.adapter.cancel(child.modelId, {
           requestId: child.requestId,
         })));
+        if (cancellations.some((result) => result.status === 'rejected')) {
+          throw new FalServiceError(
+            '供应商未确认取消，请稍后重试',
+            'FAL_CANCEL_FAILED',
+            502,
+          );
+        }
+        job.canceled = true;
         await persist(job);
         await options.payloadStore?.delete(job.id).catch(() => undefined);
       } finally {

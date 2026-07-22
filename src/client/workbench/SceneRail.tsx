@@ -1,4 +1,4 @@
-import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Search, Upload } from 'lucide-react';
 import { useMemo, useState, type DragEvent } from 'react';
 import type { Asset, Scene, StudioState } from '../../shared/domain';
 import { getSceneTitle } from './graph';
@@ -9,6 +9,7 @@ type SceneRailProps = {
   onToggleCollapsed: () => void;
   onSelectScene: (scene: Scene) => void;
   onAddAsset?: (asset: Asset) => void;
+  onUploadAsset?: () => void;
 };
 
 type RailTab = 'scenes' | 'assets';
@@ -19,6 +20,7 @@ export function SceneRail({
   onToggleCollapsed,
   onSelectScene,
   onAddAsset,
+  onUploadAsset,
 }: SceneRailProps) {
   const [activeTab, setActiveTab] = useState<RailTab>('assets');
   const [query, setQuery] = useState('');
@@ -80,6 +82,15 @@ export function SceneRail({
             </div>
           ) : (
             <div className="asset-library" role="tabpanel" aria-label="素材库">
+              <button
+                aria-label="上传图片素材"
+                className="asset-library__upload"
+                onClick={onUploadAsset}
+                type="button"
+              >
+                <Upload aria-hidden="true" size={16} />
+                上传图片
+              </button>
               <label className="asset-search">
                 <span>搜索素材</span>
                 <Search size={15} />

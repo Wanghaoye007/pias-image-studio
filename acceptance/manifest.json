@@ -10,8 +10,8 @@
       "severity": "P0",
       "required": true,
       "status": "pass",
-      "summary": "八类图片任务可从画布提交到 Fal 队列并生成结果",
-      "evidence": "src/client/workbench/Workbench.tsx; src/worker/fal/falQueueService.ts; tests/workbench.test.tsx"
+      "summary": "登录、建项、上传入画布、任务配置、Fal 队列、刷新恢复、继续生成、采用、审核、导出和用量记录已形成完整图片 MVP 链路",
+      "evidence": "src/client/workbench/Workbench.tsx; src/worker/fal/falQueueService.ts; tests/imageMvpCoreFlow.integration.test.ts; scripts/image-mvp-e2e.mjs; docs/acceptance/evidence/image-mvp-workbench-editor-2026-07-23.png"
     },
     {
       "id": "DATA-001",
@@ -46,8 +46,8 @@
       "severity": "P1",
       "required": true,
       "status": "pass",
-      "summary": "任务覆盖预检、排队、运行、后处理、部分成功、取消请求、失败、取消和过期状态",
-      "evidence": "src/shared/domain.ts; src/client/workbench/Workbench.tsx; tests/domain.test.ts; tests/workbench.test.tsx; tests/studioStateSchema.test.ts"
+      "summary": "任务覆盖预检、排队、运行、后处理、部分成功、失败、取消、重试和过期；供应商未确认取消时不伪造成功，持久队列恢复失败时阻止重复提交",
+      "evidence": "src/shared/domain.ts; src/client/workbench/Workbench.tsx; src/client/fal/falImageClient.ts; src/worker/fal/falQueueService.ts; tests/domain.test.ts; tests/workbench.test.tsx; tests/falImageClient.test.ts; tests/falQueueService.test.ts"
     },
     {
       "id": "USAGE-001",
@@ -100,8 +100,8 @@
       "severity": "P2",
       "required": true,
       "status": "pass",
-      "summary": "素材上传、项目创建/切换/刷新恢复、成员邀请/重新签发和成员生命周期编辑均连接真实持久化 API；本机模式明确禁用企业操作，无动作表头入口已移除，桌面与移动布局通过浏览器验收",
-      "evidence": "src/client/App.tsx; src/client/pages/SecondaryViews.tsx; src/server/assets/assetImagePlugin.ts; src/client/organization/organizationClient.ts; tests/app.test.tsx; tests/organizationClient.test.ts; tests/assetImagePlugin.test.ts; docs/acceptance/evidence/content-studio-organization-project-2026-07-22.png; docs/acceptance/evidence/content-studio-organization-admin-2026-07-22.png; docs/acceptance/evidence/content-studio-member-lifecycle-2026-07-22.png; docs/acceptance/evidence/content-studio-invitation-resend-2026-07-22.jpg"
+      "summary": "图片工作台支持创建项目后直接进入、画布内上传、空占位节点替换、任务导向工具名、全高右侧面板和可调高 Prompt，关键状态已通过浏览器验收",
+      "evidence": "src/client/pages/SecondaryViews.tsx; src/client/assets/AssetUploadDialog.tsx; src/client/workbench/SceneRail.tsx; src/client/workbench/ContextToolPanel.tsx; src/client/styles/soft-glass.css; tests/app.test.tsx; scripts/image-mvp-e2e.mjs; docs/acceptance/evidence/image-mvp-workbench-editor-2026-07-23.png"
     },
     {
       "id": "MEMBER-001",
@@ -118,8 +118,8 @@
       "severity": "P1",
       "required": true,
       "status": "pass",
-      "summary": "结果保留模型、请求 ID、参数、种子、时间和上游来源",
-      "evidence": "src/shared/domain.ts ResultGenerationMetadata; src/worker/fal/falQueueService.ts"
+      "summary": "用户默认看到任务类型，底层模型名不作为主信息；请求 ID、参数、种子、时间和上游来源仍保留在折叠技术追踪中",
+      "evidence": "src/shared/domain.ts ResultGenerationMetadata; src/client/workbench/ResultInspector.tsx; src/worker/fal/falQueueService.ts; tests/resultInspector.test.tsx"
     },
     {
       "id": "LINEAGE-001",
@@ -127,8 +127,8 @@
       "severity": "P1",
       "required": true,
       "status": "pass",
-      "summary": "结果派生场景和版本血缘具有状态守卫与审计事件",
-      "evidence": "src/shared/domain.ts createDerivedScene; tests/domain.test.ts"
+      "summary": "结果派生场景和版本血缘具有状态守卫与审计事件，结果详情可直接追溯原始图片和父级结果",
+      "evidence": "src/shared/domain.ts createDerivedScene; src/client/workbench/ResultInspector.tsx; tests/domain.test.ts; tests/resultInspector.test.tsx; tests/imageMvpCoreFlow.integration.test.ts; docs/acceptance/evidence/image-mvp-result-lineage-2026-07-23.png"
     },
     {
       "id": "EXPORT-001",
@@ -162,6 +162,7 @@
         "--maxWorkers=1"
       ],
       "env": {
+        "NODE_ENV": "test",
         "NODE_OPTIONS": "--max-old-space-size=384"
       }
     },
@@ -174,6 +175,13 @@
       "env": {
         "NODE_OPTIONS": "--max-old-space-size=512"
       }
+    },
+    {
+      "id": "AUTO-E2E-IMAGE-MVP",
+      "label": "Image MVP browser E2E",
+      "severity": "P0",
+      "command": "npm",
+      "args": ["run", "e2e:image-mvp"]
     }
   ]
 }

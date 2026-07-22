@@ -503,6 +503,25 @@ describe('Fal 统一作业编排器', () => {
     });
   });
 
+  it('供应商取消失败时保留可恢复任务并返回明确错误', async () => {
+    const adapter = createAdapter();
+    vi.mocked(adapter.cancel).mockRejectedValue(new Error('provider unavailable'));
+    const service = createFalQueueService({
+      adapter,
+      readKey: async () => 'id:secret',
+      createId: () => 'fal-local-cancel-failed',
+    });
+    await service.submit(request());
+
+    await expect(service.cancel('fal-local-cancel-failed')).rejects.toMatchObject({
+      code: 'FAL_CANCEL_FAILED',
+      statusCode: 502,
+    });
+    await expect(service.status('fal-local-cancel-failed')).resolves.toMatchObject({
+      status: 'completed',
+    });
+  });
+
   it('在超分首段完成后用其结果自动提交下一段', async () => {
     const adapter = createAdapter();
     vi.mocked(adapter.result).mockImplementation(async (_modelId, options) => ({
@@ -562,10 +581,11 @@ describe('Fal 统一作业编排器', () => {
     await expect(service.submit(request())).rejects.toThrow('Fal 任务提交失败');
   });
 
-  it('routes persistence failures through the operational error hook', async () => {
+  it('blocks new submissions when durable queue hydration fails', async () => {
     const onOperationalError = vi.fn();
+    const adapter = createAdapter();
     const service = createFalQueueService({
-      adapter: createAdapter(),
+      adapter,
       readKey: async () => 'id:secret',
       persistence: {
         load: vi.fn()
@@ -576,9 +596,15 @@ describe('Fal 统一作业编排器', () => {
       onOperationalError,
     });
 
+    await expect(service.submit(request())).rejects.toMatchObject({
+      code: 'FAL_PERSIST_FAILED',
+      statusCode: 503,
+    });
+    expect(adapter.submit).not.toHaveBeenCalled();
     await expect(service.submit(request())).resolves.toMatchObject({
       requestId: expect.any(String),
     });
+    expect(adapter.submit).toHaveBeenCalledOnce();
     expect(onOperationalError).toHaveBeenCalledWith(
       'content_studio_fal_queue_hydration_failed',
       expect.any(Error),

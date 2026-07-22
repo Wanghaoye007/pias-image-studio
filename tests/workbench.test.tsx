@@ -43,6 +43,7 @@ const deliveryMocks = vi.hoisted(() => ({
 }));
 
 const falClientMocks = vi.hoisted(() => ({
+  cancelFalImageJob: vi.fn(() => Promise.resolve()),
   FAL_LIFECYCLE_ABORT_REASON: 'content-studio:lifecycle-unmount',
   runFalImageJob: vi.fn(async (
     _input: unknown,
@@ -143,6 +144,8 @@ function createDataTransfer(assetId: string): DataTransfer {
 
 describe('workbench canvas', () => {
   beforeEach(() => {
+    falClientMocks.cancelFalImageJob.mockReset();
+    falClientMocks.cancelFalImageJob.mockResolvedValue(undefined);
     falClientMocks.runFalImageJob.mockReset();
     falClientMocks.resumeFalImageJob.mockReset();
     falClientMocks.runFalImageJob.mockImplementation(async (_input, options) => {
@@ -500,7 +503,7 @@ describe('workbench canvas', () => {
       </ReactFlowProvider>,
     );
 
-    expect(screen.getByText('定向光')).toBeInTheDocument();
+    expect(screen.getByText('修改光影')).toBeInTheDocument();
     expect(screen.getByText('待配置')).toBeInTheDocument();
     expect(screen.queryByText('设置参数后创建任务')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '取消新增节点' }));
@@ -956,14 +959,43 @@ describe('workbench canvas', () => {
     fireEvent.click(screen.getByRole('button', { name: '取消任务' }));
 
     await waitFor(() => expect(latestState.jobs[0]?.status).toBe('canceled'));
+    expect(falClientMocks.cancelFalImageJob).toHaveBeenCalledWith('req-cancel-1');
     expect(latestState.results).toHaveLength(0);
     expect(latestState.usage.frozenCredits).toBe(0);
+  });
+
+  it('供应商未确认取消时恢复任务并保留冻结额度', async () => {
+    falClientMocks.runFalImageJob.mockImplementationOnce((_input, options) => (
+      new Promise(() => {
+        options.onExecution?.({ requestId: 'req-cancel-failed', modelId: 'provider-model' });
+      })
+    ));
+    falClientMocks.cancelFalImageJob.mockRejectedValueOnce(
+      new Error('供应商未确认取消，请稍后重试'),
+    );
+    let latestState = initialStudioState();
+    render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '多角度' }));
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始生成' }));
+    await waitFor(() => expect(latestState.jobs[0]?.externalExecution?.requestId).toBe('req-cancel-failed'));
+    fireEvent.click(screen.getByRole('button', { name: /任务队列/ }));
+    fireEvent.click(screen.getByRole('button', { name: '取消任务' }));
+
+    await waitFor(() => expect(latestState.jobs[0]).toMatchObject({
+      status: 'queued',
+      errorMessage: '供应商未确认取消，请稍后重试',
+    }));
+    expect(latestState.usage.frozenCredits).toBeGreaterThan(0);
+    expect(screen.getByRole('status', { name: '画布操作反馈' }))
+      .toHaveTextContent('供应商未确认取消，请稍后重试');
   });
 
   it('synchronizes the light direction overlay with the tool controls', () => {
     render(<WorkbenchHarness />);
 
-    fireEvent.click(screen.getByRole('button', { name: '定向光' }));
+    fireEvent.click(screen.getByRole('button', { name: '修改光影' }));
     fireEvent.click(screen.getByRole('button', { name: '主光源 后方' }));
 
     expect(screen.getByLabelText('定向光控制点')).toHaveAttribute('data-direction', 'back');
@@ -977,9 +1009,9 @@ describe('workbench canvas', () => {
     let latestState = initialStudioState();
     render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '定向光' }));
-    const panel = screen.getByRole('dialog', { name: '定向光参数' });
-    expect(within(panel).getByText('打光效果')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '修改光影' }));
+    const panel = screen.getByRole('dialog', { name: '修改光影参数' });
+    expect(within(panel).getByText('修改光影')).toBeInTheDocument();
     fireEvent.click(within(panel).getByRole('button', { name: '主光源 前方' }));
     fireEvent.click(within(panel).getByRole('checkbox', { name: '智能模式' }));
     fireEvent.click(within(panel).getByRole('checkbox', { name: '轮廓光' }));
@@ -998,9 +1030,9 @@ describe('workbench canvas', () => {
   it('exposes stable state hooks for visual frame comparison', () => {
     render(<WorkbenchHarness />);
 
-    fireEvent.click(screen.getByRole('button', { name: '定向光' }));
+    fireEvent.click(screen.getByRole('button', { name: '修改光影' }));
 
-    const panel = screen.getByRole('dialog', { name: '定向光参数' });
+    const panel = screen.getByRole('dialog', { name: '修改光影参数' });
     const overlay = screen.getByLabelText('定向光控制');
     expect(panel).toHaveAttribute('data-placement', 'right');
     expect(panel).toHaveAttribute('data-tool', 'light');
@@ -1517,7 +1549,7 @@ describe('workbench canvas', () => {
     render(<WorkbenchHarness initialState={settled} onStateChange={(state) => { latestState = state; }} />);
 
     fireEvent.click(screen.getByAltText('生成 1'));
-    fireEvent.click(screen.getByRole('button', { name: '定向光' }));
+    fireEvent.click(screen.getByRole('button', { name: '修改光影' }));
     fireEvent.click(screen.getByRole('button', { name: '主光源 右侧' }));
     fireEvent.change(screen.getByRole('slider', { name: '光线强度' }), {
       target: { value: '72' },
@@ -1529,7 +1561,7 @@ describe('workbench canvas', () => {
     expect(branchScene).toMatchObject({
       parentSceneId: 'scene-source',
       sourceResultId: settled.results[0].id,
-      operation: '定向光',
+      operation: '修改光影',
     });
     expect(branchJob).toMatchObject({
       sceneId: branchScene.id,

@@ -26,6 +26,7 @@ import {
   type SetStateAction,
 } from 'react';
 import {
+  addAsset,
   attachExternalJob,
   buildExportFilename,
   cancelJob,
@@ -39,6 +40,7 @@ import {
   failJob,
   expireJob,
   getNextSceneId,
+  getAssetPlacementSceneId,
   getProfile,
   markJobPostprocessing,
   moveCanvasItem,
@@ -68,10 +70,12 @@ import {
   type TaskProfileId,
 } from '../../shared/domain';
 import {
+  cancelFalImageJob,
   FAL_LIFECYCLE_ABORT_REASON,
   resumeFalImageJob,
   runFalImageJob,
 } from '../fal/falImageClient';
+import { AssetUploadDialog } from '../assets/AssetUploadDialog';
 import { clampFalHorizontalAngle } from '../../shared/fal/multipleAngles';
 import { PersistenceStatus } from '../studio/PersistenceStatus';
 import type { StudioSaveStatus } from '../studio/usePersistentStudioState';
@@ -248,6 +252,7 @@ function WorkbenchContent({
   const [nodeDialog, setNodeDialog] = useState<NodeDialog>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [canvasNotice, setCanvasNotice] = useState<CanvasNotice | null>(null);
+  const [assetUploadOpen, setAssetUploadOpen] = useState(false);
   const [compareResultIds, setCompareResultIds] = useState<string[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
   const [inspectedResultId, setInspectedResultId] = useState<string | null>(null);
@@ -403,12 +408,38 @@ function WorkbenchContent({
   }, [setState]);
 
   const handleCancel = useCallback((jobId: string) => {
+    const requestedJob = state.jobs.find((item) => item.id === jobId);
+    if (!requestedJob || !cancellableStatuses.has(requestedJob.status)) return;
     const controller = falJobControllers.current.get(jobId);
     setState((current) => {
       const job = current.jobs.find((item) => item.id === jobId);
       if (!job || !cancellableStatuses.has(job.status)) return current;
       return requestJobCancellation(current, jobId);
     });
+
+    if (requestedJob.externalExecution) {
+      void cancelFalImageJob(requestedJob.externalExecution.requestId).then(() => {
+        controller?.abort(FAL_LIFECYCLE_ABORT_REASON);
+        setState((current) => {
+          const job = current.jobs.find((item) => item.id === jobId);
+          return job?.status === 'cancel_requested' ? cancelJob(current, jobId) : current;
+        });
+        setCanvasNotice({ message: '任务已取消', tone: 'success' });
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : '供应商未确认取消，请稍后重试';
+        setState((current) => {
+          const job = current.jobs.find((item) => item.id === jobId);
+          if (job?.status !== 'cancel_requested') return current;
+          const jobs = current.jobs.map((item) => item.id === jobId
+            ? { ...item, status: requestedJob.status, errorMessage: message }
+            : item);
+          return { ...current, jobs };
+        });
+        setCanvasNotice({ message, tone: 'warning' });
+      });
+      return;
+    }
+
     if (controller) {
       controller.abort();
       queueMicrotask(() => setState((current) => {
@@ -422,7 +453,7 @@ function WorkbenchContent({
         return job?.status === 'cancel_requested' ? cancelJob(current, jobId) : current;
       });
     }
-  }, [setState]);
+  }, [setState, state.jobs]);
 
   const handleRetry = useCallback((job: GenerationJob) => {
     const retrySnapshot = job.profileId === 'angle'
@@ -486,12 +517,12 @@ function WorkbenchContent({
   }, [setState]);
 
   const handleToggleAdoption = useCallback((resultId: string) => {
-    setState((current) => toggleResultAdoption(current, resultId, 'Mika Tanaka'));
-  }, [setState]);
+    setState((current) => toggleResultAdoption(current, resultId, actorId));
+  }, [actorId, setState]);
 
   const handleSetPrimary = useCallback((resultId: string) => {
-    setState((current) => setPrimaryResult(current, resultId, 'Mika Tanaka'));
-  }, [setState]);
+    setState((current) => setPrimaryResult(current, resultId, actorId));
+  }, [actorId, setState]);
 
   const handleOpenDetails = useCallback((resultId: string) => {
     dispatchInteraction({ type: 'CLOSE_TOOL' });
@@ -511,9 +542,9 @@ function WorkbenchContent({
   }, [compareResultIds]);
 
   const handleQualityIssue = useCallback((resultId: string, issue: QualityIssue) => {
-    setState((current) => setResultQualityIssue(current, resultId, issue, 'Mika Tanaka'));
+    setState((current) => setResultQualityIssue(current, resultId, issue, actorId));
     setCanvasNotice({ message: '不可用原因已记录，不会用于模型训练', tone: 'success' });
-  }, [setState]);
+  }, [actorId, setState]);
 
   const handleParameterChange = useCallback((key: string, value: string | number | boolean) => {
     setToolParameters((current) => ({ ...current, [key]: value }));
@@ -842,14 +873,14 @@ function WorkbenchContent({
     }
 
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    const nextSceneId = getNextSceneId(state);
+    const nextSceneId = getAssetPlacementSceneId(state);
     setState((current) => createSceneFromAsset(current, { assetId, position }));
     selectCreatedScene(nextSceneId);
     setCanvasNotice({ message: `已添加${asset.product}节点`, tone: 'success' });
   };
 
   const handleAssetAdd = useCallback((asset: Asset) => {
-    const nextSceneId = getNextSceneId(state);
+    const nextSceneId = getAssetPlacementSceneId(state);
     const lane = state.scenes.length;
     setState((current) => createSceneFromAsset(current, {
       assetId: asset.id,
@@ -857,6 +888,23 @@ function WorkbenchContent({
     }));
     selectCreatedScene(nextSceneId);
     setCanvasNotice({ message: `已添加${asset.product}节点`, tone: 'success' });
+  }, [selectCreatedScene, setState, state.scenes]);
+
+  const handleAssetUpload = useCallback((input: Omit<Asset, 'id'>) => {
+    const nextSceneId = getAssetPlacementSceneId(state);
+    const lane = state.scenes.length;
+    setState((current) => {
+      const withAsset = addAsset(current, input);
+      const uploadedAsset = withAsset.assets.at(-1);
+      if (!uploadedAsset) return withAsset;
+      return createSceneFromAsset(withAsset, {
+        assetId: uploadedAsset.id,
+        position: { x: 80 + (lane % 3) * 300, y: 420 + Math.floor(lane / 3) * 300 },
+      });
+    });
+    setAssetUploadOpen(false);
+    selectCreatedScene(nextSceneId);
+    setCanvasNotice({ message: `已上传并添加到画布：${input.product.trim()}`, tone: 'success' });
   }, [selectCreatedScene, setState, state.scenes]);
 
   const handleRunSelected = useCallback(() => {
@@ -991,7 +1039,7 @@ function WorkbenchContent({
   const handleExport = async (result: Result, spec: ExportSpec) => {
     try {
       const files = await downloadProductionDelivery(state, result, spec);
-      setState((current) => recordResultExport(current, result.id, 'Mika Tanaka', spec));
+      setState((current) => recordResultExport(current, result.id, actorId, spec));
       setExportResultId(null);
       setCanvasNotice({ message: `已生成 ${files.length} 个交付文件`, tone: 'success' });
     } catch (error) {
@@ -1037,11 +1085,12 @@ function WorkbenchContent({
         onAddAsset={handleAssetAdd}
         onSelectScene={handleSceneSelect}
         onToggleCollapsed={() => setRailCollapsed((current) => !current)}
+        onUploadAsset={() => setAssetUploadOpen(true)}
         state={state}
       />
       <main
         aria-label="节点画布"
-        className={`canvas-stage${interaction.draftNode ? ' is-configuring-draft' : ''}${inspectedResult || exportResult ? ' is-showing-result-overlay' : ''}`}
+        className={`canvas-stage${interaction.panelOpen ? ' is-panel-open' : ''}${interaction.draftNode ? ' is-configuring-draft' : ''}${inspectedResult || exportResult ? ' is-showing-result-overlay' : ''}`}
         onDragLeave={(event) => {
           const relatedTarget = event.relatedTarget;
           if (!(relatedTarget instanceof Element) || !event.currentTarget.contains(relatedTarget)) {
@@ -1158,6 +1207,19 @@ function WorkbenchContent({
             onToggleFavorite={() => handleToggleFavorite(inspectedResult.id)}
             result={inspectedResult}
             scene={inspectedScene}
+            parentResult={inspectedScene.sourceResultId
+              ? state.results.find((result) => result.id === inspectedScene.sourceResultId)
+              : undefined}
+            sourceAsset={state.assets.find((asset) => asset.id === (
+              inspectedJob.inputSnapshot.sourceAssetId ?? inspectedScene.sourceAssetId
+            ))}
+          />
+        )}
+        {assetUploadOpen && (
+          <AssetUploadDialog
+            onClose={() => setAssetUploadOpen(false)}
+            onSubmit={handleAssetUpload}
+            submitLabel="确认上传并添加到画布"
           />
         )}
         {exportResult && (

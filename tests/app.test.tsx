@@ -13,6 +13,7 @@ const deliveryMocks = vi.hoisted(() => ({
 }));
 
 const falClientMocks = vi.hoisted(() => ({
+  cancelFalImageJob: vi.fn(() => Promise.resolve()),
   FAL_LIFECYCLE_ABORT_REASON: 'content-studio:lifecycle-unmount',
   resumeFalImageJob: vi.fn(),
   runFalImageJob: vi.fn(),
@@ -137,6 +138,8 @@ describe('Content Studio 中文应用框架', () => {
     });
     falClientMocks.runFalImageJob.mockReset();
     falClientMocks.resumeFalImageJob.mockReset();
+    falClientMocks.cancelFalImageJob.mockReset();
+    falClientMocks.cancelFalImageJob.mockResolvedValue(undefined);
     falClientMocks.runFalImageJob.mockImplementation(async (_input, options) => {
       options.onExecution?.({ requestId: 'req-app-default', modelId: 'fal-ai/bria/product-shot' });
       options.onProgress?.(55);
@@ -175,6 +178,31 @@ describe('Content Studio 中文应用框架', () => {
     expect(styles).toMatch(
       /\.react-flow__node\.selected\.dragging \.canvas-node\s*\{[^}]*border-color:\s*rgb\(242 244 247 \/ 38%\);[^}]*box-shadow:\s*var\(--highlight-inset\),\s*0 8px 18px rgb\(0 0 0 \/ 26%\);/s,
     );
+  });
+
+  it('右侧编辑面板贯穿画布高度且 Prompt 支持纵向拖拽', () => {
+    const styles = readFileSync(`${process.cwd()}/src/client/styles/soft-glass.css`, 'utf8');
+    const releaseLayer = styles.slice(styles.lastIndexOf('/* Image MVP release convergence */'));
+
+    expect(releaseLayer).toMatch(/\.context-panel\s*\{[^}]*top:\s*0;[^}]*right:\s*0;[^}]*bottom:\s*0;/s);
+    expect(releaseLayer).toMatch(/\.context-panel textarea\s*\{[^}]*resize:\s*vertical;/s);
+    expect(releaseLayer).toMatch(/\.canvas-stage\.is-panel-open \.react-flow\s*\{[^}]*right:\s*360px;/s);
+    expect(releaseLayer).toMatch(
+      /\.segmented--counts button\[aria-pressed="false"\]\s*\{[^}]*background:\s*transparent;/s,
+    );
+    expect(releaseLayer).toMatch(
+      /\.segmented--counts button\[aria-pressed="true"\]\s*\{[^}]*background:\s*rgb\(47 111 237 \/ 34%\);/s,
+    );
+  });
+
+  it('结果详情位于画布节点之上并形成独立交互层', () => {
+    const styles = readFileSync(`${process.cwd()}/src/client/styles/soft-glass.css`, 'utf8');
+    const releaseLayer = styles.slice(styles.lastIndexOf('/* Image MVP release convergence */'));
+
+    expect(releaseLayer).toMatch(
+      /\.canvas-stage\.is-showing-result-overlay > \.react-flow\s*\{[^}]*z-index:\s*0\s*!important;[^}]*isolation:\s*isolate;/s,
+    );
+    expect(releaseLayer).toMatch(/\.result-inspector\s*\{[^}]*z-index:\s*1000;/s);
   });
 
   it('默认打开节点画布，并提供中文全局导航', async () => {
@@ -240,13 +268,21 @@ describe('Content Studio 中文应用框架', () => {
     expect(screen.queryByRole('button', { name: '审计日志' })).not.toBeInTheDocument();
   });
 
-  it('企业用户可以创建持久项目并在列表看到真实记录', async () => {
+  it('企业用户创建持久项目后直接进入新项目工作台', async () => {
     authClientMocks.loadAuthSession.mockResolvedValue(authenticatedOwner());
     organizationClientMocks.createProject.mockResolvedValue({
       id: 'project-autumn', tenantId: 'tenant-a', name: '2026 秋季发布',
       ownerUserId: 'user-owner', reviewRequired: true, status: 'active',
       createdAt: '2026-07-22T06:30:00.000Z', updatedAt: '2026-07-22T06:30:00.000Z',
     });
+    stateClientMocks.loadStudioState
+      .mockResolvedValueOnce({
+        schemaVersion: 1,
+        revision: 1,
+        updatedAt: '2026-07-21T16:00:00.000Z',
+        state: createDemoStudioState(),
+      })
+      .mockResolvedValueOnce(null);
     await renderApp();
     fireEvent.click(screen.getByRole('button', { name: '项目' }));
     fireEvent.click(screen.getByRole('button', { name: '新建项目' }));
@@ -256,10 +292,43 @@ describe('Content Studio 中文应用框架', () => {
     });
     fireEvent.click(within(dialog).getByRole('button', { name: '创建项目' }));
 
-    await screen.findByRole('button', { name: '打开项目 2026 秋季发布' });
+    await screen.findByLabelText('节点画布');
     expect(organizationClientMocks.createProject).toHaveBeenCalledWith({
       name: '2026 秋季发布', defaultBrand: '', defaultSku: '', reviewRequired: true,
     });
+    expect(authClientMocks.setActiveProjectId).toHaveBeenLastCalledWith('project-autumn');
+    expect(await screen.findByText('2026 秋季发布')).toBeInTheDocument();
+  });
+
+  it('在图片工作台内上传素材并直接放入画布', async () => {
+    await renderApp();
+    fireEvent.click(screen.getByRole('button', { name: '上传图片素材' }));
+
+    const dialog = screen.getByRole('dialog', { name: '上传素材' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '商品名称' }), {
+      target: { value: '画布新品' },
+    });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'SKU 编码' }), {
+      target: { value: 'CANVAS-001' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('素材图片'), {
+      target: { files: [new File(['canvas-image'], 'canvas-product.png', { type: 'image/png' })] },
+    });
+    await within(dialog).findByRole('img', { name: '素材预览' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认上传并添加到画布' }));
+
+    await waitFor(() => expect(stateClientMocks.saveStudioState).toHaveBeenLastCalledWith(
+      expect.any(Number),
+      expect.objectContaining({
+        assets: expect.arrayContaining([expect.objectContaining({ skuCode: 'CANVAS-001' })]),
+        scenes: expect.arrayContaining([expect.objectContaining({
+          skuCode: 'CANVAS-001',
+          sourceAssetId: expect.stringMatching(/^asset-/),
+        })]),
+      }),
+    ));
+    expect(screen.getByRole('status', { name: '画布操作反馈' }))
+      .toHaveTextContent('已上传并添加到画布');
   });
 
   it('打开企业项目时切换持久化作用域并初始化空白工作台', async () => {

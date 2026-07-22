@@ -1,5 +1,6 @@
 import { Check, Crown, Download, Star, X } from 'lucide-react';
 import type {
+  Asset,
   GenerationJob,
   QualityIssue,
   Result,
@@ -45,6 +46,8 @@ type ResultInspectorProps = {
   result: Result;
   scene: Scene;
   job: GenerationJob;
+  parentResult?: Result;
+  sourceAsset?: Asset;
   onClose: () => void;
   onDownloadPreview: () => void;
   onOpenExport: () => void;
@@ -61,6 +64,8 @@ export function ResultInspector({
   result,
   scene,
   job,
+  parentResult,
+  sourceAsset,
   onClose,
   onDownloadPreview,
   onOpenExport,
@@ -134,21 +139,27 @@ export function ResultInspector({
           <strong>来源与任务</strong>
           <dl className="result-inspector__metadata">
             <div><dt>来源场景</dt><dd>{getSceneTitle(scene)}</dd></div>
+            {sourceAsset && (
+              <div><dt>原始图片</dt><dd>{sourceAsset.product} / {sourceAsset.version}</dd></div>
+            )}
+            {parentResult && (
+              <div><dt>上一级结果</dt><dd>{parentResult.title}</dd></div>
+            )}
             <div><dt>SKU</dt><dd>{scene.skuCode}</dd></div>
-            <div><dt>任务工具</dt><dd>{getProfile(job.profileId).label}</dd></div>
+            <div><dt>任务类型</dt><dd>{getProfile(job.profileId).label}</dd></div>
             <div><dt>目标比例</dt><dd>{job.inputSnapshot.ratio}</dd></div>
             <div><dt>任务状态</dt><dd>已完成</dd></div>
             <div><dt>消耗点数</dt><dd>{job.actualCredits}</dd></div>
-            {result.generationMetadata && (
-              <>
-                <div><dt>模型</dt><dd>{result.generationMetadata.modelId}</dd></div>
-                <div><dt>请求 ID</dt><dd>{result.generationMetadata.requestId}</dd></div>
-                {result.generationMetadata.seed !== undefined && (
-                  <div><dt>Seed</dt><dd>{result.generationMetadata.seed}</dd></div>
-                )}
-              </>
-            )}
           </dl>
+          {result.generationMetadata && (
+            <details className="result-inspector__trace">
+              <summary>技术追踪</summary>
+              <span>请求 ID：{result.generationMetadata.requestId}</span>
+              {result.generationMetadata.seed !== undefined && (
+                <span>Seed：{result.generationMetadata.seed}</span>
+              )}
+            </details>
+          )}
           {parameters.length > 0 && (
             <div className="result-inspector__parameters">
               {parameters.map(([key, value]) => (

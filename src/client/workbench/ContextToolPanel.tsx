@@ -71,7 +71,7 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
       <header>
         <div>
           {!isAdvancedEditor && <small>图片处理</small>}
-          <strong>{props.tool === 'light' ? '打光效果' : props.tool === 'angle' ? '多角度编辑器' : profile.label}</strong>
+          <strong>{props.tool === 'light' ? '修改光影' : props.tool === 'angle' ? '多角度编辑器' : profile.label}</strong>
         </div>
         <button aria-label="关闭参数面板" onClick={props.onClose} title="关闭参数面板" type="button">
           <X size={17} />
@@ -167,7 +167,7 @@ export function ContextToolPanel(props: ContextToolPanelProps) {
       )}
 
       {props.tool === 'angle' && (
-        <p className="angle-risk" role="note">模型会推断不可见区域，结果需人工复核</p>
+        <p className="angle-risk" role="note">AI 会推断不可见区域，结果需人工复核</p>
       )}
 
       {props.tool === 'light' && (
@@ -322,7 +322,7 @@ function AdvancedEditorFooter({
         onClick={onRun}
         type="button"
       >
-        <span>{submitting ? '提交中' : tool === 'light' ? '生成打光' : '生成视角'}</span>
+        <span>{submitting ? '提交中' : tool === 'light' ? '生成光影修改' : '生成视角'}</span>
         <ArrowUp aria-hidden="true" size={19} strokeWidth={2.2} />
       </button>
     </footer>

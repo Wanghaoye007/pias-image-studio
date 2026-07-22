@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  cancelFalImageJob,
   FAL_LIFECYCLE_ABORT_REASON,
   prepareImageUrlForFal,
   resumeFalImageJob,
@@ -14,6 +15,15 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('Fal 通用浏览器客户端', () => {
+  it('取消接口失败时向工作台返回服务端错误，不伪装成已取消', async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({
+      error: { code: 'FAL_CANCEL_FAILED', message: '供应商未确认取消，请稍后重试' },
+    }, 502));
+
+    await expect(cancelFalImageJob('fal-local-cancel-failed', fetcher))
+      .rejects.toThrow('供应商未确认取消，请稍后重试');
+  });
+
   it('保留公网 HTTPS，读取同源图片并转换为 Data URI', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(
       new Uint8Array([137, 80, 78, 71]),
