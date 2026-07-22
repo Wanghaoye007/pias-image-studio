@@ -98,7 +98,7 @@ export function InvitationAcceptance({
       <section aria-labelledby="invitation-title" className="auth-panel invitation-panel">
         <div className="auth-brand">
           <span className="auth-brand__mark"><Box aria-hidden="true" size={21} /></span>
-          <div><strong>PIAS 图片</strong><small>企业内容生产工作台</small></div>
+          <div><strong>内容工作台</strong><small>企业内容生产工作台</small></div>
         </div>
         <div className="auth-heading">
           <span className="auth-heading__icon"><ShieldCheck aria-hidden="true" size={22} /></span>

@@ -1,5 +1,5 @@
 {
-  "name": "pias-image-studio-mvp",
+  "name": "content-studio-workbench",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "migrate:studio-state": "node scripts/migrate-studio-state.mjs",
     "migrate:project-storage": "node scripts/migrate-project-storage.mjs",
     "migrate:sqlite": "node scripts/migrate-to-sqlite.mjs",
-    "database": "node scripts/pias-database.mjs",
+    "database": "node scripts/content-studio-database.mjs",
     "fal:billing:check": "node scripts/check-fal-billing-access.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "release:preflight:report": "node scripts/release-preflight.mjs --report-only",

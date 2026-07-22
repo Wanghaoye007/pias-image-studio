@@ -1,6 +1,6 @@
 export type ReleaseMetadata = {
   schemaVersion: 1;
-  service: 'pias-image-studio';
+  service: 'content-studio';
   version: string;
   revision: string;
   dirty: boolean;

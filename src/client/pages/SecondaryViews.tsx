@@ -407,7 +407,7 @@ function ProjectsView({
         <div>
           <span className="eyebrow">图片工作区</span>
           <h3>{state.projectName}</h3>
-          <p>PIAS-SF-001 · {state.scenes.length} 个场景 · {state.results.length} 个结果</p>
+          <p>AST-SF-001 · {state.scenes.length} 个场景 · {state.results.length} 个结果</p>
         </div>
         <span className="project-row__status">当前项目</span>
       </article>
@@ -557,7 +557,7 @@ function AssetUploadDialog({
   onClose: () => void;
   onSubmit: (input: Omit<Asset, 'id'>) => void;
 }) {
-  const [brand, setBrand] = useState('PIAS');
+  const [brand, setBrand] = useState('Content Studio');
   const [product, setProduct] = useState('');
   const [skuCode, setSkuCode] = useState('');
   const [usage, setUsage] = useState('商品主图');
@@ -1375,7 +1375,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 function displayTenantName(tenantName: string) {
-  return tenantName === 'PIAS Japan' ? 'PIAS 日本' : tenantName;
+  return tenantName === 'Aster Japan' ? 'Aster 日本' : tenantName;
 }
 
 export function getJobStatusLabel(status: JobStatus) {

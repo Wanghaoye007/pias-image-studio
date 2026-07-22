@@ -27,7 +27,7 @@ export class AuthClientError extends Error {
 let activeProjectId = '';
 
 export function getPreferredProjectId(projectIds: string[]): string {
-  const remembered = readCookie('pias_project');
+  const remembered = readCookie('content_studio_project');
   return remembered && projectIds.includes(remembered) ? remembered : projectIds[0] ?? '';
 }
 
@@ -38,8 +38,8 @@ export function setActiveProjectId(projectId: string): void {
   activeProjectId = projectId;
   if (typeof document !== 'undefined') {
     document.cookie = projectId
-      ? `pias_project=${encodeURIComponent(projectId)}; Path=/; SameSite=Strict`
-      : 'pias_project=; Path=/; Max-Age=0; SameSite=Strict';
+      ? `content_studio_project=${encodeURIComponent(projectId)}; Path=/; SameSite=Strict`
+      : 'content_studio_project=; Path=/; Max-Age=0; SameSite=Strict';
   }
 }
 
@@ -77,10 +77,10 @@ export async function logout(): Promise<void> {
 export function withCsrfProtection(init: RequestInit = {}): RequestInit {
   const method = (init.method ?? 'GET').toUpperCase();
   const headers = new Headers(init.headers);
-  if (activeProjectId) headers.set('x-pias-project-id', activeProjectId);
+  if (activeProjectId) headers.set('x-content-studio-project-id', activeProjectId);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-    const token = readCookie('pias_csrf');
-    if (token) headers.set('x-pias-csrf', token);
+    const token = readCookie('content_studio_csrf');
+    if (token) headers.set('x-content-studio-csrf', token);
   }
   return { ...init, headers };
 }

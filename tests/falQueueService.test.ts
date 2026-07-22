@@ -580,7 +580,7 @@ describe('Fal 统一作业编排器', () => {
       requestId: expect.any(String),
     });
     expect(onOperationalError).toHaveBeenCalledWith(
-      'pias_fal_queue_hydration_failed',
+      'content_studio_fal_queue_hydration_failed',
       expect.any(Error),
     );
   });

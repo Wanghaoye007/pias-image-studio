@@ -3,9 +3,9 @@ import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { writeReleaseMetadata } from './write-release-metadata-core.mjs';
 
-const artifactDirectory = process.env.PIAS_RELEASE_ARTIFACT_DIR || 'dist';
-const revision = process.env.PIAS_RELEASE_REVISION || gitOutput(['rev-parse', 'HEAD']) || 'unknown';
-const dirtyOverride = process.env.PIAS_RELEASE_DIRTY;
+const artifactDirectory = process.env.CONTENT_STUDIO_RELEASE_ARTIFACT_DIR || 'dist';
+const revision = process.env.CONTENT_STUDIO_RELEASE_REVISION || gitOutput(['rev-parse', 'HEAD']) || 'unknown';
+const dirtyOverride = process.env.CONTENT_STUDIO_RELEASE_DIRTY;
 const dirty = dirtyOverride === undefined
   ? gitOutput(['status', '--porcelain']).length > 0
   : dirtyOverride === 'true';

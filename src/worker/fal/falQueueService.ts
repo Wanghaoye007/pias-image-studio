@@ -244,7 +244,7 @@ export function createFalQueueService(options: {
   let persistenceWrite = Promise.resolve();
   const jobs = new Map<string, LocalFalJob>();
   const createId = options.createId ?? (() => `fal-local-${randomUUID()}`);
-  const workerId = options.workerId ?? `pias-${process.pid}-${randomUUID()}`;
+  const workerId = options.workerId ?? `content-studio-${process.pid}-${randomUUID()}`;
   const leaseTtlMs = options.leaseTtlMs ?? 15_000;
   const billingRetryIntervalMs = Math.max(1_000, options.billingRetryIntervalMs ?? 5 * 60_000);
   const now = options.now ?? Date.now;
@@ -272,7 +272,7 @@ export function createFalQueueService(options: {
           savedJobs.filter(isPersistedJob).forEach((job) => jobs.set(job.id, job));
         })
         .catch((error) => {
-          options.onOperationalError?.('pias_fal_queue_hydration_failed', error);
+          options.onOperationalError?.('content_studio_fal_queue_hydration_failed', error);
         })
       : Promise.resolve();
     return hydrated;
@@ -293,7 +293,7 @@ export function createFalQueueService(options: {
       .catch(() => undefined)
       .then(() => options.persistence?.save(snapshot));
     persistenceWrite = write.catch((error) => {
-        options.onOperationalError?.('pias_fal_queue_persistence_failed', error);
+        options.onOperationalError?.('content_studio_fal_queue_persistence_failed', error);
       });
     return strict ? write : persistenceWrite;
   };

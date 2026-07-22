@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('production deployment artifacts', () => {
   it('keeps the TLS proxy on a loopback upstream with bounded requests', async () => {
-    const config = await readFile('deploy/nginx-pias.conf.example', 'utf8');
+    const config = await readFile('deploy/nginx-content-studio.conf.example', 'utf8');
 
     expect(config).toContain('listen 443 ssl');
     expect(config).toContain('proxy_pass http://127.0.0.1:4173');
@@ -20,11 +20,11 @@ describe('production deployment artifacts', () => {
   });
 
   it('routes structured service logs to journald with a stable identifier', async () => {
-    const service = await readFile('deploy/pias.service.example', 'utf8');
+    const service = await readFile('deploy/content-studio.service.example', 'utf8');
 
     expect(service).toContain('StandardOutput=journal');
     expect(service).toContain('StandardError=journal');
-    expect(service).toContain('SyslogIdentifier=pias');
+    expect(service).toContain('SyslogIdentifier=content-studio');
     expect(service).toContain('Restart=on-failure');
     expect(service).toContain('KillSignal=SIGTERM');
   });

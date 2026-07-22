@@ -12,7 +12,7 @@ import {
 const user = {
   id: 'user-1',
   tenantId: 'tenant-1',
-  email: 'reviewer@pias.test',
+  email: 'reviewer@studio.test',
   displayName: '青井审核员',
   role: 'reviewer' as const,
   projectIds: ['project-1'],
@@ -30,7 +30,7 @@ describe('认证浏览器客户端', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     setActiveProjectId('');
-    document.cookie = 'pias_csrf=; Max-Age=0; Path=/';
+    document.cookie = 'content_studio_csrf=; Max-Age=0; Path=/';
   });
 
   it('将未配置身份服务识别为受控本机模式', async () => {
@@ -59,7 +59,7 @@ describe('认证浏览器客户端', () => {
       }));
     vi.stubGlobal('fetch', fetcher);
 
-    await expect(login(' reviewer@pias.test ', 'correct horse battery')).resolves.toEqual({
+    await expect(login(' reviewer@studio.test ', 'correct horse battery')).resolves.toEqual({
       status: 'mfa_required',
       expiresAt: '2026-07-22T04:00:00.000Z',
     });
@@ -70,7 +70,7 @@ describe('认证浏览器客户端', () => {
     });
     expect(fetcher).toHaveBeenNthCalledWith(1, '/api/auth/login', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ email: 'reviewer@pias.test', password: 'correct horse battery' }),
+      body: JSON.stringify({ email: 'reviewer@studio.test', password: 'correct horse battery' }),
     }));
     expect(fetcher).toHaveBeenNthCalledWith(2, '/api/auth/mfa', expect.objectContaining({
       method: 'POST',
@@ -79,7 +79,7 @@ describe('认证浏览器客户端', () => {
   });
 
   it('仅为写请求注入双提交 CSRF 请求头并在退出时使用它', async () => {
-    document.cookie = 'pias_csrf=csrf%20value; Path=/';
+    document.cookie = 'content_studio_csrf=csrf%20value; Path=/';
     setActiveProjectId('project-1');
     const protectedRequest = withCsrfProtection({
       method: 'PUT',
@@ -87,13 +87,13 @@ describe('认证浏览器客户端', () => {
     });
     const readRequest = withCsrfProtection({ method: 'GET' });
 
-    expect(new Headers(protectedRequest.headers).get('x-pias-csrf')).toBe('csrf value');
-    expect(new Headers(protectedRequest.headers).get('x-pias-project-id')).toBe('project-1');
+    expect(new Headers(protectedRequest.headers).get('x-content-studio-csrf')).toBe('csrf value');
+    expect(new Headers(protectedRequest.headers).get('x-content-studio-project-id')).toBe('project-1');
     expect(new Headers(protectedRequest.headers).get('content-type')).toBe('application/json');
-    expect(new Headers(readRequest.headers).has('x-pias-csrf')).toBe(false);
-    expect(new Headers(readRequest.headers).get('x-pias-project-id')).toBe('project-1');
-    expect(new Headers(readRequest.headers).has('x-pias-tenant-id')).toBe(false);
-    expect(document.cookie).toContain('pias_project=project-1');
+    expect(new Headers(readRequest.headers).has('x-content-studio-csrf')).toBe(false);
+    expect(new Headers(readRequest.headers).get('x-content-studio-project-id')).toBe('project-1');
+    expect(new Headers(readRequest.headers).has('x-content-studio-tenant-id')).toBe(false);
+    expect(document.cookie).toContain('content_studio_project=project-1');
 
     const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetcher);
@@ -102,11 +102,11 @@ describe('认证浏览器客户端', () => {
       method: 'POST',
       headers: expect.any(Headers),
     }));
-    expect((fetcher.mock.calls[0][1].headers as Headers).get('x-pias-csrf')).toBe('csrf value');
+    expect((fetcher.mock.calls[0][1].headers as Headers).get('x-content-studio-csrf')).toBe('csrf value');
   });
 
   it('刷新后仅恢复会话仍有权访问的当前项目', () => {
-    document.cookie = 'pias_project=project-2; Path=/';
+    document.cookie = 'content_studio_project=project-2; Path=/';
     expect(getPreferredProjectId(['project-1', 'project-2'])).toBe('project-2');
     expect(getPreferredProjectId(['project-1'])).toBe('project-1');
     expect(getPreferredProjectId([])).toBe('');

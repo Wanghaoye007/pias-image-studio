@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { initialStudioState } from '../src/shared/domain';
 import {
-  openPiasDatabase,
-  type PiasDatabase,
+  openContentStudioDatabase,
+  type ContentStudioDatabase,
 } from '../src/server/persistence/sqliteDatabase';
 import {
   createSqliteStudioStatePersistence,
@@ -14,7 +14,7 @@ import {
 } from '../src/server/studio/studioStatePersistence';
 
 const temporaryDirectories: string[] = [];
-const databases: PiasDatabase[] = [];
+const databases: ContentStudioDatabase[] = [];
 
 afterEach(async () => {
   while (databases.length > 0) databases.pop()?.close();
@@ -25,13 +25,13 @@ afterEach(async () => {
 });
 
 async function databasePath(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'pias-sqlite-'));
+  const directory = await mkdtemp(join(tmpdir(), 'content-studio-sqlite-'));
   temporaryDirectories.push(directory);
-  return join(directory, 'pias.sqlite');
+  return join(directory, 'content-studio.sqlite');
 }
 
-function open(filePath: string): PiasDatabase {
-  const database = openPiasDatabase(filePath);
+function open(filePath: string): ContentStudioDatabase {
+  const database = openContentStudioDatabase(filePath);
   databases.push(database);
   return database;
 }

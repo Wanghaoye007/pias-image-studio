@@ -12,7 +12,7 @@ export function loadReleaseIdentity(
     ) as Record<string, unknown>;
     if (
       metadata.schemaVersion !== 1
-      || metadata.service !== 'pias-image-studio'
+      || metadata.service !== 'content-studio'
       || typeof metadata.version !== 'string'
       || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(metadata.version)
       || typeof metadata.revision !== 'string'

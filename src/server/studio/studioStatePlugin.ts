@@ -14,7 +14,10 @@ import {
   StudioStateStorageError,
   type StudioStatePersistence,
 } from './studioStatePersistence';
-import { openPiasDatabase, type PiasDatabase } from '../persistence/sqliteDatabase';
+import {
+  openContentStudioDatabase,
+  type ContentStudioDatabase,
+} from '../persistence/sqliteDatabase';
 import { parseStudioState, StudioStateValidationError } from '../../shared/studio/studioStateSchema';
 import {
   authorizeStudioStateWrite,
@@ -109,16 +112,16 @@ export function studioStatePlugin(options: {
   databaseFile?: string;
   persistenceBackend?: 'sqlite' | 'file';
 } = {}): Plugin {
-  let database: PiasDatabase | null = null;
+  let database: ContentStudioDatabase | null = null;
   const backend = options.persistenceBackend
-    ?? (process.env.PIAS_PERSISTENCE_BACKEND === 'file' ? 'file' : 'sqlite');
+    ?? (process.env.CONTENT_STUDIO_PERSISTENCE_BACKEND === 'file' ? 'file' : 'sqlite');
   const persistence = options.scoped
     ? backend === 'sqlite'
       ? createSqlitePersistenceResolver(() => {
-          database ??= openPiasDatabase(
+          database ??= openContentStudioDatabase(
             options.databaseFile
-            || process.env.PIAS_DATABASE_FILE
-            || '/tmp/pias-image-studio/pias.sqlite',
+            || process.env.CONTENT_STUDIO_DATABASE_FILE
+            || '/tmp/content-studio/content-studio.sqlite',
           );
           return database;
         })
@@ -135,7 +138,7 @@ export function studioStatePlugin(options: {
     } : {}),
   });
   return {
-    name: 'pias-studio-state',
+    name: 'content-studio-state',
     configureServer(server) {
       server.middlewares.use(middleware);
     },
@@ -150,7 +153,7 @@ export function studioStatePlugin(options: {
 }
 
 function createSqlitePersistenceResolver(
-  databaseSource: () => PiasDatabase,
+  databaseSource: () => ContentStudioDatabase,
 ): (request: IncomingMessage) => StudioStatePersistence {
   const cache = new Map<string, StudioStatePersistence>();
   return (request) => {
@@ -168,10 +171,10 @@ function createSqlitePersistenceResolver(
 function createScopedPersistenceResolver(
   configuredDirectory?: string,
 ): (request: IncomingMessage) => StudioStatePersistence {
-  const legacyFile = process.env.PIAS_STUDIO_STATE_FILE
-    || '/tmp/pias-image-studio/studio-state.json';
+  const legacyFile = process.env.CONTENT_STUDIO_STATE_FILE
+    || '/tmp/content-studio/studio-state.json';
   const rootDirectory = configuredDirectory
-    || process.env.PIAS_STUDIO_STATE_DIR
+    || process.env.CONTENT_STUDIO_STATE_DIR
     || join(dirname(legacyFile), 'studio-state-scopes');
   const cache = new Map<string, StudioStatePersistence>();
   return (request) => {

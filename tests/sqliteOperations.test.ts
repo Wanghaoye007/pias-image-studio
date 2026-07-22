@@ -8,7 +8,10 @@ import { initialStudioState } from '../src/shared/domain';
 import { createScopedFalQueuePersistence } from '../src/worker/fal/falJobPersistence';
 import { createSqliteFalQueuePersistence } from '../src/worker/fal/falSqlitePersistence';
 import type { PersistedFalJob } from '../src/worker/fal/falQueueService';
-import { openPiasDatabase, scopeStorageKey } from '../src/server/persistence/sqliteDatabase';
+import {
+  openContentStudioDatabase,
+  scopeStorageKey,
+} from '../src/server/persistence/sqliteDatabase';
 import {
   createScopedStudioStatePersistence,
   createSqliteStudioStatePersistence,
@@ -24,18 +27,18 @@ afterEach(async () => {
   })));
 });
 
-describe('PIAS SQLite operations', () => {
+describe('Content Studio SQLite operations', () => {
   it('backs up with integrity evidence and restores with a rollback copy', async () => {
-    const directory = await temporaryDirectory('pias-db-ops-');
-    const databasePath = join(directory, 'pias.sqlite');
-    const backupPath = join(directory, 'backups', 'pias-001.sqlite');
-    let database = openPiasDatabase(databasePath);
+    const directory = await temporaryDirectory('content-studio-db-ops-');
+    const databasePath = join(directory, 'content-studio.sqlite');
+    const backupPath = join(directory, 'backups', 'content-studio-001.sqlite');
+    let database = openContentStudioDatabase(databasePath);
     let persistence = createSqliteStudioStatePersistence(database, scope);
     await persistence.save(0, { ...initialStudioState(), workspaceName: 'backup-version' });
     database.close();
 
     const backedUp = run([
-      'scripts/pias-database.mjs', 'backup',
+      'scripts/content-studio-database.mjs', 'backup',
       '--database', databasePath,
       '--output', backupPath,
     ]);
@@ -49,25 +52,25 @@ describe('PIAS SQLite operations', () => {
     await expect(stat(backupPath)).resolves.toBeDefined();
     await expect(readFile(backupResult.manifest, 'utf8')).resolves.toContain(backupResult.sha256);
 
-    database = openPiasDatabase(databasePath);
+    database = openContentStudioDatabase(databasePath);
     persistence = createSqliteStudioStatePersistence(database, scope);
     await persistence.save(1, { ...initialStudioState(), workspaceName: 'newer-version' });
     database.close();
 
     const dryRun = run([
-      'scripts/pias-database.mjs', 'restore',
+      'scripts/content-studio-database.mjs', 'restore',
       '--database', databasePath,
       '--backup', backupPath,
     ]);
     expect(dryRun.status).toBe(0);
     expect(parseOutput(dryRun.stdout)).toMatchObject({ mode: 'dry-run', integrity: 'ok' });
-    database = openPiasDatabase(databasePath);
+    database = openContentStudioDatabase(databasePath);
     persistence = createSqliteStudioStatePersistence(database, scope);
     await expect(persistence.load()).resolves.toMatchObject({ revision: 2 });
     database.close();
 
     const restored = run([
-      'scripts/pias-database.mjs', 'restore',
+      'scripts/content-studio-database.mjs', 'restore',
       '--database', databasePath,
       '--backup', backupPath,
       '--apply',
@@ -76,7 +79,7 @@ describe('PIAS SQLite operations', () => {
     const restoreResult = parseOutput(restored.stdout) as { rollback: string; integrity: string };
     expect(restoreResult.integrity).toBe('ok');
     await expect(stat(restoreResult.rollback)).resolves.toBeDefined();
-    database = openPiasDatabase(databasePath);
+    database = openContentStudioDatabase(databasePath);
     persistence = createSqliteStudioStatePersistence(database, scope);
     await expect(persistence.load()).resolves.toMatchObject({
       revision: 1,
@@ -86,10 +89,10 @@ describe('PIAS SQLite operations', () => {
   });
 
   it('migrates scoped JSON snapshots transactionally without deleting sources', async () => {
-    const directory = await temporaryDirectory('pias-db-migrate-');
+    const directory = await temporaryDirectory('content-studio-db-migrate-');
     const sourceRoot = join(directory, 'studio-scopes');
     const falRoot = join(directory, 'fal-scopes');
-    const databasePath = join(directory, 'pias.sqlite');
+    const databasePath = join(directory, 'content-studio.sqlite');
     const source = createScopedStudioStatePersistence(sourceRoot, scope);
     await source.save(0, { ...initialStudioState(), workspaceName: 'legacy-scoped' });
     const falSource = createScopedFalQueuePersistence(falRoot, scope);
@@ -124,7 +127,7 @@ describe('PIAS SQLite operations', () => {
     expect(rawDatabase.prepare('PRAGMA table_info(organization_users)').all())
       .toEqual(expect.arrayContaining([expect.objectContaining({ name: 'first_login_at' })]));
     rawDatabase.close();
-    const database = openPiasDatabase(databasePath);
+    const database = openContentStudioDatabase(databasePath);
     const migrated = createSqliteStudioStatePersistence(database, scope);
     await expect(migrated.load()).resolves.toMatchObject({
       revision: 1,

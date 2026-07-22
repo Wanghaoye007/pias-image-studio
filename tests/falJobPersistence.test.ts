@@ -36,7 +36,7 @@ function job(prompt: string): PersistedFalJob {
 
 describe('Fal queue scoped persistence', () => {
   it('isolates identical local request ids across tenant projects', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-fal-scopes-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-fal-scopes-'));
     directories.push(directory);
     const tenantA = createScopedFalQueuePersistence(directory, {
       tenantId: 'tenant-a',

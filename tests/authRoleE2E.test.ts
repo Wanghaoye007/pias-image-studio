@@ -23,7 +23,7 @@ import type {
 } from '../src/server/studio/studioStatePersistence';
 import { createStudioStateMiddleware } from '../src/server/studio/studioStatePlugin';
 
-const password = 'PIAS-release-2026!';
+const password = 'Studio-release-2026!';
 const projectId = 'project-a';
 
 type ResponseResult = {
@@ -97,7 +97,7 @@ async function user(id: string, role: AuthUser['role']): Promise<AuthUser> {
   return {
     id,
     tenantId: 'tenant-a',
-    email: `${id}@pias.test`,
+    email: `${id}@studio.test`,
     displayName: id,
     passwordHash: await hashPassword(password),
     role,
@@ -137,10 +137,10 @@ async function login(identity: IdentityService, authUser: AuthUser) {
     { email: authUser.email, password },
   );
   const setCookies = response.headers.get('set-cookie') as string[];
-  const sessionToken = cookieValue(setCookies, 'pias_session');
-  const csrfToken = cookieValue(setCookies, 'pias_csrf');
+  const sessionToken = cookieValue(setCookies, 'content_studio_session');
+  const csrfToken = cookieValue(setCookies, 'content_studio_csrf');
   return {
-    cookie: `pias_session=${sessionToken}; pias_csrf=${csrfToken}`,
+    cookie: `content_studio_session=${sessionToken}; content_studio_csrf=${csrfToken}`,
     csrfToken,
   };
 }
@@ -159,8 +159,8 @@ async function invokeStack(
   }, 'PUT', '/api/studio/state', {
     cookie: session.cookie,
     'content-type': 'application/json',
-    'x-pias-csrf': session.csrfToken,
-    'x-pias-project-id': projectId,
+    'x-content-studio-csrf': session.csrfToken,
+    'x-content-studio-project-id': projectId,
   }, { schemaVersion: 1, expectedRevision, state });
 }
 

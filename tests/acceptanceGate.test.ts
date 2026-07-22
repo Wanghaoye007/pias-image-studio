@@ -28,7 +28,7 @@ function fixture(status: 'pass' | 'fail' | 'partial', severity: 'P0' | 'P1' | 'P
 }
 
 describe('acceptance gate', () => {
-  it('validates the PIAS manifest and keeps acceptance yellow while non-P0 gaps exist', () => {
+  it('validates the Content Studio manifest and keeps acceptance yellow while non-P0 gaps exist', () => {
     expect(() => validateManifest(manifest)).not.toThrow();
     const result = evaluateAcceptance(manifest);
 

@@ -1,4 +1,4 @@
-# PIAS 生产发布预检
+# Content Studio 生产发布预检
 
 ## 目的
 
@@ -11,10 +11,10 @@
 ```bash
 npm run build
 npm run database -- backup \
-  --database "$PIAS_DATABASE_FILE" \
-  --output /var/backups/pias/pias-release.sqlite
-export PIAS_RELEASE_BACKUP_FILE=/var/backups/pias/pias-release.sqlite
-export PIAS_RELEASE_ARTIFACT_DIR=/opt/pias/dist
+  --database "$CONTENT_STUDIO_DATABASE_FILE" \
+  --output /var/backups/content-studio/content-studio-release.sqlite
+export CONTENT_STUDIO_RELEASE_BACKUP_FILE=/var/backups/content-studio/content-studio-release.sqlite
+export CONTENT_STUDIO_RELEASE_ARTIFACT_DIR=/opt/content-studio/dist
 npm run release:preflight
 ```
 
@@ -26,7 +26,7 @@ npm run release:preflight
 | --- | --- | --- |
 | `runtime.node` | Node.js 24.x | `NODE_VERSION_UNSUPPORTED` |
 | `deployment.mode` | `NODE_ENV=production` | `PRODUCTION_MODE_REQUIRED` |
-| `security.cookies` | `PIAS_SECURE_COOKIES=true` | `SECURE_COOKIES_REQUIRED` |
+| `security.cookies` | `CONTENT_STUDIO_SECURE_COOKIES=true` | `SECURE_COOKIES_REQUIRED` |
 | `security.raw_secrets` | Fal 凭证只从文件读取 | `RAW_SECRET_ENV_FORBIDDEN` |
 | `deployment.persistence` | 使用 SQLite 后端 | `SQLITE_BACKEND_REQUIRED` |
 | `deployment.public_url` | 非本机公开 HTTPS 地址 | `PUBLIC_HTTPS_URL_REQUIRED` |

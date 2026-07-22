@@ -16,7 +16,7 @@ vi.mock('../src/client/auth/authClient', () => authClientMocks);
 const user = {
   id: 'user-1',
   tenantId: 'tenant-1',
-  email: 'admin@pias.test',
+  email: 'admin@studio.test',
   displayName: '田中管理员',
   role: 'admin' as const,
   projectIds: ['project-1'],
@@ -62,10 +62,10 @@ describe('应用认证边界', () => {
       </AuthBoundary>,
     );
 
-    expect(await screen.findByRole('heading', { name: '登录 PIAS' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '登录 Content Studio' })).toBeInTheDocument();
     expect(screen.queryByText(/工作台-/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: '邮箱' }), {
-      target: { value: 'admin@pias.test' },
+      target: { value: 'admin@studio.test' },
     });
     fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'correct horse battery' },
@@ -79,7 +79,7 @@ describe('应用认证边界', () => {
     fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
 
     expect(await screen.findByText('工作台-authenticated')).toBeInTheDocument();
-    expect(authClientMocks.login).toHaveBeenCalledWith('admin@pias.test', 'correct horse battery');
+    expect(authClientMocks.login).toHaveBeenCalledWith('admin@studio.test', 'correct horse battery');
     expect(authClientMocks.completeMfa).toHaveBeenCalledWith('123456');
   });
 
@@ -93,12 +93,12 @@ describe('应用认证边界', () => {
     );
 
     const email = await screen.findByRole('textbox', { name: '邮箱' });
-    fireEvent.change(email, { target: { value: 'admin@pias.test' } });
+    fireEvent.change(email, { target: { value: 'admin@studio.test' } });
     fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'wrong password' } });
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('邮箱或密码不正确');
-    expect(email).toHaveValue('admin@pias.test');
+    expect(email).toHaveValue('admin@studio.test');
     await waitFor(() => expect(screen.getByRole('button', { name: '继续' })).toBeEnabled());
   });
 

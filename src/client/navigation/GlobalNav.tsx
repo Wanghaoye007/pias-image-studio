@@ -51,7 +51,7 @@ export function GlobalNav({
     <aside className="nav-rail">
       <div className="brand-mark">
         <Box aria-hidden="true" size={20} />
-        <span>PIAS 图片</span>
+        <span>内容工作台</span>
       </div>
       <nav aria-label="主导航">
         {navItems.map((item) => {
@@ -98,5 +98,5 @@ export function roleLabel(role: AuthRole): string {
 }
 
 function displayTenantName(tenantName: string) {
-  return tenantName === 'PIAS Japan' ? 'PIAS 日本' : tenantName;
+  return tenantName === 'Aster Japan' ? 'Aster 日本' : tenantName;
 }

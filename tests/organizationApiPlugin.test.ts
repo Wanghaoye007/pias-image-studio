@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuthContext } from '../src/server/auth/authPolicy';
 import { createOrganizationMiddleware } from '../src/server/organization/organizationPlugin';
 import { createOrganizationService } from '../src/server/organization/organizationService';
-import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
+import { openContentStudioDatabase } from '../src/server/persistence/sqliteDatabase';
 
 const directories: string[] = [];
 const context: AuthContext = {
@@ -47,7 +47,7 @@ describe('organization API middleware', () => {
     });
     const projectId = (project.body?.project as { id: string }).id;
     const invitation = await invoke(middleware, 'POST', '/api/organization/invitations', {
-      email: 'reviewer@pias.test', role: 'reviewer', projectIds: [projectId],
+      email: 'reviewer@studio.test', role: 'reviewer', projectIds: [projectId],
     });
     expect(invitation).toMatchObject({
       statusCode: 201,
@@ -66,7 +66,7 @@ describe('organization API middleware', () => {
     });
     const projectId = (project.body?.project as { id: string }).id;
     const created = await invoke(middleware, 'POST', '/api/organization/invitations', {
-      email: 'public-member@pias.test', role: 'viewer', projectIds: [projectId],
+      email: 'public-member@studio.test', role: 'viewer', projectIds: [projectId],
     });
     const acceptToken = String(created.body?.acceptToken);
 
@@ -78,23 +78,23 @@ describe('organization API middleware', () => {
     );
     expect(preview).toMatchObject({
       statusCode: 200,
-      body: { invitation: { email: 'public-member@pias.test', role: 'viewer' } },
+      body: { invitation: { email: 'public-member@studio.test', role: 'viewer' } },
     });
     const accepted = await invoke(
       middleware,
       'POST',
       '/api/organization/invitations/accept',
-      { token: acceptToken, password: 'PIAS-member-2026!' },
+      { token: acceptToken, password: 'Studio-member-2026!' },
     );
     expect(accepted).toMatchObject({
       statusCode: 201,
-      body: { member: { email: 'public-member@pias.test', projectIds: [projectId] } },
+      body: { member: { email: 'public-member@studio.test', projectIds: [projectId] } },
     });
     const second = await invoke(
       middleware,
       'POST',
       '/api/organization/invitations/accept',
-      { token: acceptToken, password: 'PIAS-member-2026!' },
+      { token: acceptToken, password: 'Studio-member-2026!' },
     );
     expect(second).toMatchObject({ statusCode: 409 });
     close();
@@ -107,7 +107,7 @@ describe('organization API middleware', () => {
     });
     const projectId = (project.body?.project as { id: string }).id;
     const original = await invoke(middleware, 'POST', '/api/organization/invitations', {
-      email: 'resend-api@pias.test', role: 'reviewer', projectIds: [projectId],
+      email: 'resend-api@studio.test', role: 'reviewer', projectIds: [projectId],
     });
     const originalId = (original.body?.invitation as { id: string }).id;
 
@@ -121,7 +121,7 @@ describe('organization API middleware', () => {
       statusCode: 201,
       body: {
         invitation: {
-          email: 'resend-api@pias.test',
+          email: 'resend-api@studio.test',
           status: 'pending',
         },
         acceptToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
@@ -142,10 +142,10 @@ describe('organization API middleware', () => {
     const firstId = (first.body?.project as { id: string }).id;
     const secondId = (second.body?.project as { id: string }).id;
     const created = await invoke(middleware, 'POST', '/api/organization/invitations', {
-      email: 'api-member@pias.test', role: 'creator', projectIds: [firstId],
+      email: 'api-member@studio.test', role: 'creator', projectIds: [firstId],
     });
     const accepted = await invoke(middleware, 'POST', '/api/organization/invitations/accept', {
-      token: String(created.body?.acceptToken), password: 'PIAS-member-2026!',
+      token: String(created.body?.acceptToken), password: 'Studio-member-2026!',
     });
     const memberId = (accepted.body?.member as { id: string }).id;
 
@@ -171,9 +171,9 @@ describe('organization API middleware', () => {
 });
 
 async function setup() {
-  const directory = await mkdtemp(join(tmpdir(), 'pias-org-api-'));
+  const directory = await mkdtemp(join(tmpdir(), 'content-studio-org-api-'));
   directories.push(directory);
-  const database = openPiasDatabase(join(directory, 'pias.sqlite'));
+  const database = openContentStudioDatabase(join(directory, 'content-studio.sqlite'));
   const service = createOrganizationService(database);
   return {
     middleware: createOrganizationMiddleware(service, { getContext: () => context }),

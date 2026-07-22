@@ -12,21 +12,21 @@ import { loadReleaseIdentity } from './src/server/releaseIdentity';
 import { studioStatePlugin } from './src/server/studio/studioStatePlugin';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), 'PIAS_');
+  const env = loadEnv(mode, process.cwd(), 'CONTENT_STUDIO_');
   const identity = loadIdentityServiceFromConfig(
-    process.env.PIAS_AUTH_CONFIG_FILE || env.PIAS_AUTH_CONFIG_FILE,
+    process.env.CONTENT_STUDIO_AUTH_CONFIG_FILE || env.CONTENT_STUDIO_AUTH_CONFIG_FILE,
   );
-  const secureCookies = (process.env.PIAS_SECURE_COOKIES || env.PIAS_SECURE_COOKIES)
-    ? (process.env.PIAS_SECURE_COOKIES || env.PIAS_SECURE_COOKIES) !== 'false'
+  const secureCookies = (process.env.CONTENT_STUDIO_SECURE_COOKIES || env.CONTENT_STUDIO_SECURE_COOKIES)
+    ? (process.env.CONTENT_STUDIO_SECURE_COOKIES || env.CONTENT_STUDIO_SECURE_COOKIES) !== 'false'
     : mode !== 'development';
-  const persistenceBackend = (process.env.PIAS_PERSISTENCE_BACKEND
-    || env.PIAS_PERSISTENCE_BACKEND) === 'file' ? 'file' : 'sqlite';
-  const databaseFile = process.env.PIAS_DATABASE_FILE || env.PIAS_DATABASE_FILE;
-  const assetDirectory = process.env.PIAS_ASSET_DIR
-    || env.PIAS_ASSET_DIR
-    || '/tmp/pias-image-studio/assets';
-  const artifactDirectory = process.env.PIAS_RELEASE_ARTIFACT_DIR
-    || env.PIAS_RELEASE_ARTIFACT_DIR
+  const persistenceBackend = (process.env.CONTENT_STUDIO_PERSISTENCE_BACKEND
+    || env.CONTENT_STUDIO_PERSISTENCE_BACKEND) === 'file' ? 'file' : 'sqlite';
+  const databaseFile = process.env.CONTENT_STUDIO_DATABASE_FILE || env.CONTENT_STUDIO_DATABASE_FILE;
+  const assetDirectory = process.env.CONTENT_STUDIO_ASSET_DIR
+    || env.CONTENT_STUDIO_ASSET_DIR
+    || '/tmp/content-studio/assets';
+  const artifactDirectory = process.env.CONTENT_STUDIO_RELEASE_ARTIFACT_DIR
+    || env.CONTENT_STUDIO_RELEASE_ARTIFACT_DIR
     || 'dist';
 
   return {
@@ -34,8 +34,8 @@ export default defineConfig(({ mode }) => {
       react(),
       healthPlugin({
         release: loadReleaseIdentity(artifactDirectory, {
-          version: process.env.PIAS_RELEASE_VERSION || packageDocument.version,
-          revision: process.env.PIAS_RELEASE_REVISION || (mode === 'development' ? 'development' : 'unknown'),
+          version: process.env.CONTENT_STUDIO_RELEASE_VERSION || packageDocument.version,
+          revision: process.env.CONTENT_STUDIO_RELEASE_REVISION || (mode === 'development' ? 'development' : 'unknown'),
         }),
         readinessCheck: createProductionReadinessCheck({
           databaseFile,

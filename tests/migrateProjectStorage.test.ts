@@ -15,7 +15,7 @@ afterEach(async () => {
 
 describe('project storage migration command', () => {
   it('dry-runs then copies assets and Fal mappings without deleting sources', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-project-migration-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-project-migration-'));
     directories.push(directory);
     const assetSource = join(directory, 'legacy-assets');
     const assetTargetRoot = join(directory, 'asset-scopes');

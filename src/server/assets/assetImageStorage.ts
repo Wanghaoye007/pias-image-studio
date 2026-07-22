@@ -31,7 +31,7 @@ const contentTypesByExtension: Record<string, string> = {
 };
 
 export function createFileAssetImageStorage(
-  directory = process.env.PIAS_ASSET_DIR || '/tmp/pias-image-studio/assets',
+  directory = process.env.CONTENT_STUDIO_ASSET_DIR || '/tmp/content-studio/assets',
 ): AssetImageStorage {
   return {
     async save({ bytes, contentType }) {

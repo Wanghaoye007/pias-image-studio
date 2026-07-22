@@ -1,4 +1,4 @@
-# PIAS 身份与租户授权设计
+# Content Studio 身份与租户授权设计
 
 ## 目标
 

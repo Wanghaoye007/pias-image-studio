@@ -15,7 +15,7 @@ import {
   type AuthUser,
 } from '../src/server/auth/identityService';
 
-const password = 'PIAS-release-2026!';
+const password = 'Studio-release-2026!';
 const secret = 'JBSWY3DPEHPK3PXP';
 const now = Date.parse('2026-07-22T03:00:00.000Z');
 
@@ -82,8 +82,8 @@ describe('authentication API middleware', () => {
     user = {
       id: 'user-owner',
       tenantId: 'tenant-a',
-      email: 'owner@pias.test',
-      displayName: 'PIAS Owner',
+      email: 'owner@studio.test',
+      displayName: 'Content Studio Owner',
       passwordHash: await hashPassword(password),
       role: 'owner',
       status: 'active',
@@ -94,8 +94,8 @@ describe('authentication API middleware', () => {
     viewer = {
       id: 'user-viewer',
       tenantId: 'tenant-a',
-      email: 'viewer@pias.test',
-      displayName: 'PIAS Viewer',
+      email: 'viewer@studio.test',
+      displayName: 'Content Studio Viewer',
       passwordHash: await hashPassword(password),
       role: 'viewer',
       status: 'active',
@@ -119,7 +119,7 @@ describe('authentication API middleware', () => {
     });
     expect(response.body).not.toHaveProperty('challengeToken');
     const setCookies = response.headers.get('set-cookie') as string[];
-    expect(setCookies.join('\n')).toMatch(/pias_mfa=.*HttpOnly.*Secure.*SameSite=Strict/i);
+    expect(setCookies.join('\n')).toMatch(/content_studio_mfa=.*HttpOnly.*Secure.*SameSite=Strict/i);
   });
 
   it('completes MFA and exposes only protected session and CSRF cookies', async () => {
@@ -129,7 +129,7 @@ describe('authentication API middleware', () => {
       '/api/auth/login',
       { body: { email: user.email, password } },
     );
-    const challengeCookie = cookieValue(login.headers.get('set-cookie') as string[], 'pias_mfa');
+    const challengeCookie = cookieValue(login.headers.get('set-cookie') as string[], 'content_studio_mfa');
 
     const response = await invoke(
       createAuthApiMiddleware(identity, { secureCookies: false }),
@@ -137,7 +137,7 @@ describe('authentication API middleware', () => {
       '/api/auth/mfa',
       {
         body: { code: generateTotp(secret, now) },
-        headers: { cookie: `pias_mfa=${challengeCookie}` },
+        headers: { cookie: `content_studio_mfa=${challengeCookie}` },
       },
     );
 
@@ -151,8 +151,8 @@ describe('authentication API middleware', () => {
     expect(response.body).not.toHaveProperty('sessionToken');
     expect(response.body).not.toHaveProperty('csrfToken');
     const setCookies = response.headers.get('set-cookie') as string[];
-    expect(setCookies.find((value) => value.startsWith('pias_session='))).toMatch(/HttpOnly.*SameSite=Strict/i);
-    expect(setCookies.find((value) => value.startsWith('pias_csrf='))).not.toMatch(/HttpOnly/i);
+    expect(setCookies.find((value) => value.startsWith('content_studio_session='))).toMatch(/HttpOnly.*SameSite=Strict/i);
+    expect(setCookies.find((value) => value.startsWith('content_studio_csrf='))).not.toMatch(/HttpOnly/i);
   });
 
   it('returns the current trusted identity and revokes it only with valid CSRF', async () => {
@@ -164,7 +164,7 @@ describe('authentication API middleware', () => {
     });
     expect(current).toMatchObject({
       statusCode: 200,
-      body: { user: { id: user.id, displayName: 'PIAS Owner', role: 'owner' } },
+      body: { user: { id: user.id, displayName: 'Content Studio Owner', role: 'owner' } },
     });
 
     const rejected = await invoke(middleware, 'POST', '/api/auth/logout', {
@@ -178,7 +178,7 @@ describe('authentication API middleware', () => {
     const loggedOut = await invoke(middleware, 'POST', '/api/auth/logout', {
       headers: {
         cookie: session.cookieHeader,
-        'x-pias-csrf': session.csrfToken,
+        'x-content-studio-csrf': session.csrfToken,
       },
     });
     expect(loggedOut.statusCode).toBe(204);
@@ -209,7 +209,7 @@ describe('authentication API middleware', () => {
     const accepted = await invoke(guard, 'GET', '/api/studio/state', {
       headers: {
         cookie: session.cookieHeader,
-        'x-pias-project-id': 'project-a',
+        'x-content-studio-project-id': 'project-a',
       },
     });
     expect(accepted.next).toHaveBeenCalledOnce();
@@ -238,7 +238,7 @@ describe('authentication API middleware', () => {
     const rejectedWrite = await invoke(guard, 'PUT', '/api/studio/state', {
       headers: {
         cookie: session.cookieHeader,
-        'x-pias-project-id': 'project-a',
+        'x-content-studio-project-id': 'project-a',
       },
     });
     expect(rejectedWrite).toMatchObject({
@@ -249,8 +249,8 @@ describe('authentication API middleware', () => {
     const acceptedWrite = await invoke(guard, 'PUT', '/api/studio/state', {
       headers: {
         cookie: session.cookieHeader,
-        'x-pias-csrf': session.csrfToken,
-        'x-pias-project-id': 'project-a',
+        'x-content-studio-csrf': session.csrfToken,
+        'x-content-studio-project-id': 'project-a',
       },
     });
     expect(acceptedWrite.next).toHaveBeenCalledOnce();
@@ -284,8 +284,8 @@ describe('authentication API middleware', () => {
     const session = await authenticatedWithoutMfaCookies(identity, viewer);
     const headers = {
       cookie: session.cookieHeader,
-      'x-pias-csrf': session.csrfToken,
-      'x-pias-project-id': 'project-a',
+      'x-content-studio-csrf': session.csrfToken,
+      'x-content-studio-project-id': 'project-a',
     };
 
     const assetUpload = await invoke(guard, 'POST', '/api/assets/images', { headers });
@@ -331,7 +331,7 @@ describe('authentication API middleware', () => {
     const invitation = await invoke(guard, 'POST', '/api/organization/invitations', {
       headers: {
         cookie: viewerSession.cookieHeader,
-        'x-pias-csrf': viewerSession.csrfToken,
+        'x-content-studio-csrf': viewerSession.csrfToken,
       },
     });
     expect(invitation).toMatchObject({
@@ -346,17 +346,17 @@ async function authenticatedCookies(identity: IdentityService, user: AuthUser) {
   const login = await invoke(middleware, 'POST', '/api/auth/login', {
     body: { email: user.email, password },
   });
-  const challenge = cookieValue(login.headers.get('set-cookie') as string[], 'pias_mfa');
+  const challenge = cookieValue(login.headers.get('set-cookie') as string[], 'content_studio_mfa');
   const mfa = await invoke(middleware, 'POST', '/api/auth/mfa', {
     body: { code: generateTotp(secret, now) },
-    headers: { cookie: `pias_mfa=${challenge}` },
+    headers: { cookie: `content_studio_mfa=${challenge}` },
   });
   const setCookies = mfa.headers.get('set-cookie') as string[];
-  const sessionToken = cookieValue(setCookies, 'pias_session');
-  const csrfToken = cookieValue(setCookies, 'pias_csrf');
+  const sessionToken = cookieValue(setCookies, 'content_studio_session');
+  const csrfToken = cookieValue(setCookies, 'content_studio_csrf');
   return {
     csrfToken,
-    cookieHeader: `pias_session=${sessionToken}; pias_csrf=${csrfToken}`,
+    cookieHeader: `content_studio_session=${sessionToken}; content_studio_csrf=${csrfToken}`,
   };
 }
 
@@ -366,10 +366,10 @@ async function authenticatedWithoutMfaCookies(identity: IdentityService, user: A
     body: { email: user.email, password },
   });
   const setCookies = login.headers.get('set-cookie') as string[];
-  const sessionToken = cookieValue(setCookies, 'pias_session');
-  const csrfToken = cookieValue(setCookies, 'pias_csrf');
+  const sessionToken = cookieValue(setCookies, 'content_studio_session');
+  const csrfToken = cookieValue(setCookies, 'content_studio_csrf');
   return {
     csrfToken,
-    cookieHeader: `pias_session=${sessionToken}; pias_csrf=${csrfToken}`,
+    cookieHeader: `content_studio_session=${sessionToken}; content_studio_csrf=${csrfToken}`,
   };
 }

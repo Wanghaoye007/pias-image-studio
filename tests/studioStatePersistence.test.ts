@@ -13,7 +13,7 @@ import {
 const temporaryDirectories: string[] = [];
 
 async function createStorePath() {
-  const directory = await mkdtemp(join(tmpdir(), 'pias-studio-state-'));
+  const directory = await mkdtemp(join(tmpdir(), 'content-studio-state-'));
   temporaryDirectories.push(directory);
   return { directory, filePath: join(directory, 'state.json') };
 }

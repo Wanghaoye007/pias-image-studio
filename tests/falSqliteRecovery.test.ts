@@ -2,7 +2,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openPiasDatabase, type PiasDatabase } from '../src/server/persistence/sqliteDatabase';
+import {
+  openContentStudioDatabase,
+  type ContentStudioDatabase,
+} from '../src/server/persistence/sqliteDatabase';
 import {
   createSqliteFalJobLeaseStore,
   createSqliteFalJobPayloadStore,
@@ -19,7 +22,7 @@ import {
 } from '../src/worker/fal/falRecoveryWorker';
 
 const directories: string[] = [];
-const databases: PiasDatabase[] = [];
+const databases: ContentStudioDatabase[] = [];
 const scope = { tenantId: 'tenant-a', projectId: 'project-a' };
 
 afterEach(async () => {
@@ -228,13 +231,13 @@ function adapter(): FalQueueAdapter {
 }
 
 async function databasePath(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'pias-fal-sqlite-'));
+  const directory = await mkdtemp(join(tmpdir(), 'content-studio-fal-sqlite-'));
   directories.push(directory);
-  return join(directory, 'pias.sqlite');
+  return join(directory, 'content-studio.sqlite');
 }
 
-function open(filePath: string): PiasDatabase {
-  const database = openPiasDatabase(filePath);
+function open(filePath: string): ContentStudioDatabase {
+  const database = openContentStudioDatabase(filePath);
   databases.push(database);
   return database;
 }

@@ -8,15 +8,15 @@ import {
   type AuthUser,
 } from '../src/server/auth/identityService';
 
-const strongPassword = 'PIAS-release-2026!';
+const strongPassword = 'Studio-release-2026!';
 const totpSecret = 'JBSWY3DPEHPK3PXP';
 
 async function createUser(overrides: Partial<AuthUser> = {}): Promise<AuthUser> {
   return {
     id: 'user-owner',
     tenantId: 'tenant-a',
-    email: 'owner@pias.test',
-    displayName: 'PIAS Owner',
+    email: 'owner@studio.test',
+    displayName: 'Content Studio Owner',
     passwordHash: await hashPassword(strongPassword),
     role: 'owner',
     status: 'active',
@@ -38,7 +38,7 @@ describe('identity service', () => {
     const now = Date.parse('2026-07-22T03:00:00.000Z');
     const service = new IdentityService([await createUser()], { now: () => now });
 
-    const login = await service.beginLogin('OWNER@PIAS.TEST', strongPassword);
+    const login = await service.beginLogin('OWNER@STUDIO.TEST', strongPassword);
     expect(login.status).toBe('mfa_required');
     if (login.status !== 'mfa_required') throw new Error('mfa challenge missing');
 
@@ -58,11 +58,11 @@ describe('identity service', () => {
   it('prevents reuse of a TOTP time step', async () => {
     const now = Date.parse('2026-07-22T03:00:00.000Z');
     const service = new IdentityService([await createUser()], { now: () => now });
-    const first = await service.beginLogin('owner@pias.test', strongPassword);
+    const first = await service.beginLogin('owner@studio.test', strongPassword);
     if (first.status !== 'mfa_required') throw new Error('mfa challenge missing');
     service.completeMfa(first.challengeToken, generateTotp(totpSecret, now));
 
-    const second = await service.beginLogin('owner@pias.test', strongPassword);
+    const second = await service.beginLogin('owner@studio.test', strongPassword);
     if (second.status !== 'mfa_required') throw new Error('mfa challenge missing');
     expect(() => service.completeMfa(second.challengeToken, generateTotp(totpSecret, now)))
       .toThrowError(expect.objectContaining({ code: 'AUTH_MFA_REPLAYED' }));
@@ -73,16 +73,16 @@ describe('identity service', () => {
     const service = new IdentityService([await createUser()], { now: () => now });
 
     for (let attempt = 1; attempt <= 4; attempt += 1) {
-      await expect(service.beginLogin('owner@pias.test', 'wrong-password-value'))
+      await expect(service.beginLogin('owner@studio.test', 'wrong-password-value'))
         .rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' });
     }
-    await expect(service.beginLogin('owner@pias.test', 'wrong-password-value'))
+    await expect(service.beginLogin('owner@studio.test', 'wrong-password-value'))
       .rejects.toMatchObject({ code: 'AUTH_RATE_LIMITED' });
-    await expect(service.beginLogin('owner@pias.test', strongPassword))
+    await expect(service.beginLogin('owner@studio.test', strongPassword))
       .rejects.toMatchObject({ code: 'AUTH_RATE_LIMITED' });
 
     now += 61_000;
-    await expect(service.beginLogin('owner@pias.test', strongPassword)).resolves.toMatchObject({
+    await expect(service.beginLogin('owner@studio.test', strongPassword)).resolves.toMatchObject({
       status: 'mfa_required',
     });
   });
@@ -91,7 +91,7 @@ describe('identity service', () => {
     let now = Date.parse('2026-07-22T03:00:00.000Z');
     const viewer = await createUser({
       id: 'user-viewer',
-      email: 'viewer@pias.test',
+      email: 'viewer@studio.test',
       role: 'viewer',
       mfaEnabled: false,
       mfaSecret: undefined,
@@ -155,7 +155,7 @@ describe('identity service', () => {
   it('authenticates persisted organization users through an external resolver', async () => {
     const member = await createUser({
       id: 'user-persisted',
-      email: 'persisted@pias.test',
+      email: 'persisted@studio.test',
       role: 'reviewer',
       mfaEnabled: false,
       mfaSecret: undefined,
@@ -170,7 +170,7 @@ describe('identity service', () => {
       userId === member.id ? ['project-persisted'] : []
     ));
 
-    const login = await service.beginLogin('PERSISTED@PIAS.TEST', strongPassword);
+    const login = await service.beginLogin('PERSISTED@STUDIO.TEST', strongPassword);
     expect(login.status).toBe('authenticated');
     if (login.status !== 'authenticated') throw new Error('session missing');
     expect(service.authenticateSession(login.sessionToken)).toMatchObject({
@@ -184,7 +184,7 @@ describe('identity service', () => {
   it('records every successful session creation without recording failed credentials', async () => {
     const viewer = await createUser({
       id: 'user-audited',
-      email: 'audited@pias.test',
+      email: 'audited@studio.test',
       role: 'viewer',
       mfaEnabled: false,
       mfaSecret: undefined,

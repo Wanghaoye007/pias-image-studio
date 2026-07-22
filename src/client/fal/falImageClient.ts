@@ -4,7 +4,7 @@ import type { FalGeneratedImage } from '../../shared/fal/multipleAngles';
 
 type Fetcher = typeof fetch;
 
-export const FAL_LIFECYCLE_ABORT_REASON = 'pias:lifecycle-unmount';
+export const FAL_LIFECYCLE_ABORT_REASON = 'content-studio:lifecycle-unmount';
 
 export type RunFalImageInput = {
   profileId: TaskProfileId;

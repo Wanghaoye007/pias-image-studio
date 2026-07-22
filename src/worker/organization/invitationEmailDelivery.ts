@@ -5,7 +5,7 @@ import {
   randomUUID,
 } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
-import type { PiasDatabase } from '../../server/persistence/sqliteDatabase';
+import type { ContentStudioDatabase } from '../../server/persistence/sqliteDatabase';
 import type {
   OrganizationInvitation,
   OrganizationInvitationDelivery,
@@ -62,14 +62,14 @@ export type InvitationEmailDelivery = OrganizationInvitationDelivery & {
 };
 
 export function createInvitationEmailDelivery(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   config: InvitationEmailConfig,
   options: InvitationEmailDeliveryOptions = {},
 ): InvitationEmailDelivery {
   validateRuntimeConfig(config);
   const fetcher = options.fetcher ?? fetch;
   const now = options.now ?? (() => new Date().toISOString());
-  const workerId = options.workerId ?? `pias-email-${process.pid}-${randomUUID()}`;
+  const workerId = options.workerId ?? `content-studio-email-${process.pid}-${randomUUID()}`;
   const intervalMs = Math.max(500, options.intervalMs ?? 5_000);
   const leaseTtlMs = Math.max(5_000, options.leaseTtlMs ?? 30_000);
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -147,11 +147,11 @@ export function loadInvitationEmailConfig(
   env: Record<string, string | undefined> = process.env,
 ): InvitationEmailConfig | null {
   const values = {
-    publicBaseUrl: env.PIAS_PUBLIC_BASE_URL?.trim() ?? '',
-    from: env.PIAS_EMAIL_FROM?.trim() ?? '',
-    webhookUrl: env.PIAS_EMAIL_WEBHOOK_URL?.trim() ?? '',
-    webhookKeyFile: env.PIAS_EMAIL_WEBHOOK_KEY_FILE?.trim() ?? '',
-    encryptionKeyFile: env.PIAS_INVITATION_ENCRYPTION_KEY_FILE?.trim() ?? '',
+    publicBaseUrl: env.CONTENT_STUDIO_PUBLIC_BASE_URL?.trim() ?? '',
+    from: env.CONTENT_STUDIO_EMAIL_FROM?.trim() ?? '',
+    webhookUrl: env.CONTENT_STUDIO_EMAIL_WEBHOOK_URL?.trim() ?? '',
+    webhookKeyFile: env.CONTENT_STUDIO_EMAIL_WEBHOOK_KEY_FILE?.trim() ?? '',
+    encryptionKeyFile: env.CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE?.trim() ?? '',
   };
   if (Object.values(values).every((value) => !value)) return null;
   if (Object.values(values).some((value) => !value)) {
@@ -174,7 +174,7 @@ export function loadInvitationEmailConfig(
 }
 
 async function runCycle(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   config: InvitationEmailConfig,
   options: {
     fetcher: typeof fetch;
@@ -204,10 +204,10 @@ async function runCycle(
         },
         body: JSON.stringify({
           messageId: message.messageId,
-          template: 'pias-member-invitation-v1',
+          template: 'content-studio-member-invitation-v1',
           from: message.senderEmail,
           to: message.recipientEmail,
-          subject: 'PIAS 企业工作台邀请',
+          subject: 'Content Studio 企业工作台邀请',
           variables: {
             displayName: message.displayName ?? message.recipientEmail.split('@')[0],
             role: message.role,
@@ -234,7 +234,7 @@ async function runCycle(
 }
 
 function claimNextMessage(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   workerId: string,
   at: string,
   leaseTtlMs: number,
@@ -283,7 +283,7 @@ function claimNextMessage(
 }
 
 function markSent(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   message: ClaimedMessage,
   workerId: string,
   at: string,
@@ -311,7 +311,7 @@ function markSent(
 }
 
 function markFailed(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   message: ClaimedMessage,
   workerId: string,
   at: string,
@@ -471,7 +471,7 @@ class WebhookDeliveryError extends Error {
   }
 }
 
-function transaction(database: PiasDatabase, action: () => void): void {
+function transaction(database: ContentStudioDatabase, action: () => void): void {
   database.connection.exec('BEGIN IMMEDIATE');
   try {
     action();
@@ -482,7 +482,7 @@ function transaction(database: PiasDatabase, action: () => void): void {
   }
 }
 
-function insertDeliveryAudit(database: PiasDatabase, event: {
+function insertDeliveryAudit(database: ContentStudioDatabase, event: {
   tenantId: string;
   type: 'member.invitation_delivery_succeeded' | 'member.invitation_delivery_failed';
   targetId: string;

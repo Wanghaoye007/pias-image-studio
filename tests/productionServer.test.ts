@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { generateTotp, hashPassword } from '../src/server/auth/identityService';
-import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
+import { openContentStudioDatabase } from '../src/server/persistence/sqliteDatabase';
 import { createProductionServer } from '../src/server/productionServer';
 
 const directories: string[] = [];
@@ -58,7 +58,7 @@ describe('standalone production server', () => {
 
     const spa = await fetch(`${origin}/projects/project-a/workbench`);
     expect(spa.status).toBe(200);
-    expect(await spa.text()).toContain('<main>PIAS production</main>');
+    expect(await spa.text()).toContain('<main>Content Studio production</main>');
     expect(spa.headers.get('cache-control')).toBe('no-store');
     expect(spa.headers.get('x-frame-options')).toBe('DENY');
     expect(spa.headers.get('strict-transport-security')).toBe('max-age=31536000');
@@ -69,7 +69,7 @@ describe('standalone production server', () => {
 
     const asset = await fetch(`${origin}/assets/app.abcdef12.js`);
     expect(asset.status).toBe(200);
-    expect(await asset.text()).toBe('window.PIAS=true;');
+    expect(await asset.text()).toBe('window.Content Studio=true;');
     expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
   });
 
@@ -87,7 +87,7 @@ describe('standalone production server', () => {
 
     const response = await fetch(`${origin}/api/health/live?token=must-not-be-logged`, {
       headers: {
-        cookie: 'pias_session=must-not-be-logged',
+        cookie: 'content_studio_session=must-not-be-logged',
         'x-request-id': 'attacker-controlled-id',
       },
     });
@@ -101,7 +101,7 @@ describe('standalone production server', () => {
     const parsedMessages = messages
       .map((message) => JSON.parse(message) as Record<string, unknown>);
     const requestLog = parsedMessages
-      .find((entry) => entry.event === 'pias_http_request');
+      .find((entry) => entry.event === 'content_studio_http_request');
     expect(requestLog).toMatchObject({
       requestId,
       method: 'GET',
@@ -109,7 +109,7 @@ describe('standalone production server', () => {
       status: 200,
     });
     expect(parsedMessages).toContainEqual(expect.objectContaining({
-      event: 'pias_http_request',
+      event: 'content_studio_http_request',
       path: '/api/other',
       status: 401,
     }));
@@ -156,7 +156,7 @@ describe('standalone production server', () => {
       headers: {
         ...headers,
         'content-type': 'application/json',
-        origin: 'https://studio.pias.test',
+        origin: 'https://studio.studio.test',
       },
       body,
     });
@@ -186,7 +186,7 @@ describe('standalone production server', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          email: `unknown-${index}@pias.test`,
+          email: `unknown-${index}@studio.test`,
           password: 'not-the-password',
         }),
       });
@@ -197,7 +197,7 @@ describe('standalone production server', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        email: 'unknown-over-limit@pias.test',
+        email: 'unknown-over-limit@studio.test',
         password: 'not-the-password',
       }),
     });
@@ -222,8 +222,8 @@ describe('standalone production server', () => {
     servers.push(application);
     const { origin } = await application.start();
     const credentials = JSON.stringify({
-      email: 'owner@pias.test',
-      password: 'PIAS-release-2026!',
+      email: 'owner@studio.test',
+      password: 'Studio-release-2026!',
     });
 
     const crossSite = await fetch(`${origin}/api/auth/login`, {
@@ -245,7 +245,7 @@ describe('standalone production server', () => {
       method: 'POST',
       headers: {
         'content-type': 'text/plain',
-        origin: 'https://studio.pias.test',
+        origin: 'https://studio.studio.test',
       },
       body: credentials,
     });
@@ -259,7 +259,7 @@ describe('standalone production server', () => {
       `${origin}/api/organization/invitations/invitation-11111111-1111-1111-1111-111111111111/revoke`,
       {
         method: 'POST',
-        headers: { origin: 'https://studio.pias.test' },
+        headers: { origin: 'https://studio.studio.test' },
       },
     );
     expect(bodylessCommand.status).toBe(401);
@@ -290,7 +290,7 @@ describe('standalone production server', () => {
 
   it('fails closed before binding when production safeguards are absent', async () => {
     await expect(createProductionServer({
-      env: { NODE_ENV: 'development', PIAS_SECURE_COOKIES: 'false' },
+      env: { NODE_ENV: 'development', CONTENT_STUDIO_SECURE_COOKIES: 'false' },
       host: '127.0.0.1',
       port: 0,
       logger: () => undefined,
@@ -340,23 +340,23 @@ async function authenticatedHeaders(origin: string): Promise<Record<string, stri
   const login = await fetch(`${origin}/api/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: 'owner@pias.test', password: 'PIAS-release-2026!' }),
+    body: JSON.stringify({ email: 'owner@studio.test', password: 'Studio-release-2026!' }),
   });
-  const challenge = cookieFromResponse(login, 'pias_mfa');
+  const challenge = cookieFromResponse(login, 'content_studio_mfa');
   const verified = await fetch(`${origin}/api/auth/mfa`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      cookie: `pias_mfa=${challenge}`,
+      cookie: `content_studio_mfa=${challenge}`,
     },
     body: JSON.stringify({ code: generateTotp('JBSWY3DPEHPK3PXP') }),
   });
-  const session = cookieFromResponse(verified, 'pias_session');
-  const csrf = cookieFromResponse(verified, 'pias_csrf');
+  const session = cookieFromResponse(verified, 'content_studio_session');
+  const csrf = cookieFromResponse(verified, 'content_studio_csrf');
   return {
-    cookie: `pias_session=${session}; pias_csrf=${csrf}`,
-    'x-pias-csrf': csrf,
-    'x-pias-project-id': 'project-a',
+    cookie: `content_studio_session=${session}; content_studio_csrf=${csrf}`,
+    'x-content-studio-csrf': csrf,
+    'x-content-studio-project-id': 'project-a',
   };
 }
 
@@ -368,10 +368,10 @@ function cookieFromResponse(response: Response, name: string): string {
 }
 
 async function createFixture() {
-  const directory = await mkdtemp(join(tmpdir(), 'pias-production-server-'));
+  const directory = await mkdtemp(join(tmpdir(), 'demo-production-server-'));
   directories.push(directory);
-  const databaseFile = join(directory, 'pias.sqlite');
-  const database = openPiasDatabase(databaseFile);
+  const databaseFile = join(directory, 'content-studio.sqlite');
+  const database = openContentStudioDatabase(databaseFile);
   database.close();
   const assetDirectory = join(directory, 'assets');
   const artifactDirectory = join(directory, 'dist');
@@ -379,17 +379,17 @@ async function createFixture() {
   await mkdir(join(artifactDirectory, 'assets'), { recursive: true, mode: 0o700 });
   await writeFile(
     join(artifactDirectory, 'index.html'),
-    '<!doctype html><main>PIAS production</main>',
+    '<!doctype html><main>Content Studio production</main>',
     { mode: 0o600 },
   );
   await writeFile(
     join(artifactDirectory, 'assets', 'app.abcdef12.js'),
-    'window.PIAS=true;',
+    'window.Content Studio=true;',
     { mode: 0o600 },
   );
   await writeFile(join(artifactDirectory, 'release.json'), JSON.stringify({
     schemaVersion: 1,
-    service: 'pias-image-studio',
+    service: 'content-studio',
     version: '0.1.0',
     revision: 'abc1234',
     dirty: false,
@@ -401,9 +401,9 @@ async function createFixture() {
     users: [{
       id: 'user-owner',
       tenantId: 'tenant-a',
-      email: 'owner@pias.test',
+      email: 'owner@studio.test',
       displayName: 'Owner',
-      passwordHash: await hashPassword('PIAS-release-2026!'),
+      passwordHash: await hashPassword('Studio-release-2026!'),
       role: 'owner',
       status: 'active',
       projectIds: ['project-a'],
@@ -423,17 +423,17 @@ async function createFixture() {
   return {
     env: {
       NODE_ENV: 'production',
-      PIAS_SECURE_COOKIES: 'true',
-      PIAS_PERSISTENCE_BACKEND: 'sqlite',
-      PIAS_PUBLIC_BASE_URL: 'https://studio.pias.test',
-      PIAS_DATABASE_FILE: databaseFile,
-      PIAS_ASSET_DIR: assetDirectory,
-      PIAS_RELEASE_ARTIFACT_DIR: artifactDirectory,
-      PIAS_AUTH_CONFIG_FILE: authConfigFile,
-      PIAS_EMAIL_FROM: 'PIAS <no-reply@pias.test>',
-      PIAS_EMAIL_WEBHOOK_URL: 'https://mail-relay.pias.test/v1/send',
-      PIAS_EMAIL_WEBHOOK_KEY_FILE: emailWebhookKeyFile,
-      PIAS_INVITATION_ENCRYPTION_KEY_FILE: invitationEncryptionKeyFile,
+      CONTENT_STUDIO_SECURE_COOKIES: 'true',
+      CONTENT_STUDIO_PERSISTENCE_BACKEND: 'sqlite',
+      CONTENT_STUDIO_PUBLIC_BASE_URL: 'https://studio.studio.test',
+      CONTENT_STUDIO_DATABASE_FILE: databaseFile,
+      CONTENT_STUDIO_ASSET_DIR: assetDirectory,
+      CONTENT_STUDIO_RELEASE_ARTIFACT_DIR: artifactDirectory,
+      CONTENT_STUDIO_AUTH_CONFIG_FILE: authConfigFile,
+      CONTENT_STUDIO_EMAIL_FROM: 'Content Studio <no-reply@studio.test>',
+      CONTENT_STUDIO_EMAIL_WEBHOOK_URL: 'https://mail-relay.studio.test/v1/send',
+      CONTENT_STUDIO_EMAIL_WEBHOOK_KEY_FILE: emailWebhookKeyFile,
+      CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE: invitationEncryptionKeyFile,
     },
   };
 }

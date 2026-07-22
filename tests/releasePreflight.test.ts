@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runReleasePreflight } from '../scripts/release-preflight-core.mjs';
-import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
+import { openContentStudioDatabase } from '../src/server/persistence/sqliteDatabase';
 
 const directories: string[] = [];
 
@@ -25,12 +25,12 @@ afterEach(async () => {
 
 describe('production release preflight', () => {
   it('rejects an incomplete environment with stable machine-readable blockers', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-release-preflight-empty-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-release-preflight-empty-'));
     directories.push(directory);
     const report = await runReleasePreflight({
       env: {
-        PIAS_RELEASE_ARTIFACT_DIR: join(directory, 'missing-dist'),
-        PIAS_RELEASE_SERVER_FILE: join(directory, 'missing-server.mjs'),
+        CONTENT_STUDIO_RELEASE_ARTIFACT_DIR: join(directory, 'missing-dist'),
+        CONTENT_STUDIO_RELEASE_SERVER_FILE: join(directory, 'missing-server.mjs'),
       },
       nodeVersion: 'v22.0.0',
       billingCheck: async () => ({ ok: false, status: 403, reason: 'billing_access_denied' }),
@@ -112,7 +112,7 @@ describe('production release preflight', () => {
 
   it('rejects a valid backup that does not belong to the release database', async () => {
     const fixture = await createValidFixture();
-    const manifestFile = `${fixture.env.PIAS_RELEASE_BACKUP_FILE}.manifest.json`;
+    const manifestFile = `${fixture.env.CONTENT_STUDIO_RELEASE_BACKUP_FILE}.manifest.json`;
     const manifest = JSON.parse(await readFile(manifestFile, 'utf8')) as Record<string, unknown>;
     await writePrivate(manifestFile, JSON.stringify({
       ...manifest,
@@ -133,9 +133,9 @@ describe('production release preflight', () => {
 
   it('rejects a build produced from a dirty worktree', async () => {
     const fixture = await createValidFixture();
-    await writeFile(join(fixture.env.PIAS_RELEASE_ARTIFACT_DIR, 'release.json'), JSON.stringify({
+    await writeFile(join(fixture.env.CONTENT_STUDIO_RELEASE_ARTIFACT_DIR, 'release.json'), JSON.stringify({
       schemaVersion: 1,
-      service: 'pias-image-studio',
+      service: 'content-studio',
       version: '0.1.0',
       revision: 'abc1234',
       dirty: true,
@@ -176,12 +176,12 @@ describe('production release preflight', () => {
 });
 
 async function createValidFixture() {
-  const directory = await mkdtemp(join(tmpdir(), 'pias-release-preflight-'));
+  const directory = await mkdtemp(join(tmpdir(), 'content-studio-release-preflight-'));
   directories.push(directory);
-  const databaseFile = join(directory, 'pias.sqlite');
-  const database = openPiasDatabase(databaseFile);
+  const databaseFile = join(directory, 'content-studio.sqlite');
+  const database = openContentStudioDatabase(databaseFile);
   database.close();
-  const backupFile = join(directory, 'pias-backup.sqlite');
+  const backupFile = join(directory, 'content-studio-backup.sqlite');
   await copyFile(databaseFile, backupFile);
   const backupDigest = createHash('sha256').update(await readFile(backupFile)).digest('hex');
   await writePrivate(`${backupFile}.manifest.json`, JSON.stringify({
@@ -196,7 +196,7 @@ async function createValidFixture() {
     users: [{
       id: 'user-owner',
       tenantId: 'tenant-a',
-      email: 'owner@pias.test',
+      email: 'owner@studio.test',
       displayName: 'Owner',
       passwordHash: `scrypt$16384$8$1$${'0'.repeat(32)}$${'0'.repeat(64)}`,
       role: 'owner',
@@ -221,7 +221,7 @@ async function createValidFixture() {
   await writeFile(join(artifactDirectory, 'index.html'), '<!doctype html>', { mode: 0o600 });
   await writeFile(join(artifactDirectory, 'release.json'), JSON.stringify({
     schemaVersion: 1,
-    service: 'pias-image-studio',
+    service: 'content-studio',
     version: '0.1.0',
     revision: 'abc1234',
     dirty: false,
@@ -236,21 +236,21 @@ async function createValidFixture() {
     directory,
     env: {
       NODE_ENV: 'production',
-      PIAS_SECURE_COOKIES: 'true',
-      PIAS_PERSISTENCE_BACKEND: 'sqlite',
-      PIAS_PUBLIC_BASE_URL: 'https://studio.pias.test',
-      PIAS_DATABASE_FILE: databaseFile,
-      PIAS_RELEASE_BACKUP_FILE: backupFile,
-      PIAS_AUTH_CONFIG_FILE: authConfigFile,
-      PIAS_ASSET_DIR: assetDirectory,
-      PIAS_RELEASE_ARTIFACT_DIR: artifactDirectory,
-      PIAS_RELEASE_SERVER_FILE: serverFile,
+      CONTENT_STUDIO_SECURE_COOKIES: 'true',
+      CONTENT_STUDIO_PERSISTENCE_BACKEND: 'sqlite',
+      CONTENT_STUDIO_PUBLIC_BASE_URL: 'https://studio.studio.test',
+      CONTENT_STUDIO_DATABASE_FILE: databaseFile,
+      CONTENT_STUDIO_RELEASE_BACKUP_FILE: backupFile,
+      CONTENT_STUDIO_AUTH_CONFIG_FILE: authConfigFile,
+      CONTENT_STUDIO_ASSET_DIR: assetDirectory,
+      CONTENT_STUDIO_RELEASE_ARTIFACT_DIR: artifactDirectory,
+      CONTENT_STUDIO_RELEASE_SERVER_FILE: serverFile,
       FAL_KEY_FILE: falKeyFile,
       FAL_ADMIN_KEY_FILE: falAdminKeyFile,
-      PIAS_EMAIL_FROM: 'PIAS <no-reply@pias.test>',
-      PIAS_EMAIL_WEBHOOK_URL: 'https://mail-relay.pias.test/v1/send',
-      PIAS_EMAIL_WEBHOOK_KEY_FILE: webhookKeyFile,
-      PIAS_INVITATION_ENCRYPTION_KEY_FILE: encryptionKeyFile,
+      CONTENT_STUDIO_EMAIL_FROM: 'Content Studio <no-reply@studio.test>',
+      CONTENT_STUDIO_EMAIL_WEBHOOK_URL: 'https://mail-relay.studio.test/v1/send',
+      CONTENT_STUDIO_EMAIL_WEBHOOK_KEY_FILE: webhookKeyFile,
+      CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE: encryptionKeyFile,
     },
   };
 }

@@ -1,19 +1,19 @@
 [Unit]
-Description=PIAS Image Studio
+Description=Content Studio Workbench
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=pias
-Group=pias
-WorkingDirectory=/opt/pias/current
-EnvironmentFile=/etc/pias/pias.env
+User=content-studio
+Group=content-studio
+WorkingDirectory=/opt/content-studio/current
+EnvironmentFile=/etc/content-studio/content-studio.env
 ExecStartPre=/usr/bin/npm run release:preflight
-ExecStart=/usr/bin/node /opt/pias/current/dist-server/server.mjs
+ExecStart=/usr/bin/node /opt/content-studio/current/dist-server/server.mjs
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=pias
+SyslogIdentifier=content-studio
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
@@ -23,7 +23,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/pias /var/backups/pias
+ReadWritePaths=/var/lib/content-studio /var/backups/content-studio
 
 [Install]
 WantedBy=multi-user.target

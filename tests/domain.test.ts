@@ -41,18 +41,18 @@ describe('Image Studio domain flow', () => {
     const state = initialStudioState();
 
     const next = addAsset(state, {
-      brand: '  PIAS  ',
+      brand: '  Aster  ',
       product: '  夏季精华  ',
-      skuCode: '  PIAS-SF-009  ',
+      skuCode: '  AST-SF-009  ',
       usage: '  商品主图  ',
       version: '  v1  ',
       imageUrl: 'data:image/png;base64,UElBUw==',
     });
 
     expect(next.assets.at(-1)).toMatchObject({
-      brand: 'PIAS',
+      brand: 'Aster',
       product: '夏季精华',
-      skuCode: 'PIAS-SF-009',
+      skuCode: 'AST-SF-009',
       usage: '商品主图',
       version: 'v1',
       imageUrl: 'data:image/png;base64,UElBUw==',
@@ -68,7 +68,7 @@ describe('Image Studio domain flow', () => {
     const state = initialStudioState();
 
     expect(() => addAsset(state, {
-      brand: 'PIAS',
+      brand: 'Aster',
       product: '重复素材',
       skuCode: state.assets[0].skuCode.toLowerCase(),
       usage: '商品主图',
@@ -162,7 +162,7 @@ describe('Image Studio domain flow', () => {
         jobId: next.jobs[0].id,
         units: 72,
         balanceAfter: 1928,
-        pricingRuleVersion: 'pias-credit-v1',
+        pricingRuleVersion: 'content-studio-credit-v1',
       }),
     ]);
   });
@@ -711,7 +711,7 @@ describe('Image Studio domain flow', () => {
     });
     expect(next.scenes.at(-1)).toMatchObject({
       title: '护肤套装',
-      skuCode: 'PIAS-SK-014',
+      skuCode: 'AST-SK-014',
       x: 420,
       y: 260,
       status: 'source',
@@ -944,10 +944,10 @@ describe('Image Studio domain flow', () => {
     const filename = buildExportFilename(approved, 'result-1', spec, new Date('2026-07-15T00:00:00Z'));
     const manifest = buildResultManifest(approved, ['result-1']);
 
-    expect(filename).toBe('PIAS_PIAS-SF-001_2026-夏季-SKU-上新_源场景_生成-1_20260715_v1.webp');
+    expect(filename).toBe('Aster_AST-SF-001_2026-夏季-SKU-上新_源场景_生成-1_20260715_v1.webp');
     expect(manifest).toEqual([expect.objectContaining({
       resultId: 'result-1',
-      skuCode: 'PIAS-SF-001',
+      skuCode: 'AST-SF-001',
       dimensions: '2048x2048',
       operation: '生成',
       reviewStatus: 'approved',

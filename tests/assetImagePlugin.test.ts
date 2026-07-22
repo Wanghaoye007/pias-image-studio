@@ -65,7 +65,7 @@ describe('asset image API middleware', () => {
       createAssetImageMiddleware(storage),
       'POST',
       '/api/assets/images',
-      Buffer.from('pias'),
+      Buffer.from('content-studio'),
       'image/png',
     );
 
@@ -78,7 +78,7 @@ describe('asset image API middleware', () => {
       },
     });
     expect(storage.save).toHaveBeenCalledWith({
-      bytes: Buffer.from('pias'),
+      bytes: Buffer.from('content-studio'),
       contentType: 'image/png',
     });
   });
@@ -92,7 +92,7 @@ describe('asset image API middleware', () => {
       middleware,
       'POST',
       '/api/assets/images',
-      Buffer.from('pias'),
+      Buffer.from('content-studio'),
       'image/png',
     );
 

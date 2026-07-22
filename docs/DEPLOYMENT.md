@@ -16,6 +16,6 @@ npm run acceptance
 npm start
 ```
 
-构建产物为 `dist/` 和 `dist-server/server.mjs`。生产配置以 [deploy/pias.env.example](../deploy/pias.env.example) 为模板，systemd 与 Nginx 样例分别见 [deploy/pias.service.example](../deploy/pias.service.example) 和 [deploy/nginx-pias.conf.example](../deploy/nginx-pias.conf.example)。
+构建产物为 `dist/` 和 `dist-server/server.mjs`。生产配置以 [deploy/content-studio.env.example](../deploy/content-studio.env.example) 为模板，systemd 与 Nginx 样例分别见 [deploy/content-studio.service.example](../deploy/content-studio.service.example) 和 [deploy/nginx-content-studio.conf.example](../deploy/nginx-content-studio.conf.example)。
 
 详细目录权限、备份、健康检查、日志、发布与回滚步骤见 [operations/deployment-runbook.md](operations/deployment-runbook.md)。数据库操作见 [operations/database-runbook.md](operations/database-runbook.md)，统一预检见 [operations/release-preflight.md](operations/release-preflight.md)。

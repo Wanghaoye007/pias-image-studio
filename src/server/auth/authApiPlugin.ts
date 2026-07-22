@@ -16,14 +16,14 @@ const loginPath = '/api/auth/login';
 const mfaPath = '/api/auth/mfa';
 const sessionPath = '/api/auth/session';
 const logoutPath = '/api/auth/logout';
-const sessionCookieName = 'pias_session';
-const mfaCookieName = 'pias_mfa';
-const csrfCookieName = 'pias_csrf';
-const projectCookieName = 'pias_project';
-const projectHeaderName = 'x-pias-project-id';
+const sessionCookieName = 'content_studio_session';
+const mfaCookieName = 'content_studio_mfa';
+const csrfCookieName = 'content_studio_csrf';
+const projectCookieName = 'content_studio_project';
+const projectHeaderName = 'x-content-studio-project-id';
 const maxBodyBytes = 8 * 1024;
-const requestAuthContext = Symbol('pias.auth-context');
-const requestProjectScope = Symbol('pias.project-scope');
+const requestAuthContext = Symbol('content-studio.auth-context');
+const requestProjectScope = Symbol('content-studio.project-scope');
 
 export type RequestProjectScope = {
   tenantId: string;
@@ -86,7 +86,7 @@ export function createAuthApiMiddleware(
       if (url.pathname === logoutPath && request.method === 'POST') {
         const cookies = readCookies(request);
         const sessionToken = cookies[sessionCookieName];
-        const csrfToken = readHeader(request, 'x-pias-csrf');
+        const csrfToken = readHeader(request, 'x-content-studio-csrf');
         if (!sessionToken || !csrfToken || !cookies[csrfCookieName]) {
           throw new IdentityError('请求验证失败', 'AUTH_CSRF_INVALID', 403);
         }
@@ -145,7 +145,7 @@ export function createApiAuthGuard(identity: IdentityService): Connect.NextHandl
         }
       }
       if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method ?? 'GET')) {
-        const csrfToken = readHeader(request, 'x-pias-csrf');
+        const csrfToken = readHeader(request, 'x-content-studio-csrf');
         const csrfCookie = cookies[csrfCookieName];
         if (!csrfToken || !csrfCookie) {
           throw new IdentityError('请求验证失败', 'AUTH_CSRF_INVALID', 403);
@@ -250,7 +250,7 @@ export function authApiPlugin(
 ): Plugin {
   const middlewareStack = createAuthMiddlewareStack(identity, options);
   return {
-    name: 'pias-auth-api',
+    name: 'content-studio-auth-api',
     configureServer(server) {
       middlewareStack.forEach((middleware) => server.middlewares.use(middleware));
     },

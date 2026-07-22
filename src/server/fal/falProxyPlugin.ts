@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import type { Connect, Plugin } from 'vite';
 import { getRequestAuthContext, getRequestProjectScope } from '../auth/authApiPlugin';
 import { authorize } from '../auth/authPolicy';
-import { openPiasDatabase, type PiasDatabase } from '../persistence/sqliteDatabase';
+import { openContentStudioDatabase, type ContentStudioDatabase } from '../persistence/sqliteDatabase';
 import { createFalBillingClient } from './falBillingClient';
 import {
   createFalQueueService,
@@ -150,27 +150,27 @@ export function falImageProxyPlugin(options: {
   readKey?: () => Promise<string>;
   logger?: ProductionLogWriter;
 } = {}): Plugin {
-  const legacyFile = process.env.PIAS_FAL_JOB_STATE_FILE
-    || '/tmp/pias-image-studio/fal-queue-state.json';
+  const legacyFile = process.env.CONTENT_STUDIO_FAL_JOB_STATE_FILE
+    || '/tmp/content-studio/fal-queue-state.json';
   const rootDirectory = options.scopedDirectory
-    || process.env.PIAS_FAL_JOB_STATE_DIR
+    || process.env.CONTENT_STUDIO_FAL_JOB_STATE_DIR
     || join(dirname(legacyFile), 'fal-queue-scopes');
   const backend = options.persistenceBackend
-    ?? (process.env.PIAS_PERSISTENCE_BACKEND === 'file' ? 'file' : 'sqlite');
+    ?? (process.env.CONTENT_STUDIO_PERSISTENCE_BACKEND === 'file' ? 'file' : 'sqlite');
   const adapter = options.adapter ?? falAdapter;
   const billingAdapter = createFalBillingClient();
   const leaseTtlMs = options.leaseTtlMs
-    ?? readPositiveInteger(process.env.PIAS_FAL_LEASE_TTL_MS, 15_000);
+    ?? readPositiveInteger(process.env.CONTENT_STUDIO_FAL_LEASE_TTL_MS, 15_000);
   const billingRetryIntervalMs = options.billingRetryIntervalMs
-    ?? readPositiveInteger(process.env.PIAS_FAL_BILLING_RETRY_MS, 5 * 60_000);
-  const workerId = `pias-fal-${process.pid}-${randomUUID()}`;
+    ?? readPositiveInteger(process.env.CONTENT_STUDIO_FAL_BILLING_RETRY_MS, 5 * 60_000);
+  const workerId = `content-studio-fal-${process.pid}-${randomUUID()}`;
   const cache = new Map<string, FalQueueService>();
-  let database: PiasDatabase | null = null;
+  let database: ContentStudioDatabase | null = null;
   const getDatabase = () => {
-    database ??= openPiasDatabase(
+    database ??= openContentStudioDatabase(
       options.databaseFile
-      || process.env.PIAS_DATABASE_FILE
-      || '/tmp/pias-image-studio/pias.sqlite',
+      || process.env.CONTENT_STUDIO_DATABASE_FILE
+      || '/tmp/content-studio/content-studio.sqlite',
     );
     return database;
   };
@@ -227,7 +227,7 @@ export function falImageProxyPlugin(options: {
   });
   const recoveryWorker = createFalRecoveryWorker({
     intervalMs: options.workerIntervalMs
-      ?? readPositiveInteger(process.env.PIAS_FAL_WORKER_INTERVAL_MS, 2_500),
+      ?? readPositiveInteger(process.env.CONTENT_STUDIO_FAL_WORKER_INTERVAL_MS, 2_500),
     listServices: () => {
       if (options.scoped && backend === 'sqlite') {
         return listSqliteFalScopeKeys(getDatabase()).map(getSqliteService);
@@ -238,7 +238,7 @@ export function falImageProxyPlugin(options: {
     onError: (error) => {
       writeProductionLog(
         options.logger,
-        'pias_fal_recovery_failed',
+        'content_studio_fal_recovery_failed',
         { component: 'fal_recovery' },
         error,
       );
@@ -252,7 +252,7 @@ export function falImageProxyPlugin(options: {
     });
   };
   return {
-    name: 'pias-fal-image-proxy',
+    name: 'content-studio-fal-image-proxy',
     configureServer(server) {
       mount(server);
     },

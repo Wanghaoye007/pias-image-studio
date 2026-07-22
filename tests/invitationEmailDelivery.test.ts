@@ -10,7 +10,7 @@ import {
 } from '../src/worker/organization/invitationEmailDelivery';
 import { createOrganizationService } from '../src/server/organization/organizationService';
 import { organizationPlugin } from '../src/server/organization/organizationPlugin';
-import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
+import { openContentStudioDatabase } from '../src/server/persistence/sqliteDatabase';
 
 const directories: string[] = [];
 const baseNow = '2026-07-22T08:00:00.000Z';
@@ -45,7 +45,7 @@ describe('invitation email delivery', () => {
     });
     const project = service.createProject(creator, { name: '邮件邀请项目', reviewRequired: true });
     const created = service.createInvitation(owner, {
-      email: 'mail-member@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'mail-member@studio.test', role: 'viewer', projectIds: [project.id],
     });
 
     expect(created.invitation.deliveryStatus).toBe('queued');
@@ -60,17 +60,17 @@ describe('invitation email delivery', () => {
     await expect(delivery.runOnce()).resolves.toMatchObject({ inspected: 1, sent: 1, failed: 0 });
     expect(fetcher).toHaveBeenCalledTimes(1);
     const [url, request] = fetcher.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://mail-relay.pias.test/v1/send');
+    expect(url).toBe('https://mail-relay.studio.test/v1/send');
     expect(new Headers(request.headers).get('authorization')).toBe('Bearer webhook-secret');
     expect(new Headers(request.headers).get('idempotency-key')).toMatch(/^email-/);
     const body = JSON.parse(String(request.body)) as Record<string, unknown>;
     expect(body).toMatchObject({
-      template: 'pias-member-invitation-v1',
-      from: 'PIAS <no-reply@pias.test>',
-      to: 'mail-member@pias.test',
+      template: 'content-studio-member-invitation-v1',
+      from: 'Content Studio <no-reply@studio.test>',
+      to: 'mail-member@studio.test',
     });
     expect(JSON.stringify(body)).toContain(
-      `https://studio.pias.test/#/accept-invitation?token=${created.acceptToken}`,
+      `https://studio.studio.test/#/accept-invitation?token=${created.acceptToken}`,
     );
     expect(database.connection.prepare(`
       SELECT status, attempt_count FROM organization_email_outbox WHERE invitation_id = ?
@@ -102,7 +102,7 @@ describe('invitation email delivery', () => {
     });
     const project = service.createProject(creator, { name: '邮件重试项目', reviewRequired: true });
     const created = service.createInvitation(owner, {
-      email: 'retry@pias.test', role: 'reviewer', projectIds: [project.id],
+      email: 'retry@studio.test', role: 'reviewer', projectIds: [project.id],
     });
 
     await expect(delivery.runOnce()).resolves.toMatchObject({ failed: 1, sent: 0 });
@@ -144,7 +144,7 @@ describe('invitation email delivery', () => {
     });
     const project = service.createProject(creator, { name: '撤销邮件项目', reviewRequired: true });
     const created = service.createInvitation(owner, {
-      email: 'cancel@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'cancel@studio.test', role: 'viewer', projectIds: [project.id],
     });
 
     service.revokeInvitation(owner, created.invitation.id);
@@ -168,7 +168,7 @@ describe('invitation email delivery', () => {
     });
     const project = service.createProject(creator, { name: '邮件状态项目', reviewRequired: true });
     const original = service.createInvitation(owner, {
-      email: 'mail-state@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'mail-state@studio.test', role: 'viewer', projectIds: [project.id],
     });
 
     const replacement = service.resendInvitation(owner, original.invitation.id);
@@ -189,42 +189,42 @@ describe('invitation email delivery', () => {
   });
 
   it('loads secrets only from 0600 files and rejects partial mail configuration', async () => {
-    const directory = await temporaryDirectory('pias-mail-config-');
+    const directory = await temporaryDirectory('content-studio-mail-config-');
     const encryptionKeyFile = join(directory, 'encryption-key');
     const webhookKeyFile = join(directory, 'webhook-key');
     await writeFile(encryptionKeyFile, Buffer.alloc(32, 7).toString('base64'), { mode: 0o600 });
     await writeFile(webhookKeyFile, 'webhook-secret\n', { mode: 0o600 });
 
     expect(loadInvitationEmailConfig({
-      PIAS_PUBLIC_BASE_URL: 'https://studio.pias.test',
-      PIAS_EMAIL_FROM: 'PIAS <no-reply@pias.test>',
-      PIAS_EMAIL_WEBHOOK_URL: 'https://mail-relay.pias.test/v1/send',
-      PIAS_EMAIL_WEBHOOK_KEY_FILE: webhookKeyFile,
-      PIAS_INVITATION_ENCRYPTION_KEY_FILE: encryptionKeyFile,
+      CONTENT_STUDIO_PUBLIC_BASE_URL: 'https://studio.studio.test',
+      CONTENT_STUDIO_EMAIL_FROM: 'Content Studio <no-reply@studio.test>',
+      CONTENT_STUDIO_EMAIL_WEBHOOK_URL: 'https://mail-relay.studio.test/v1/send',
+      CONTENT_STUDIO_EMAIL_WEBHOOK_KEY_FILE: webhookKeyFile,
+      CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE: encryptionKeyFile,
     })).toMatchObject({
-      publicBaseUrl: 'https://studio.pias.test',
+      publicBaseUrl: 'https://studio.studio.test',
       webhookKey: 'webhook-secret',
       encryptionKey: expect.any(Buffer),
     });
     expect(loadInvitationEmailConfig({})).toBeNull();
-    expect(() => loadInvitationEmailConfig({ PIAS_EMAIL_FROM: 'partial@pias.test' }))
+    expect(() => loadInvitationEmailConfig({ CONTENT_STUDIO_EMAIL_FROM: 'partial@studio.test' }))
       .toThrow(expect.objectContaining({ code: 'ORG_EMAIL_CONFIG_INCOMPLETE' }));
     await writeFile(webhookKeyFile, 'insecure', { mode: 0o644 });
     await chmod(webhookKeyFile, 0o644);
     expect(() => loadInvitationEmailConfig({
-      PIAS_PUBLIC_BASE_URL: 'https://studio.pias.test',
-      PIAS_EMAIL_FROM: 'no-reply@pias.test',
-      PIAS_EMAIL_WEBHOOK_URL: 'https://mail-relay.pias.test/v1/send',
-      PIAS_EMAIL_WEBHOOK_KEY_FILE: webhookKeyFile,
-      PIAS_INVITATION_ENCRYPTION_KEY_FILE: encryptionKeyFile,
+      CONTENT_STUDIO_PUBLIC_BASE_URL: 'https://studio.studio.test',
+      CONTENT_STUDIO_EMAIL_FROM: 'no-reply@studio.test',
+      CONTENT_STUDIO_EMAIL_WEBHOOK_URL: 'https://mail-relay.studio.test/v1/send',
+      CONTENT_STUDIO_EMAIL_WEBHOOK_KEY_FILE: webhookKeyFile,
+      CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE: encryptionKeyFile,
     })).toThrow(expect.objectContaining({ code: 'ORG_EMAIL_CONFIG_PERMISSIONS_INVALID' }));
   });
 
   it('starts the durable email worker with the organization Vite plugin', async () => {
-    const directory = await temporaryDirectory('pias-mail-plugin-');
-    const databasePath = join(directory, 'pias.sqlite');
+    const directory = await temporaryDirectory('content-studio-mail-plugin-');
+    const databasePath = join(directory, 'content-studio.sqlite');
     const config = emailConfig();
-    const seedDatabase = openPiasDatabase(databasePath);
+    const seedDatabase = openContentStudioDatabase(databasePath);
     const seedDelivery = createInvitationEmailDelivery(seedDatabase, config, {
       fetcher: vi.fn(), now: () => baseNow, workerId: 'seed-worker',
     });
@@ -235,12 +235,12 @@ describe('invitation email delivery', () => {
       name: '插件邮件项目', reviewRequired: true,
     });
     const created = seedService.createInvitation(owner, {
-      email: 'plugin-mail@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'plugin-mail@studio.test', role: 'viewer', projectIds: [project.id],
     });
     seedDatabase.close();
     const fetcher = vi.fn().mockResolvedValue(new Response('', { status: 202 }));
     const identity = new IdentityService([{
-      id: 'user-owner', tenantId: 'tenant-a', email: 'owner@pias.test', displayName: 'Owner',
+      id: 'user-owner', tenantId: 'tenant-a', email: 'owner@studio.test', displayName: 'Owner',
       passwordHash: 'scrypt$16384$8$1$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000',
       role: 'owner', status: 'active', projectIds: [project.id], mfaEnabled: true,
       mfaSecret: 'JBSWY3DPEHPK3PXP',
@@ -259,7 +259,7 @@ describe('invitation email delivery', () => {
     } as never);
 
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
-    const inspected = openPiasDatabase(databasePath);
+    const inspected = openContentStudioDatabase(databasePath);
     expect(inspected.connection.prepare(`
       SELECT status FROM organization_email_outbox WHERE invitation_id = ?
     `).get(created.invitation.id)).toEqual({ status: 'sent' });
@@ -270,17 +270,17 @@ describe('invitation email delivery', () => {
 
 function emailConfig() {
   return {
-    publicBaseUrl: 'https://studio.pias.test',
-    from: 'PIAS <no-reply@pias.test>',
-    webhookUrl: 'https://mail-relay.pias.test/v1/send',
+    publicBaseUrl: 'https://studio.studio.test',
+    from: 'Content Studio <no-reply@studio.test>',
+    webhookUrl: 'https://mail-relay.studio.test/v1/send',
     webhookKey: 'webhook-secret',
     encryptionKey: Buffer.alloc(32, 9),
   };
 }
 
 async function setupDatabase() {
-  const directory = await temporaryDirectory('pias-mail-outbox-');
-  const database = openPiasDatabase(join(directory, 'pias.sqlite'));
+  const directory = await temporaryDirectory('content-studio-mail-outbox-');
+  const database = openContentStudioDatabase(join(directory, 'content-studio.sqlite'));
   return { database, close: () => database.close() };
 }
 

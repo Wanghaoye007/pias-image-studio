@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { StudioState } from '../../shared/domain';
 import type { PersistedStudioSnapshot, StudioStateScope } from '../../shared/studio/types';
-import type { PiasDatabase } from '../persistence/sqliteDatabase';
+import type { ContentStudioDatabase } from '../persistence/sqliteDatabase';
 import { parseStudioState, StudioStateValidationError } from '../../shared/studio/studioStateSchema';
 
 export type { PersistedStudioSnapshot, StudioStateScope } from '../../shared/studio/types';
@@ -31,8 +31,8 @@ export class StudioStateStorageError extends Error {
 }
 
 export function createFileStudioStatePersistence(
-  filePath = process.env.PIAS_STUDIO_STATE_FILE
-    || '/tmp/pias-image-studio/studio-state.json',
+  filePath = process.env.CONTENT_STUDIO_STATE_FILE
+    || '/tmp/content-studio/studio-state.json',
 ): StudioStatePersistence {
   let writeQueue: Promise<void> = Promise.resolve();
 
@@ -95,7 +95,7 @@ export function createScopedStudioStatePersistence(
 }
 
 export function createSqliteStudioStatePersistence(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   scope: StudioStateScope,
 ): StudioStatePersistence {
   const scopeKey = database.scopeKey(scope);

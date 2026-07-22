@@ -170,14 +170,14 @@ export function AuthBoundary({ children }: AuthBoundaryProps) {
       <section aria-labelledby="auth-title" className="auth-panel">
         <div className="auth-brand">
           <span className="auth-brand__mark"><Box aria-hidden="true" size={21} /></span>
-          <div><strong>PIAS 图片</strong><small>企业内容生产工作台</small></div>
+          <div><strong>内容工作台</strong><small>企业内容生产工作台</small></div>
         </div>
         <div className="auth-heading">
           <span className="auth-heading__icon">
             {mfa ? <ShieldCheck aria-hidden="true" size={22} /> : <KeyRound aria-hidden="true" size={22} />}
           </span>
           <div>
-            <h1 id="auth-title">{mfa ? '验证身份' : '登录 PIAS'}</h1>
+            <h1 id="auth-title">{mfa ? '验证身份' : '登录 Content Studio'}</h1>
             <p>{mfa ? '输入验证器中当前显示的六位验证码' : '使用企业账户继续进入图片工作台'}</p>
           </div>
         </div>

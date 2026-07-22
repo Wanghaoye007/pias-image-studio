@@ -1,4 +1,7 @@
-import type { PiasDatabase, DatabaseScope } from '../../server/persistence/sqliteDatabase';
+import type {
+  ContentStudioDatabase,
+  DatabaseScope,
+} from '../../server/persistence/sqliteDatabase';
 import type {
   FalJobLeaseStore,
   FalJobPayloadStore,
@@ -8,14 +11,14 @@ import type {
 } from './falQueueService';
 
 export function createSqliteFalJobPayloadStore(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   scope: DatabaseScope,
 ): FalJobPayloadStore {
   return createSqliteFalJobPayloadStoreForScopeKey(database, database.scopeKey(scope));
 }
 
 export function createSqliteFalJobPayloadStoreForScopeKey(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   scopeKey: string,
 ): FalJobPayloadStore {
   const select = database.connection.prepare(`
@@ -49,14 +52,14 @@ export function createSqliteFalJobPayloadStoreForScopeKey(
 }
 
 export function createSqliteFalQueuePersistence(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   scope: DatabaseScope,
 ): FalQueuePersistence {
   return createSqliteFalQueuePersistenceForScopeKey(database, database.scopeKey(scope));
 }
 
 export function createSqliteFalQueuePersistenceForScopeKey(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   scopeKey: string,
 ): FalQueuePersistence {
   const select = database.connection.prepare(`
@@ -98,14 +101,14 @@ export function createSqliteFalQueuePersistenceForScopeKey(
 }
 
 export function createSqliteFalJobLeaseStore(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   scope: DatabaseScope,
 ): FalJobLeaseStore {
   return createSqliteFalJobLeaseStoreForScopeKey(database, database.scopeKey(scope));
 }
 
 export function createSqliteFalJobLeaseStoreForScopeKey(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   scopeKey: string,
 ): FalJobLeaseStore {
   const acquire = database.connection.prepare(`
@@ -157,7 +160,7 @@ export function createSqliteFalJobLeaseStoreForScopeKey(
   };
 }
 
-export function listSqliteFalScopeKeys(database: PiasDatabase): string[] {
+export function listSqliteFalScopeKeys(database: ContentStudioDatabase): string[] {
   const rows = database.connection.prepare(`
     SELECT DISTINCT scope_key
     FROM fal_jobs

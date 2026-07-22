@@ -24,7 +24,7 @@ export async function runReleasePreflight(options = {}) {
 
   add('runtime.node', /^v24\./.test(nodeVersion), 'NODE_VERSION_UNSUPPORTED');
   add('deployment.mode', env.NODE_ENV === 'production', 'PRODUCTION_MODE_REQUIRED');
-  add('security.cookies', env.PIAS_SECURE_COOKIES === 'true', 'SECURE_COOKIES_REQUIRED');
+  add('security.cookies', env.CONTENT_STUDIO_SECURE_COOKIES === 'true', 'SECURE_COOKIES_REQUIRED');
   add(
     'security.raw_secrets',
     !env.FAL_KEY?.trim() && !env.FAL_ADMIN_KEY?.trim(),
@@ -32,34 +32,34 @@ export async function runReleasePreflight(options = {}) {
   );
   add(
     'deployment.persistence',
-    env.PIAS_PERSISTENCE_BACKEND === 'sqlite',
+    env.CONTENT_STUDIO_PERSISTENCE_BACKEND === 'sqlite',
     'SQLITE_BACKEND_REQUIRED',
   );
   add(
     'deployment.public_url',
-    isProductionHttpsUrl(env.PIAS_PUBLIC_BASE_URL),
+    isProductionHttpsUrl(env.CONTENT_STUDIO_PUBLIC_BASE_URL),
     'PUBLIC_HTTPS_URL_REQUIRED',
   );
 
-  const databaseResult = await checkDatabase(env.PIAS_DATABASE_FILE);
+  const databaseResult = await checkDatabase(env.CONTENT_STUDIO_DATABASE_FILE);
   add('database.integrity', databaseResult.ok, databaseResult.code);
   const backupResult = await checkBackup(
-    env.PIAS_RELEASE_BACKUP_FILE,
-    env.PIAS_DATABASE_FILE,
+    env.CONTENT_STUDIO_RELEASE_BACKUP_FILE,
+    env.CONTENT_STUDIO_DATABASE_FILE,
   );
   add('database.rollback', backupResult.ok, backupResult.code);
-  const authResult = await checkAuthConfig(env.PIAS_AUTH_CONFIG_FILE);
+  const authResult = await checkAuthConfig(env.CONTENT_STUDIO_AUTH_CONFIG_FILE);
   add('identity.config', authResult.ok, authResult.code);
   const falKeyResult = await checkFalKeyFiles(env.FAL_KEY_FILE, env.FAL_ADMIN_KEY_FILE);
   add('fal.key_files', falKeyResult.ok, falKeyResult.code);
   const emailResult = await checkEmailConfig(env);
   add('email.config', emailResult.ok, emailResult.code);
-  const storageResult = await checkPrivateDirectory(env.PIAS_ASSET_DIR);
+  const storageResult = await checkPrivateDirectory(env.CONTENT_STUDIO_ASSET_DIR);
   add('storage.assets', storageResult.ok, storageResult.ok ? 'OK' : 'ASSET_STORAGE_REQUIRED');
-  const artifactResult = await checkBuildArtifact(env.PIAS_RELEASE_ARTIFACT_DIR || 'dist');
+  const artifactResult = await checkBuildArtifact(env.CONTENT_STUDIO_RELEASE_ARTIFACT_DIR || 'dist');
   add('build.artifact', artifactResult.ok, artifactResult.code);
   const serverArtifactResult = await checkServerArtifact(
-    env.PIAS_RELEASE_SERVER_FILE || 'dist-server/server.mjs',
+    env.CONTENT_STUDIO_RELEASE_SERVER_FILE || 'dist-server/server.mjs',
   );
   add('server.artifact', serverArtifactResult.ok, serverArtifactResult.code);
 
@@ -180,25 +180,25 @@ async function checkFalKeyFiles(inferenceFile, adminFile) {
 
 async function checkEmailConfig(env) {
   const required = [
-    env.PIAS_PUBLIC_BASE_URL,
-    env.PIAS_EMAIL_FROM,
-    env.PIAS_EMAIL_WEBHOOK_URL,
-    env.PIAS_EMAIL_WEBHOOK_KEY_FILE,
-    env.PIAS_INVITATION_ENCRYPTION_KEY_FILE,
+    env.CONTENT_STUDIO_PUBLIC_BASE_URL,
+    env.CONTENT_STUDIO_EMAIL_FROM,
+    env.CONTENT_STUDIO_EMAIL_WEBHOOK_URL,
+    env.CONTENT_STUDIO_EMAIL_WEBHOOK_KEY_FILE,
+    env.CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE,
   ];
   if (required.some((value) => !value?.trim())) return failed('EMAIL_CONFIG_REQUIRED');
-  if (!isProductionHttpsUrl(env.PIAS_EMAIL_WEBHOOK_URL)) return failed('EMAIL_CONFIG_INVALID');
-  if (!/^[^\r\n]{1,320}$/.test(env.PIAS_EMAIL_FROM) || !env.PIAS_EMAIL_FROM.includes('@')) {
+  if (!isProductionHttpsUrl(env.CONTENT_STUDIO_EMAIL_WEBHOOK_URL)) return failed('EMAIL_CONFIG_INVALID');
+  if (!/^[^\r\n]{1,320}$/.test(env.CONTENT_STUDIO_EMAIL_FROM) || !env.CONTENT_STUDIO_EMAIL_FROM.includes('@')) {
     return failed('EMAIL_CONFIG_INVALID');
   }
-  if (!await isPrivateNonemptyFile(env.PIAS_EMAIL_WEBHOOK_KEY_FILE)) {
+  if (!await isPrivateNonemptyFile(env.CONTENT_STUDIO_EMAIL_WEBHOOK_KEY_FILE)) {
     return failed('EMAIL_KEY_FILES_INVALID');
   }
-  if (!await isPrivateFile(env.PIAS_INVITATION_ENCRYPTION_KEY_FILE)) {
+  if (!await isPrivateFile(env.CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE)) {
     return failed('EMAIL_KEY_FILES_INVALID');
   }
   try {
-    const raw = (await readFile(env.PIAS_INVITATION_ENCRYPTION_KEY_FILE, 'utf8')).trim();
+    const raw = (await readFile(env.CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE, 'utf8')).trim();
     const key = /^[a-f0-9]{64}$/i.test(raw) ? Buffer.from(raw, 'hex') : Buffer.from(raw, 'base64');
     if (key.length !== 32) return failed('EMAIL_ENCRYPTION_KEY_INVALID');
   } catch {
@@ -219,7 +219,7 @@ async function checkBuildArtifact(directory) {
     const metadata = JSON.parse(await readFile(join(directory, 'release.json'), 'utf8'));
     if (
       metadata.schemaVersion !== 1
-      || metadata.service !== 'pias-image-studio'
+      || metadata.service !== 'content-studio'
       || metadata.version !== packageDocument.version
       || !/^[a-f0-9]{7,40}$/.test(metadata.revision)
       || typeof metadata.dirty !== 'boolean'

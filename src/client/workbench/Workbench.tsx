@@ -802,7 +802,7 @@ function WorkbenchContent({
 
   const handleDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
-    const assetId = event.dataTransfer.getData('application/x-pias-asset');
+    const assetId = event.dataTransfer.getData('application/x-content-studio-asset');
     if (!assetId) return;
     const asset = state.assets.find((item) => item.id === assetId);
     if (!asset) return;
@@ -1006,9 +1006,9 @@ function WorkbenchContent({
   return (
     <div className={`workbench ${railCollapsed ? 'is-rail-collapsed' : ''}`}>
       <header aria-label="工作台状态" className="workbench-topbar">
-        <div className="workbench-topbar__brand" aria-label="PIAS 图片工作台">
+        <div className="workbench-topbar__brand" aria-label="Content Studio 图片工作台">
           <span><Aperture aria-hidden="true" size={18} /></span>
-          <strong>PIAS</strong>
+          <strong>Content Studio</strong>
           <small>图片工作台</small>
         </div>
         <div className="workbench-topbar__project">

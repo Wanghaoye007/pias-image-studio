@@ -17,7 +17,7 @@ describe('authentication configuration', () => {
   });
 
   it('loads only a private hash-only user configuration', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-auth-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-auth-'));
     directories.push(directory);
     const path = join(directory, 'auth.json');
     await writeFile(path, JSON.stringify({
@@ -25,9 +25,9 @@ describe('authentication configuration', () => {
       users: [{
         id: 'user-owner',
         tenantId: 'tenant-a',
-        email: 'owner@pias.test',
-        displayName: 'PIAS Owner',
-        passwordHash: await hashPassword('PIAS-release-2026!'),
+        email: 'owner@studio.test',
+        displayName: 'Content Studio Owner',
+        passwordHash: await hashPassword('Studio-release-2026!'),
         role: 'owner',
         status: 'active',
         projectIds: ['project-a'],
@@ -38,12 +38,12 @@ describe('authentication configuration', () => {
 
     const identity = loadIdentityServiceFromConfig(path);
 
-    await expect(identity?.beginLogin('owner@pias.test', 'PIAS-release-2026!'))
+    await expect(identity?.beginLogin('owner@studio.test', 'Studio-release-2026!'))
       .resolves.toMatchObject({ status: 'mfa_required' });
   });
 
   it('rejects world-readable files and plaintext password fields', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-auth-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-auth-'));
     directories.push(directory);
     const path = join(directory, 'auth.json');
     await writeFile(path, JSON.stringify({ schemaVersion: 1, users: [] }), { mode: 0o600 });
@@ -60,7 +60,7 @@ describe('authentication configuration', () => {
   });
 
   it('rejects business users without a valid project assignment', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-auth-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-auth-'));
     directories.push(directory);
     const path = join(directory, 'auth.json');
     await writeFile(path, JSON.stringify({
@@ -68,9 +68,9 @@ describe('authentication configuration', () => {
       users: [{
         id: 'user-viewer',
         tenantId: 'tenant-a',
-        email: 'viewer@pias.test',
-        displayName: 'PIAS Viewer',
-        passwordHash: await hashPassword('PIAS-viewer-2026!'),
+        email: 'viewer@studio.test',
+        displayName: 'Content Studio Viewer',
+        passwordHash: await hashPassword('CS-viewer-2026!'),
         role: 'viewer',
         status: 'active',
         projectIds: [],

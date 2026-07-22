@@ -110,9 +110,9 @@ export async function createProductionServer(
       scoped: true,
       persistenceBackend: 'sqlite',
       databaseFile: config.databaseFile,
-      workerIntervalMs: positiveInteger(env.PIAS_FAL_WORKER_INTERVAL_MS, 2_500),
-      leaseTtlMs: positiveInteger(env.PIAS_FAL_LEASE_TTL_MS, 15_000),
-      billingRetryIntervalMs: positiveInteger(env.PIAS_FAL_BILLING_RETRY_MS, 300_000),
+      workerIntervalMs: positiveInteger(env.CONTENT_STUDIO_FAL_WORKER_INTERVAL_MS, 2_500),
+      leaseTtlMs: positiveInteger(env.CONTENT_STUDIO_FAL_LEASE_TTL_MS, 15_000),
+      billingRetryIntervalMs: positiveInteger(env.CONTENT_STUDIO_FAL_BILLING_RETRY_MS, 300_000),
       readKey: () => readFalKey({ env, defaultFile: '' }),
       logger: options.logger,
     }),
@@ -174,7 +174,7 @@ export async function createProductionServer(
         throw new Error('SERVER_ADDRESS_INVALID');
       }
       startedOrigin = `http://${formatHost(config.host)}:${address.port}`;
-      writeProductionLog(options.logger, 'pias_server_started', {
+      writeProductionLog(options.logger, 'content_studio_server_started', {
         host: config.host,
         port: address.port,
         version: release.version,
@@ -198,22 +198,22 @@ function validateConfig(
   options: ProductionServerOptions,
 ) {
   if (env.NODE_ENV !== 'production') throw new Error('PRODUCTION_MODE_REQUIRED');
-  if (env.PIAS_SECURE_COOKIES !== 'true') throw new Error('SECURE_COOKIES_REQUIRED');
-  if (env.PIAS_PERSISTENCE_BACKEND !== 'sqlite') throw new Error('SQLITE_BACKEND_REQUIRED');
-  const host = options.host ?? env.PIAS_HOST ?? '127.0.0.1';
+  if (env.CONTENT_STUDIO_SECURE_COOKIES !== 'true') throw new Error('SECURE_COOKIES_REQUIRED');
+  if (env.CONTENT_STUDIO_PERSISTENCE_BACKEND !== 'sqlite') throw new Error('SQLITE_BACKEND_REQUIRED');
+  const host = options.host ?? env.CONTENT_STUDIO_HOST ?? '127.0.0.1';
   if (!['127.0.0.1', '::1'].includes(host)) throw new Error('LOOPBACK_HOST_REQUIRED');
-  const requestedPort = options.port ?? positiveInteger(env.PIAS_PORT, 4_173);
+  const requestedPort = options.port ?? positiveInteger(env.CONTENT_STUDIO_PORT, 4_173);
   if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65_535) {
     throw new Error('SERVER_PORT_INVALID');
   }
   return {
     host,
     port: requestedPort,
-    databaseFile: required(env.PIAS_DATABASE_FILE, 'DATABASE_REQUIRED'),
-    assetDirectory: required(env.PIAS_ASSET_DIR, 'ASSET_STORAGE_REQUIRED'),
-    artifactDirectory: required(env.PIAS_RELEASE_ARTIFACT_DIR, 'BUILD_ARTIFACT_REQUIRED'),
-    authConfigFile: required(env.PIAS_AUTH_CONFIG_FILE, 'AUTH_CONFIG_REQUIRED'),
-    publicOrigin: requirePublicOrigin(env.PIAS_PUBLIC_BASE_URL),
+    databaseFile: required(env.CONTENT_STUDIO_DATABASE_FILE, 'DATABASE_REQUIRED'),
+    assetDirectory: required(env.CONTENT_STUDIO_ASSET_DIR, 'ASSET_STORAGE_REQUIRED'),
+    artifactDirectory: required(env.CONTENT_STUDIO_RELEASE_ARTIFACT_DIR, 'BUILD_ARTIFACT_REQUIRED'),
+    authConfigFile: required(env.CONTENT_STUDIO_AUTH_CONFIG_FILE, 'AUTH_CONFIG_REQUIRED'),
+    publicOrigin: requirePublicOrigin(env.CONTENT_STUDIO_PUBLIC_BASE_URL),
   };
 }
 
@@ -259,7 +259,7 @@ function securityHeadersMiddleware(
   next();
 }
 
-const requestIdKey = Symbol('pias.request-id');
+const requestIdKey = Symbol('content-studio.request-id');
 type ObservedRequest = IncomingMessage & { [requestIdKey]?: string };
 
 function createRequestObservabilityMiddleware(
@@ -275,7 +275,7 @@ function createRequestObservabilityMiddleware(
     const logCompletion = (aborted: boolean) => {
       if (logged) return;
       logged = true;
-      writeProductionLog(logger, 'pias_http_request', {
+      writeProductionLog(logger, 'content_studio_http_request', {
         requestId,
         method: request.method ?? 'GET',
         path: logPathname(request.url),
@@ -422,7 +422,7 @@ function dispatchMiddleware(
   const dispatch = (index: number, error?: unknown) => {
     if (response.writableEnded) return;
     if (error) {
-      writeProductionLog(logger, 'pias_http_failure', {
+      writeProductionLog(logger, 'content_studio_http_failure', {
         requestId: (request as ObservedRequest)[requestIdKey] ?? 'unassigned',
         method: request.method ?? 'GET',
         path: logPathname(request.url),

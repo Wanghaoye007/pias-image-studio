@@ -31,7 +31,7 @@ const qualityIssues = new Set([
   'background', 'dimensions', 'content-safety', 'other',
 ]);
 const usageEntryTypes = new Set(['reserve', 'charge', 'release', 'adjustment']);
-const pricingRuleVersions = new Set(['pias-credit-v1']);
+const pricingRuleVersions = new Set(['content-studio-credit-v1']);
 const notificationTypes = new Set([
   'review.submitted', 'review.approved', 'review.returned', 'review.rejected', 'review.withdrawn',
 ]);

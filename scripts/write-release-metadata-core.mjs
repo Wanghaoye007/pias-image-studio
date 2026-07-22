@@ -5,7 +5,7 @@ export async function writeReleaseMetadata(options) {
   const packageDocument = JSON.parse(await readFile(options.packageFile, 'utf8'));
   const metadata = {
     schemaVersion: 1,
-    service: 'pias-image-studio',
+    service: 'content-studio',
     version: packageDocument.version,
     revision: options.revision,
     dirty: options.dirty,
@@ -28,7 +28,7 @@ export async function writeReleaseMetadata(options) {
 
 function isValidMetadata(metadata) {
   return metadata.schemaVersion === 1
-    && metadata.service === 'pias-image-studio'
+    && metadata.service === 'content-studio'
     && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(metadata.version)
     && (metadata.revision === 'unknown' || /^[a-f0-9]{7,40}$/.test(metadata.revision))
     && typeof metadata.dirty === 'boolean'

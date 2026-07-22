@@ -48,7 +48,7 @@ export function createHealthMiddleware(
     if (pathname === livePath) {
       writeJson(request, response, 200, {
         status: 'ok',
-        service: 'pias-image-studio',
+        service: 'content-studio',
         ...options.release,
       });
       return;
@@ -60,7 +60,7 @@ export function createHealthMiddleware(
 export function healthPlugin(options: HealthMiddlewareOptions): Plugin {
   const middleware = createHealthMiddleware(options);
   return {
-    name: 'pias-health-api',
+    name: 'content-studio-health-api',
     configureServer(server) {
       server.middlewares.use(middleware);
     },
@@ -83,9 +83,9 @@ async function respondWithReadiness(
   }
   writeJson(request, response, readiness.ok ? 200 : 503, {
     status: readiness.ok ? 'ready' : 'not_ready',
-    service: 'pias-image-studio',
+    service: 'content-studio',
     ...options.release,
-    ...(!readiness.ok ? { code: 'PIAS_NOT_READY' } : {}),
+    ...(!readiness.ok ? { code: 'CONTENT_STUDIO_NOT_READY' } : {}),
     checks: readiness.checks,
   });
 }

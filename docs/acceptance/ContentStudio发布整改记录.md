@@ -1,4 +1,4 @@
-# PIAS 发布整改记录
+# 内容工作台发布整改记录
 
 本记录按自动整改轮次追加，只记录可复现的完成事实。正式发布结论以 `acceptance/manifest.json` 和 `npm run acceptance` 为准。
 
@@ -276,7 +276,7 @@
 - `src/studio/studioStatePlugin.ts`
 - `src/studio/usePersistentStudioState.ts`
 - `scripts/sqlite-common.mjs`
-- `scripts/pias-database.mjs`
+- `scripts/content-studio-database.mjs`
 - `scripts/migrate-to-sqlite.mjs`
 - `tests/studioStateSqlitePersistence.test.ts`
 - `tests/sqliteOperations.test.ts`
@@ -531,7 +531,7 @@
 - 全量回归：37 个文件、343 项测试通过；TypeScript 与 Vite 生产构建通过，Git 空白检查通过。
 - 生产依赖高危漏洞为 0；验收报告为 15 项通过、2 项部分通过，仍为黄色。
 - 浏览器企业态跑通登录/MFA、创建项目、切换、刷新恢复、成员邀请；1280 x 720 与 390 x 844 均无横向溢出或文字裁切，0 破图，清洁页签控制台 0 警告/错误。
-- 浏览器证据：`docs/acceptance/evidence/pias-organization-project-2026-07-22.png` 和 `pias-organization-admin-2026-07-22.png`。
+- 浏览器证据：`docs/acceptance/evidence/content-studio-organization-project-2026-07-22.png` 和 `content-studio-organization-admin-2026-07-22.png`。
 
 ### 风险控制
 
@@ -592,7 +592,7 @@
 - `npm audit --omit=dev --audit-level=high`：0 漏洞。
 - 验收报告：15 项通过、2 项部分通过；`MEMBER-001` 的安全链接入组子链路已通过，但整体仍缺 PRD 必选的邮件与成员生命周期，当前保持黄色。
 - 真实浏览器完成所有者登录/MFA、创建企业项目、签发邀请、公开接受、服务重启、新成员登录和旧链接重放失败。1280 x 720 与 390 x 844 均无横向溢出，0 破图，控制台 0 警告/错误。
-- 浏览器证据：`docs/acceptance/evidence/pias-member-invitation-admin-2026-07-22.jpg`、`pias-member-invitation-accepted-2026-07-22.jpg`。
+- 浏览器证据：`docs/acceptance/evidence/content-studio-member-invitation-admin-2026-07-22.jpg`、`content-studio-member-invitation-accepted-2026-07-22.jpg`。
 - 主服务已用最新代码重启，`http://127.0.0.1:5173/` 返回 HTTP 200。
 
 ### 风险控制
@@ -649,7 +649,7 @@
 - 全量依赖审计：0 漏洞；生产验收自动检查全部通过。
 - 隔离企业态浏览器与独立 Cookie Jar 跑通：所有者登录/MFA、创建项目、签发邀请、公开激活、新成员登录、角色变更、停用、旧会话从 HTTP 200 变为 401、重新启用及新角色登录。
 - SQLite 取证确认 schema v6、成员最终为 `reviewer/active`，审计顺序包含首次登录、停用、角色变更、恢复和后续登录；浏览器 1280 x 720 无横向溢出、0 破图、控制台 0 警告/错误。
-- 浏览器证据：`docs/acceptance/evidence/pias-member-lifecycle-2026-07-22.png`。
+- 浏览器证据：`docs/acceptance/evidence/content-studio-member-lifecycle-2026-07-22.png`。
 - 验收统计维持 15 项通过、2 项部分通过，未把外部配置缺口冒充为通过。
 
 ### 风险控制
@@ -698,7 +698,7 @@
 - `README.md`
 - `docs/operations/organization-management.md`
 - `acceptance/manifest.json`
-- `docs/acceptance/evidence/pias-invitation-resend-2026-07-22.jpg`
+- `docs/acceptance/evidence/content-studio-invitation-resend-2026-07-22.jpg`
 
 ### 验证结果
 
@@ -706,7 +706,7 @@
 - 全量回归：38 个测试文件、372 项测试通过；TypeScript 与 Vite 生产构建通过，Git 空白检查通过。
 - `npm audit --omit=dev`：0 漏洞；验收自动检查全部通过。
 - 隔离企业态浏览器跑通所有者登录/MFA、创建项目、签发邀请和重新签发；旧链接返回 `409 ORG_INVITATION_NOT_PENDING`，新链接预览返回 `200`。
-- 1280 x 720 页面 `scrollWidth=clientWidth=1280`、0 破图、控制台 0 警告/错误；证据为 `docs/acceptance/evidence/pias-invitation-resend-2026-07-22.jpg`。
+- 1280 x 720 页面 `scrollWidth=clientWidth=1280`、0 破图、控制台 0 警告/错误；证据为 `docs/acceptance/evidence/content-studio-invitation-resend-2026-07-22.jpg`。
 - 隔离服务与临时身份、数据库已清理，主服务 `http://127.0.0.1:5173/` 保持 HTTP 200。
 - 验收统计仍为 15 项通过、2 项部分通过；自动化实现完成不等同于生产邮件已真实送达。
 
@@ -781,7 +781,7 @@
 ### 本轮完成内容
 
 - 新增公开只读的 `/api/health/live` 与 `/api/health/ready`；存活端点标识进程和版本，就绪端点实际检查 SQLite schema v7/quick check、构建首页、素材目录读写能力和身份配置。
-- 健康响应统一禁用缓存并设置 `nosniff`；就绪异常只返回稳定状态和 `PIAS_NOT_READY`，不泄露数据库路径或底层错误。
+- 健康响应统一禁用缓存并设置 `nosniff`；就绪异常只返回稳定状态和 `CONTENT_STUDIO_NOT_READY`，不泄露数据库路径或底层错误。
 - 构建新增原子 `dist/release.json`，记录 package version、Git revision、构建时间与工作树状态；Preview 实例会从产物读取真实 revision。
 - 发布预检新增元数据校验，拒绝缺失、篡改、未知 revision 或脏工作树产物；测试构建允许生成 dirty 产物，但不能进入生产。
 - 新增无密钥环境模板、systemd 候选模板、单机目录权限、TLS 反代边界、双门禁、健康检查和回滚手册。
@@ -802,8 +802,8 @@
 - `vite.config.ts`
 - `package.json`
 - `.gitignore`
-- `deploy/pias.env.example`
-- `deploy/pias.service.example`
+- `deploy/content-studio.env.example`
+- `deploy/content-studio.service.example`
 - `docs/operations/deployment-runbook.md`
 - `docs/operations/release-preflight.md`
 - `README.md`
@@ -859,8 +859,8 @@
 - `package-lock.json`
 - `tsconfig.json`
 - `.gitignore`
-- `deploy/pias.env.example`
-- `deploy/pias.service.example`
+- `deploy/content-studio.env.example`
+- `deploy/content-studio.service.example`
 - `docs/operations/deployment-runbook.md`
 - `docs/operations/release-preflight.md`
 - `README.md`
@@ -963,7 +963,7 @@
 - `src/workbench/Workbench.tsx`
 - `tests/bundleArchitecture.test.ts`
 - `tests/app.test.tsx`
-- `docs/acceptance/evidence/pias-bundle-split-workbench-2026-07-22.png`
+- `docs/acceptance/evidence/content-studio-bundle-split-workbench-2026-07-22.png`
 
 ### 测试和构建结果
 
@@ -1022,7 +1022,7 @@
 - 前端与独立 Node 服务双产物构建通过，所有 JS 块继续低于 500 kB。
 - `npm audit --omit=dev --audit-level=high` 为 0 漏洞。
 - GitHub PR 运行 `29884548194` 与分支推送运行 `29884547736` 均在提交 `eb9470d0a5212b517e45f50319d83db673cd04b1` 上通过全部 11 个步骤。
-- PR 运行上传发布候选 `pias-release-feb1b6a4bb0ac0f96a1329b0c516a48aa427b2f2`，大小 9,119,225 字节，摘要 `sha256:ba11c283ea626552501174d11a9fc1bc2d4f2f344f269524cb732b8df5910b4f`，保留至 2026-07-29。
+- PR 运行上传发布候选 `content-studio-release-feb1b6a4bb0ac0f96a1329b0c516a48aa427b2f2`，大小 9,119,225 字节，摘要 `sha256:ba11c283ea626552501174d11a9fc1bc2d4f2f344f269524cb732b8df5910b4f`，保留至 2026-07-29。
 - 本地 `dist/release.json` 确认 revision 为 `eb9470d0a5212b517e45f50319d83db673cd04b1` 且 `dirty=false`。
 
 ### 风险控制
@@ -1047,7 +1047,7 @@
 
 - 为独立 Node 服务增加生产 CSP、HSTS、COOP/CORP、禁止嵌入、`nosniff`、Referrer/Permissions Policy 等统一响应头。
 - 所有 `/api/` 默认使用 `Cache-Control: no-store`；内容哈希素材仍由素材路由覆盖为私有不可变缓存。
-- 写请求携带的 Origin 必须与 `PIAS_PUBLIC_BASE_URL` 完全一致，`Sec-Fetch-Site: cross-site` 直接拒绝；登录、MFA、组织管理、StudioState 与 Fal JSON 写入只接受 `application/json`。
+- 写请求携带的 Origin 必须与 `CONTENT_STUDIO_PUBLIC_BASE_URL` 完全一致，`Sec-Fetch-Site: cross-site` 直接拒绝；登录、MFA、组织管理、StudioState 与 Fal JSON 写入只接受 `application/json`。
 - 在按邮箱渐进锁定之外增加单实例 20 次/分钟登录总量门，阻断轮换邮箱持续触发同步 scrypt；超限返回稳定 `429` 与 `Retry-After`。
 - 固定 Node HTTP 入口预算：完整请求 60 秒、头部 15 秒、Keep-Alive 5 秒、16 KiB/100 个请求头及单连接 1000 次请求。
 - README 与部署手册同步反向代理、安全头、Origin、媒体类型、限流和超时约束。
@@ -1097,7 +1097,7 @@
 - `src/fal/falProxyPlugin.ts`
 - `tests/productionServer.test.ts`
 - `tests/deploymentArtifacts.test.ts`
-- `deploy/nginx-pias.conf.example`
+- `deploy/nginx-content-studio.conf.example`
 - `docs/operations/deployment-runbook.md`
 - `README.md`
 
@@ -1133,9 +1133,9 @@
 - 为每个生产 HTTP 请求生成服务端 UUID `X-Request-ID`，请求完成日志记录关联 ID、方法、固定路由模板、状态和耗时。
 - 动态 Fal Job、成员、邀请和素材路径使用参数模板；未知 API 统一记录 `/api/other`，SPA 与静态资源也不写客户端可控原始路径。
 - 新增严格白名单的单行 JSON 序列化器。Error 只保留符合规则的稳定 `errorCode`，不输出 message、stack、Query、Cookie、Prompt、图片/Data URL 或客户端 Request ID。
-- 中间件未处理异常新增 `pias_http_failure` 诊断事件；Fal 恢复 Worker、队列加载和持久化错误改走同一脱敏通道，不再 `console.warn` 原始 Error。
+- 中间件未处理异常新增 `content_studio_http_failure` 诊断事件；Fal 恢复 Worker、队列加载和持久化错误改走同一脱敏通道，不再 `console.warn` 原始 Error。
 - 日志传输器自身抛错时被隔离，不会打断 HTTP 响应、Worker 清理或进程关闭。
-- systemd 样例固定输出到 journald 并使用 `SyslogIdentifier=pias`；部署手册补充 request ID 检索、5xx/队列/ready 告警以及日志 30 天、业务审计 365 天的保留边界。
+- systemd 样例固定输出到 journald 并使用 `SyslogIdentifier=content-studio`；部署手册补充 request ID 检索、5xx/队列/ready 告警以及日志 30 天、业务审计 365 天的保留边界。
 
 ### 修改文件
 
@@ -1147,7 +1147,7 @@
 - `tests/productionServer.test.ts`
 - `tests/falQueueService.test.ts`
 - `tests/deploymentArtifacts.test.ts`
-- `deploy/pias.service.example`
+- `deploy/content-studio.service.example`
 - `docs/operations/deployment-runbook.md`
 - `README.md`
 
@@ -1157,7 +1157,7 @@
 - 聚焦回归：生产日志、独立服务、Fal 队列/代理和部署产物 5 个测试文件、36 项测试通过。
 - 全量回归：48 个测试文件、417 项测试通过；`npm run lint`、`npm run typecheck`、前端和独立 Node 双产物构建通过。
 - `npm audit --omit=dev --audit-level=high` 为 0 漏洞；前端块大小保持不变，服务 bundle 为 130.16 kB。
-- 构建后的独立进程完成 live、未知 API、日志脱敏和 SIGTERM 验收：退出码 0，request ID 格式有效，未知路径为 `/api/other`，测试机密未进入 stdout；隔离证据位于 `/tmp/pias-log-smoke-V0gnFb`。
+- 构建后的独立进程完成 live、未知 API、日志脱敏和 SIGTERM 验收：退出码 0，request ID 格式有效，未知路径为 `/api/other`，测试机密未进入 stdout；隔离证据位于 `/tmp/content-studio-log-smoke-V0gnFb`。
 - 当前构建因尚未提交按事实标记 `dirty=true`；提交后需重新构建并确认 `dirty=false`。
 
 ### 风险控制

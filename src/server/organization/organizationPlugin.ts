@@ -3,7 +3,7 @@ import type { Connect, Plugin } from 'vite';
 import { AuthorizationError, type AuthContext, type AuthRole } from '../auth/authPolicy';
 import { getRequestAuthContext } from '../auth/authApiPlugin';
 import { IdentityError, type IdentityService } from '../auth/identityService';
-import { openPiasDatabase, type PiasDatabase } from '../persistence/sqliteDatabase';
+import { openContentStudioDatabase, type ContentStudioDatabase } from '../persistence/sqliteDatabase';
 import {
   createOrganizationService,
   OrganizationError,
@@ -162,13 +162,13 @@ export function organizationPlugin(
   const emailConfig = options.emailConfig === undefined
     ? loadInvitationEmailConfig()
     : options.emailConfig;
-  let database: PiasDatabase | null = null;
+  let database: ContentStudioDatabase | null = null;
   let service: OrganizationService | null = null;
   let invitationDelivery: InvitationEmailDelivery | null = null;
   const getService = () => {
     if (!identity) throw new OrganizationApiError('企业身份服务尚未配置', 'ORG_NOT_CONFIGURED', 503);
-    database ??= openPiasDatabase(
-      options.databaseFile || process.env.PIAS_DATABASE_FILE || '/tmp/pias-image-studio/pias.sqlite',
+    database ??= openContentStudioDatabase(
+      options.databaseFile || process.env.CONTENT_STUDIO_DATABASE_FILE || '/tmp/content-studio/content-studio.sqlite',
     );
     if (emailConfig) {
       invitationDelivery ??= createInvitationEmailDelivery(
@@ -204,7 +204,7 @@ export function organizationPlugin(
     }
   };
   return {
-    name: 'pias-organization-api',
+    name: 'content-studio-organization-api',
     configureServer(server) { mount(server); },
     configurePreviewServer(server) { mount(server); },
     async closeBundle() {

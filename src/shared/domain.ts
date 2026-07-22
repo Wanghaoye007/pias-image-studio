@@ -62,7 +62,7 @@ export type UsageLedgerEntry = {
   entryType: 'reserve' | 'charge' | 'release' | 'adjustment';
   units: number;
   balanceAfter: number;
-  pricingRuleVersion: 'pias-credit-v1';
+  pricingRuleVersion: 'content-studio-credit-v1';
   reason: string;
   at: string;
 };
@@ -238,11 +238,11 @@ export const taskProfiles: TaskProfile[] = [
 ];
 
 const resultImages = [
-  '/demo-assets/pias-product-emerald.png',
-  '/demo-assets/pias-product-blue.png',
-  '/demo-assets/pias-product-coral.png',
-  '/demo-assets/pias-product-flatlay.png',
-  '/demo-assets/pias-product-pack.png',
+  '/demo-assets/demo-product-emerald.png',
+  '/demo-assets/demo-product-blue.png',
+  '/demo-assets/demo-product-coral.png',
+  '/demo-assets/demo-product-flatlay.png',
+  '/demo-assets/demo-product-pack.png',
 ];
 
 export function getProfile(profileId: TaskProfileId): TaskProfile {
@@ -255,7 +255,7 @@ export function getProfile(profileId: TaskProfileId): TaskProfile {
 
 export function initialStudioState(): StudioState {
   return {
-    tenantName: 'PIAS Japan',
+    tenantName: 'Aster Japan',
     projectName: '2026 夏季 SKU 上新',
     workspaceName: '图片工作台',
     selectedSceneId: 'scene-source',
@@ -270,42 +270,42 @@ export function initialStudioState(): StudioState {
     assets: [
       {
         id: 'asset-main',
-        brand: 'PIAS',
+        brand: 'Aster',
         product: '精华粉底',
-        skuCode: 'PIAS-SF-001',
+        skuCode: 'AST-SF-001',
         usage: '主商品图',
         version: 'v3',
-        imageUrl: '/demo-assets/pias-product-source.png',
+        imageUrl: '/demo-assets/demo-product-source.png',
       },
       {
         id: 'asset-pack',
-        brand: 'PIAS',
+        brand: 'Aster',
         product: '护肤套装',
-        skuCode: 'PIAS-SK-014',
+        skuCode: 'AST-SK-014',
         usage: '包装',
         version: 'v1',
-        imageUrl: '/demo-assets/pias-product-pack.png',
+        imageUrl: '/demo-assets/demo-product-pack.png',
       },
       {
         id: 'asset-scene',
-        brand: 'PIAS',
+        brand: 'Aster',
         product: '活动参考',
-        skuCode: 'PIAS-REF-SEA',
+        skuCode: 'AST-REF-SEA',
         usage: '场景参考',
         version: 'v2',
-        imageUrl: '/demo-assets/pias-product-flatlay.png',
+        imageUrl: '/demo-assets/demo-product-flatlay.png',
       },
     ],
     scenes: [
       {
         id: 'scene-source',
         title: '源场景',
-        skuCode: 'PIAS-SF-001',
+        skuCode: 'AST-SF-001',
         operation: '商品素材',
         status: 'source',
         x: 0,
         y: 40,
-        imageUrl: '/demo-assets/pias-product-source.png',
+        imageUrl: '/demo-assets/demo-product-source.png',
         resultIds: [],
         sourceAssetId: 'asset-main',
         sourceAssetVersion: 'v3',
@@ -871,7 +871,7 @@ function usageLedgerEntry(
     entryType,
     units,
     balanceAfter: options.balanceAfter,
-    pricingRuleVersion: 'pias-credit-v1',
+    pricingRuleVersion: 'content-studio-credit-v1',
     reason: options.reason,
     at: new Date().toISOString(),
   };

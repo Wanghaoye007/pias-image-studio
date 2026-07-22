@@ -10,12 +10,12 @@ describe('production log serialization', () => {
       code: 'SQLITE_BUSY',
     });
 
-    const output = serializeProductionLog('pias_operation_failed', {
+    const output = serializeProductionLog('content_studio_operation_failed', {
       requestId: 'request-safe',
     }, error);
 
     expect(JSON.parse(output)).toEqual({
-      event: 'pias_operation_failed',
+      event: 'content_studio_operation_failed',
       requestId: 'request-safe',
       errorCode: 'SQLITE_BUSY',
     });
@@ -24,7 +24,7 @@ describe('production log serialization', () => {
   });
 
   it('replaces untrusted error codes and drops unsafe fields', () => {
-    const output = serializeProductionLog('pias_operation_failed', {
+    const output = serializeProductionLog('content_studio_operation_failed', {
       path: '/api/fal/jobs',
       prompt: 'must-not-be-logged',
       imageUrl: 'data:image/png;base64,must-not-be-logged',
@@ -34,7 +34,7 @@ describe('production log serialization', () => {
     });
 
     expect(JSON.parse(output)).toEqual({
-      event: 'pias_operation_failed',
+      event: 'content_studio_operation_failed',
       path: '/api/fal/jobs',
       errorCode: 'UNEXPECTED_ERROR',
     });
@@ -44,7 +44,7 @@ describe('production log serialization', () => {
   it('does not let a logging transport failure interrupt production work', () => {
     expect(() => writeProductionLog(
       () => { throw new Error('stdout unavailable'); },
-      'pias_http_request',
+      'content_studio_http_request',
       { requestId: 'request-safe' },
     )).not.toThrow();
   });

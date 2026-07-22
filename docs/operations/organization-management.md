@@ -1,9 +1,9 @@
-# PIAS 企业项目与成员运维说明
+# Content Studio 企业项目与成员运维说明
 
 ## 当前能力
 
 - `POST /api/organization/projects` 创建项目、创建者成员关系和不可变审计事件；`GET` 按 Tenant 与成员范围列出项目。
-- 项目切换同时更新 `x-pias-project-id` 和 SameSite Cookie，刷新时只恢复当前会话仍有权访问的项目。
+- 项目切换同时更新 `x-content-studio-project-id` 和 SameSite Cookie，刷新时只恢复当前会话仍有权访问的项目。
 - 新项目无 StudioState 快照时创建空白工作台，演示数据仅用于未启用企业身份的本机模式。
 - `POST /api/organization/invitations` 校验成员角色和真实企业项目范围，生成 256 位一次性令牌，数据库只保存 SHA-256 摘要；重复待处理邀请返回 `409`。
 - `POST /api/organization/invitations/preview` 与 `/accept` 是仅凭邀请令牌访问的公开入口；接受交易会原子创建成员、项目关系、邀请状态和审计事件，令牌重复消费返回 `409`。
@@ -16,7 +16,7 @@
 
 ## 存储与备份
 
-项目、成员关系、邀请、邮件 Outbox 和组织审计使用 `PIAS_DATABASE_FILE` 中的 SQLite schema version 7，由同一数据库备份/恢复命令管理。v4 到 v6 依次增量添加令牌生命周期、持久成员和 `first_login_at`；v7 新增 `organization_email_outbox`，原邀请和成员行均不删除。运行时与命令行迁移工具会直接升级到 v7。旧 `token_hash=NULL` 的待处理邀请不能接受，管理员应撤销并重新签发。恢复前必须停止全部写入，dry-run 校验通过后再 `--apply`；回滚使用恢复命令保留的 `.rollback-*` 主文件和 sidecar。旧版二进制回滚时必须同时恢复升级前数据库，不允许让 v6 代码继续写入 v7 数据库。详见 `database-runbook.md`。
+项目、成员关系、邀请、邮件 Outbox 和组织审计使用 `CONTENT_STUDIO_DATABASE_FILE` 中的 SQLite schema version 7，由同一数据库备份/恢复命令管理。v4 到 v6 依次增量添加令牌生命周期、持久成员和 `first_login_at`；v7 新增 `organization_email_outbox`，原邀请和成员行均不删除。运行时与命令行迁移工具会直接升级到 v7。旧 `token_hash=NULL` 的待处理邀请不能接受，管理员应撤销并重新签发。恢复前必须停止全部写入，dry-run 校验通过后再 `--apply`；回滚使用恢复命令保留的 `.rollback-*` 主文件和 sidecar。旧版二进制回滚时必须同时恢复升级前数据库，不允许让 v6 代码继续写入 v7 数据库。详见 `database-runbook.md`。
 
 ## 权限边界
 
@@ -35,19 +35,19 @@
 必须一次性提供全部配置，部分配置会阻止服务启动：
 
 ```bash
-PIAS_PUBLIC_BASE_URL=https://studio.example.com
-PIAS_EMAIL_FROM='PIAS <no-reply@example.com>'
-PIAS_EMAIL_WEBHOOK_URL=https://mail-relay.example.com/v1/send
-PIAS_EMAIL_WEBHOOK_KEY_FILE=/etc/pias/mail-webhook.key
-PIAS_INVITATION_ENCRYPTION_KEY_FILE=/etc/pias/invitation-encryption.key
+CONTENT_STUDIO_PUBLIC_BASE_URL=https://studio.example.com
+CONTENT_STUDIO_EMAIL_FROM='Content Studio <no-reply@example.com>'
+CONTENT_STUDIO_EMAIL_WEBHOOK_URL=https://mail-relay.example.com/v1/send
+CONTENT_STUDIO_EMAIL_WEBHOOK_KEY_FILE=/etc/content-studio/mail-webhook.key
+CONTENT_STUDIO_INVITATION_ENCRYPTION_KEY_FILE=/etc/content-studio/invitation-encryption.key
 ```
 
 两个密钥文件必须是普通文件且权限为 `0600`。邀请加密 Key 必须为 32 字节，可使用 64 位十六进制或 Base64：
 
 ```bash
 umask 077
-openssl rand -base64 32 > /etc/pias/invitation-encryption.key
-chmod 600 /etc/pias/invitation-encryption.key /etc/pias/mail-webhook.key
+openssl rand -base64 32 > /etc/content-studio/invitation-encryption.key
+chmod 600 /etc/content-studio/invitation-encryption.key /etc/content-studio/mail-webhook.key
 ```
 
 Relay 接收 `POST` JSON，字段为 `messageId`、`template`、`from`、`to`、`subject` 和 `variables`；`variables` 包含 `displayName`、`role`、`acceptUrl`、`expiresAt`。请求头包含 `Authorization: Bearer <key>` 和 `Idempotency-Key: <messageId>`。Relay 必须按幂等键去重，并仅在邮件服务已接受投递时返回 2xx。

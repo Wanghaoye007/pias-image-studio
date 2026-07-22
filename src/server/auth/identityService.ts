@@ -74,7 +74,7 @@ const commonPasswords = new Set([
   '123456789012',
   'qwerty123456',
   'admin12345678',
-  'pias12345678',
+  'contentstudio12345678',
 ]);
 
 export class IdentityError extends Error {

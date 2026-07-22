@@ -15,7 +15,7 @@ afterEach(async () => {
 
 describe('release metadata', () => {
   it('writes an atomic, path-free identity for the built artifact', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-release-metadata-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-release-metadata-'));
     directories.push(directory);
     const packageFile = join(directory, 'package.json');
     const artifactDirectory = join(directory, 'dist');
@@ -32,7 +32,7 @@ describe('release metadata', () => {
 
     expect(metadata).toEqual({
       schemaVersion: 1,
-      service: 'pias-image-studio',
+      service: 'content-studio',
       version: '1.2.3',
       revision: 'abc1234',
       dirty: false,
@@ -45,7 +45,7 @@ describe('release metadata', () => {
   });
 
   it('rejects malformed package versions and revisions', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-release-metadata-invalid-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-release-metadata-invalid-'));
     directories.push(directory);
     const packageFile = join(directory, 'package.json');
     const artifactDirectory = join(directory, 'dist');

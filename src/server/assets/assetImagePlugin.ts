@@ -105,8 +105,8 @@ export function createAssetImageMiddleware(
 
 export function assetImagePlugin(options: { scoped?: boolean; scopedDirectory?: string } = {}): Plugin {
   const rootDirectory = options.scopedDirectory
-    || process.env.PIAS_ASSET_DIR
-    || '/tmp/pias-image-studio/assets';
+    || process.env.CONTENT_STUDIO_ASSET_DIR
+    || '/tmp/content-studio/assets';
   const cache = new Map<string, AssetImageStorage>();
   const storage = options.scoped
     ? (request: IncomingMessage) => {
@@ -124,7 +124,7 @@ export function assetImagePlugin(options: { scoped?: boolean; scopedDirectory?: 
     ...(options.scoped ? { scopeFromRequest: getRequestProjectScope } : {}),
   });
   return {
-    name: 'pias-asset-images',
+    name: 'content-studio-asset-images',
     configureServer(server) {
       server.middlewares.use(middleware);
     },

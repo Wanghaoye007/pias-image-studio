@@ -140,7 +140,7 @@ function AssetGroup({
 }
 
 function handleAssetDragStart(event: DragEvent<HTMLButtonElement>, assetId: string) {
-  event.dataTransfer.setData('application/x-pias-asset', assetId);
+  event.dataTransfer.setData('application/x-content-studio-asset', assetId);
   event.dataTransfer.effectAllowed = 'copy';
 }
 

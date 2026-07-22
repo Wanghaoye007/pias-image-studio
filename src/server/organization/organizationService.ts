@@ -5,7 +5,7 @@ import {
   verifyTotpCode,
   type AuthUser,
 } from '../auth/identityService';
-import type { PiasDatabase } from '../persistence/sqliteDatabase';
+import type { ContentStudioDatabase } from '../persistence/sqliteDatabase';
 import type {
   OrganizationInvitation,
   OrganizationInvitationDelivery,
@@ -60,7 +60,7 @@ type OrganizationServiceOptions = {
 };
 
 export function createOrganizationService(
-  database: PiasDatabase,
+  database: ContentStudioDatabase,
   options: OrganizationServiceOptions = {},
 ) {
   const now = options.now ?? (() => new Date().toISOString());
@@ -684,7 +684,7 @@ function parseUserRow(value: unknown): AuthUser {
 }
 
 function findUserByEmail(
-  connection: PiasDatabase['connection'],
+  connection: ContentStudioDatabase['connection'],
   emailInput: string,
 ): AuthUser | undefined {
   const row = connection.prepare(`
@@ -713,7 +713,7 @@ function toOrganizationMember(
 }
 
 function parseMemberRow(
-  connection: PiasDatabase['connection'],
+  connection: ContentStudioDatabase['connection'],
   value: unknown,
 ): OrganizationMember {
   const row = value as Record<string, unknown>;
@@ -739,7 +739,7 @@ function parseMemberRow(
 }
 
 function validateMemberProjects(
-  connection: PiasDatabase['connection'],
+  connection: ContentStudioDatabase['connection'],
   tenantId: string,
   input: string[],
 ): string[] {
@@ -766,7 +766,7 @@ function sameStringSet(left: string[], right: string[]): boolean {
 }
 
 function resolveInvitationByToken(
-  connection: PiasDatabase['connection'],
+  connection: ContentStudioDatabase['connection'],
   token: string,
 ): OrganizationInvitation {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) invalidInvitationToken();
@@ -778,7 +778,7 @@ function resolveInvitationByToken(
 }
 
 function assertInvitationPending(
-  connection: PiasDatabase['connection'],
+  connection: ContentStudioDatabase['connection'],
   invitation: OrganizationInvitation,
   at: string,
   invitationDelivery?: OrganizationInvitationDelivery,
@@ -792,7 +792,7 @@ function assertInvitationPending(
 }
 
 function expirePendingInvitations(
-  connection: PiasDatabase['connection'],
+  connection: ContentStudioDatabase['connection'],
   tenantId: string,
   at: string,
   invitationDelivery?: OrganizationInvitationDelivery,
@@ -807,7 +807,7 @@ function expirePendingInvitations(
 }
 
 function expireInvitation(
-  connection: PiasDatabase['connection'],
+  connection: ContentStudioDatabase['connection'],
   invitation: OrganizationInvitation,
   at: string,
   invitationDelivery?: OrganizationInvitationDelivery,
@@ -869,7 +869,7 @@ function parseAuditRow(value: unknown): OrganizationAuditEvent {
   };
 }
 
-function insertAudit(connection: PiasDatabase['connection'], event: OrganizationAuditEvent): void {
+function insertAudit(connection: ContentStudioDatabase['connection'], event: OrganizationAuditEvent): void {
   connection.prepare(`
     INSERT INTO organization_audit_events (
       event_id, tenant_id, event_type, actor_user_id, target_id, details_json, created_at
@@ -885,7 +885,7 @@ function insertAudit(connection: PiasDatabase['connection'], event: Organization
   );
 }
 
-function transaction(connection: PiasDatabase['connection'], action: () => void): void {
+function transaction(connection: ContentStudioDatabase['connection'], action: () => void): void {
   connection.exec('BEGIN IMMEDIATE');
   try {
     action();

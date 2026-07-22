@@ -13,7 +13,7 @@ const deliveryMocks = vi.hoisted(() => ({
 }));
 
 const falClientMocks = vi.hoisted(() => ({
-  FAL_LIFECYCLE_ABORT_REASON: 'pias:lifecycle-unmount',
+  FAL_LIFECYCLE_ABORT_REASON: 'content-studio:lifecycle-unmount',
   resumeFalImageJob: vi.fn(),
   runFalImageJob: vi.fn(),
 }));
@@ -81,8 +81,8 @@ function authenticatedOwner() {
     user: {
       id: 'user-owner',
       tenantId: 'tenant-a',
-      email: 'owner@pias.test',
-      displayName: 'PIAS Owner',
+      email: 'owner@studio.test',
+      displayName: 'Content Studio Owner',
       role: 'owner' as const,
       projectIds: ['project-a'],
       mfaEnabled: true,
@@ -90,7 +90,7 @@ function authenticatedOwner() {
   };
 }
 
-describe('PIAS 中文应用框架', () => {
+describe('Content Studio 中文应用框架', () => {
   beforeEach(() => {
     authClientMocks.loadAuthSession.mockReset();
     authClientMocks.loadAuthSession.mockResolvedValue({ status: 'disabled' });
@@ -192,26 +192,26 @@ describe('PIAS 中文应用框架', () => {
 
     const dialog = screen.getByRole('dialog', { name: '上传素材' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: '品牌' }), {
-      target: { value: 'PIAS' },
+      target: { value: 'Content Studio' },
     });
     fireEvent.change(within(dialog).getByRole('textbox', { name: '商品名称' }), {
       target: { value: '夏季精华' },
     });
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'SKU 编码' }), {
-      target: { value: 'PIAS-SF-009' },
+      target: { value: 'AST-SF-009' },
     });
     fireEvent.change(within(dialog).getByLabelText('素材图片'), {
-      target: { files: [new File(['pias'], 'summer-serum.png', { type: 'image/png' })] },
+      target: { files: [new File(['content-studio'], 'summer-serum.png', { type: 'image/png' })] },
     });
 
     await within(dialog).findByRole('img', { name: '素材预览' });
     fireEvent.click(within(dialog).getByRole('button', { name: '确认上传' }));
 
-    expect((await screen.findAllByText('PIAS-SF-009')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('AST-SF-009')).length).toBeGreaterThan(0);
     expect(assetImageClientMocks.uploadAssetImage).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'summer-serum.png', type: 'image/png' }),
     );
-    expect(screen.getByText('PIAS / 夏季精华')).toBeInTheDocument();
+    expect(screen.getByText('Content Studio / 夏季精华')).toBeInTheDocument();
     expect(screen.getByRole('status', { name: '素材上传状态' })).toHaveTextContent('已上传 夏季精华');
     await waitFor(() => expect(stateClientMocks.saveStudioState).toHaveBeenLastCalledWith(
       expect.any(Number),
@@ -220,7 +220,7 @@ describe('PIAS 中文应用框架', () => {
           expect.objectContaining({
             imageUrl: '/api/assets/images/asset-upload.png',
             product: '夏季精华',
-            skuCode: 'PIAS-SF-009',
+            skuCode: 'AST-SF-009',
           }),
         ]),
       }),
@@ -266,7 +266,7 @@ describe('PIAS 中文应用框架', () => {
     authClientMocks.loadAuthSession.mockResolvedValue(authenticatedOwner());
     organizationClientMocks.listProjects.mockResolvedValue([{
       id: 'project-autumn', tenantId: 'tenant-a', name: '2026 秋季发布',
-      defaultBrand: 'PIAS', defaultSku: 'PIAS-AW-001', ownerUserId: 'user-owner',
+      defaultBrand: 'Content Studio', defaultSku: 'CS-AW-001', ownerUserId: 'user-owner',
       reviewRequired: true, status: 'active',
       createdAt: '2026-07-22T06:30:00.000Z', updatedAt: '2026-07-22T06:30:00.000Z',
     }]);
@@ -311,7 +311,7 @@ describe('PIAS 中文应用框架', () => {
     authClientMocks.getPreferredProjectId.mockReturnValue('project-autumn');
     organizationClientMocks.listProjects.mockResolvedValue([{
       id: 'project-autumn', tenantId: 'tenant-a', name: '2026 秋季发布',
-      defaultBrand: 'PIAS', defaultSku: 'PIAS-AW-001', ownerUserId: 'user-owner',
+      defaultBrand: 'Content Studio', defaultSku: 'CS-AW-001', ownerUserId: 'user-owner',
       reviewRequired: true, status: 'active',
       createdAt: '2026-07-22T06:30:00.000Z', updatedAt: '2026-07-22T06:30:00.000Z',
     }]);
@@ -336,7 +336,7 @@ describe('PIAS 中文应用框架', () => {
     }]);
     organizationClientMocks.createInvitation.mockResolvedValue({
       invitation: {
-        id: 'invitation-1', tenantId: 'tenant-a', email: 'reviewer@pias.test',
+        id: 'invitation-1', tenantId: 'tenant-a', email: 'reviewer@studio.test',
         role: 'reviewer', projectIds: ['project-a'], status: 'pending',
         deliveryStatus: 'pending_configuration', createdBy: 'user-owner',
         createdAt: '2026-07-22T06:30:00.000Z', expiresAt: '2026-07-29T06:30:00.000Z',
@@ -348,7 +348,7 @@ describe('PIAS 中文应用框架', () => {
     fireEvent.click(screen.getByRole('button', { name: '邀请成员' }));
     const dialog = screen.getByRole('dialog', { name: '邀请成员' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: '成员邮箱' }), {
-      target: { value: 'reviewer@pias.test' },
+      target: { value: 'reviewer@studio.test' },
     });
     fireEvent.change(within(dialog).getByRole('combobox', { name: '成员角色' }), {
       target: { value: 'reviewer' },
@@ -360,7 +360,7 @@ describe('PIAS 中文应用框架', () => {
     expect(screen.getByRole('textbox', { name: '一次性邀请链接' }))
       .toHaveValue('http://localhost/#/accept-invitation?token=secure-token');
     expect(organizationClientMocks.createInvitation).toHaveBeenCalledWith({
-      email: 'reviewer@pias.test', displayName: '', role: 'reviewer', projectIds: ['project-a'],
+      email: 'reviewer@studio.test', displayName: '', role: 'reviewer', projectIds: ['project-a'],
     });
   });
 
@@ -373,7 +373,7 @@ describe('PIAS 中文应用框架', () => {
     }]);
     const original = {
       id: 'invitation-11111111-1111-1111-1111-111111111111', tenantId: 'tenant-a',
-      email: 'resend-ui@pias.test', role: 'viewer' as const, projectIds: ['project-a'],
+      email: 'resend-ui@studio.test', role: 'viewer' as const, projectIds: ['project-a'],
       status: 'pending' as const, deliveryStatus: 'pending_configuration' as const,
       createdBy: 'user-owner', createdAt: '2026-07-22T06:30:00.000Z',
       expiresAt: '2026-07-29T06:30:00.000Z',
@@ -392,8 +392,8 @@ describe('PIAS 中文应用框架', () => {
 
     await renderApp();
     fireEvent.click(screen.getByRole('button', { name: '企业管理' }));
-    expect(await screen.findByText('resend-ui@pias.test')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '重新签发邀请 resend-ui@pias.test' }));
+    expect(await screen.findByText('resend-ui@studio.test')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重新签发邀请 resend-ui@studio.test' }));
 
     await waitFor(() => expect(organizationClientMocks.resendInvitation)
       .toHaveBeenCalledWith(original.id));
@@ -419,7 +419,7 @@ describe('PIAS 中文应用框架', () => {
     ]);
     const member = {
       id: 'user-11111111-1111-1111-1111-111111111111', tenantId: 'tenant-a',
-      email: 'managed@pias.test', displayName: '受管成员', role: 'creator' as const,
+      email: 'managed@studio.test', displayName: '受管成员', role: 'creator' as const,
       status: 'active' as const, projectIds: ['project-a'], mfaEnabled: false,
       createdAt: '2026-07-22T06:30:00.000Z', updatedAt: '2026-07-22T06:30:00.000Z',
     };
@@ -431,7 +431,7 @@ describe('PIAS 中文应用框架', () => {
     await renderApp();
     fireEvent.click(screen.getByRole('button', { name: '企业管理' }));
     expect(await screen.findByText('受管成员')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '编辑成员 managed@pias.test' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑成员 managed@studio.test' }));
     const dialog = screen.getByRole('dialog', { name: '编辑成员' });
     fireEvent.change(within(dialog).getByRole('combobox', { name: '成员角色' }), {
       target: { value: 'reviewer' },
@@ -454,11 +454,11 @@ describe('PIAS 中文应用框架', () => {
     window.history.replaceState({}, '', `/#/accept-invitation?token=${token}`);
     authClientMocks.loadAuthSession.mockResolvedValue({ status: 'anonymous' });
     organizationClientMocks.previewInvitation.mockResolvedValue({
-      email: 'member@pias.test', displayName: '新成员', role: 'viewer',
+      email: 'member@studio.test', displayName: '新成员', role: 'viewer',
       projectIds: ['project-a'], expiresAt: '2026-07-29T06:30:00.000Z',
     });
     organizationClientMocks.acceptInvitation.mockResolvedValue({
-      id: 'user-member', tenantId: 'tenant-a', email: 'member@pias.test',
+      id: 'user-member', tenantId: 'tenant-a', email: 'member@studio.test',
       displayName: '新成员', role: 'viewer', status: 'active', projectIds: ['project-a'],
       mfaEnabled: false, createdAt: '2026-07-22T06:30:00.000Z',
       updatedAt: '2026-07-22T06:30:00.000Z',
@@ -466,18 +466,18 @@ describe('PIAS 中文应用框架', () => {
 
     render(<App />);
     expect(await screen.findByRole('heading', { name: '接受企业邀请' })).toBeInTheDocument();
-    expect(screen.getByText('member@pias.test')).toBeInTheDocument();
+    expect(screen.getByText('member@studio.test')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('设置密码'), {
-      target: { value: 'PIAS-member-2026!' },
+      target: { value: 'Studio-member-2026!' },
     });
     fireEvent.change(screen.getByLabelText('确认密码'), {
-      target: { value: 'PIAS-member-2026!' },
+      target: { value: 'Studio-member-2026!' },
     });
     fireEvent.click(screen.getByRole('button', { name: '接受并创建账户' }));
 
     expect(await screen.findByRole('heading', { name: '账户已创建' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '前往登录' }));
-    expect(await screen.findByRole('heading', { name: '登录 PIAS' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '登录 Content Studio' })).toBeInTheDocument();
     expect(window.location.hash).toBe('');
   });
 
@@ -632,7 +632,7 @@ describe('PIAS 中文应用框架', () => {
     expect(within(approvedRow).getByRole('button', { name: '生成生产导出' })).toBeInTheDocument();
     expect(pendingRow).not.toHaveTextContent('scene-source');
     expect(pendingRow).toHaveTextContent('源场景');
-    expect(pendingRow).toHaveTextContent('PIAS-SF-001');
+    expect(pendingRow).toHaveTextContent('AST-SF-001');
 
     fireEvent.click(within(pendingRow).getByRole('button', { name: '通过审核' }));
 
@@ -657,7 +657,7 @@ describe('PIAS 中文应用框架', () => {
       .closest<HTMLElement>('.workspace-panel')!;
 
     expect(within(dashboard).getAllByText('任务 01 · 生成').length).toBeGreaterThan(0);
-    expect(within(dashboard).getByText('融图场景 · PIAS-SF-001')).toBeInTheDocument();
+    expect(within(dashboard).getByText('融图场景 · AST-SF-001')).toBeInTheDocument();
     expect(within(dashboard).getAllByText('生成 1').length).toBeGreaterThan(0);
     ['job-1', 'scene-2', 'result-1'].forEach((id) => {
       expect(screen.queryByText(id, { exact: true })).not.toBeInTheDocument();

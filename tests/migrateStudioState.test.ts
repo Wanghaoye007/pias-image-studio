@@ -16,7 +16,7 @@ afterEach(async () => {
 
 describe('StudioState tenant migration command', () => {
   it('defaults to dry-run and copies without deleting or overwriting the legacy source', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-state-migration-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-state-migration-'));
     directories.push(directory);
     const source = join(directory, 'legacy.json');
     const targetRoot = join(directory, 'scopes');

@@ -12,7 +12,7 @@ export function openDatabase(filePath) {
   database.exec('PRAGMA foreign_keys = ON');
   database.exec('PRAGMA busy_timeout = 5000');
   database.exec(`
-    CREATE TABLE IF NOT EXISTS pias_schema_migrations (
+    CREATE TABLE IF NOT EXISTS content_studio_schema_migrations (
       version INTEGER PRIMARY KEY,
       applied_at TEXT NOT NULL
     ) STRICT;
@@ -115,13 +115,13 @@ export function openDatabase(filePath) {
     ) STRICT;
     CREATE INDEX IF NOT EXISTS organization_audit_tenant_time
     ON organization_audit_events (tenant_id, created_at);
-    INSERT OR IGNORE INTO pias_schema_migrations (version, applied_at)
+    INSERT OR IGNORE INTO content_studio_schema_migrations (version, applied_at)
     VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-    INSERT OR IGNORE INTO pias_schema_migrations (version, applied_at)
+    INSERT OR IGNORE INTO content_studio_schema_migrations (version, applied_at)
     VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-    INSERT OR IGNORE INTO pias_schema_migrations (version, applied_at)
+    INSERT OR IGNORE INTO content_studio_schema_migrations (version, applied_at)
     VALUES (3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-    INSERT OR IGNORE INTO pias_schema_migrations (version, applied_at)
+    INSERT OR IGNORE INTO content_studio_schema_migrations (version, applied_at)
     VALUES (4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
     PRAGMA user_version = 4;
   `);
@@ -167,7 +167,7 @@ function migrateOrganizationSchemaV5(database) {
       ON organization_invitations (tenant_id, email) WHERE status = 'pending';
       CREATE INDEX IF NOT EXISTS organization_users_tenant_role
       ON organization_users (tenant_id, role, status);
-      INSERT OR IGNORE INTO pias_schema_migrations (version, applied_at)
+      INSERT OR IGNORE INTO content_studio_schema_migrations (version, applied_at)
       VALUES (5, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
       PRAGMA user_version = 5;
     `);
@@ -188,7 +188,7 @@ function migrateOrganizationSchemaV6(database) {
       database.exec('ALTER TABLE organization_users ADD COLUMN first_login_at TEXT');
     }
     database.exec(`
-      INSERT OR IGNORE INTO pias_schema_migrations (version, applied_at)
+      INSERT OR IGNORE INTO content_studio_schema_migrations (version, applied_at)
       VALUES (6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
       PRAGMA user_version = 6;
     `);
@@ -226,7 +226,7 @@ function migrateOrganizationSchemaV7(database) {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS organization_email_outbox_due
       ON organization_email_outbox (status, next_attempt_at, lease_expires_at);
-      INSERT OR IGNORE INTO pias_schema_migrations (version, applied_at)
+      INSERT OR IGNORE INTO content_studio_schema_migrations (version, applied_at)
       VALUES (7, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
       PRAGMA user_version = 7;
     `);

@@ -37,15 +37,15 @@ describe('production delivery artifacts', () => {
       approved,
       approved.results[0],
       spec,
-      'PIAS_result.webp',
+      'content-studio-result.webp',
     );
 
     expect(artifacts.map((artifact) => artifact.filename)).toEqual([
-      'PIAS_result_manifest.csv',
-      'PIAS_result_manifest.json',
+      'content-studio-result_manifest.csv',
+      'content-studio-result_manifest.json',
     ]);
     expect(artifacts[0].content).toContain('resultId,skuCode,dimensions,operation,generatedAt,reviewStatus');
-    expect(artifacts[0].content).toContain('result-1,PIAS-SF-001,2048x2048');
+    expect(artifacts[0].content).toContain('result-1,AST-SF-001,2048x2048');
     expect(JSON.parse(artifacts[1].content)).toMatchObject({
       exportSpec: spec,
       results: [{ resultId: 'result-1', reviewStatus: 'approved' }],

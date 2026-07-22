@@ -15,7 +15,7 @@ afterEach(async () => {
 
 describe('asset image file storage', () => {
   it('deduplicates identical bytes by content hash and restores the image', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-assets-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-assets-'));
     directories.push(directory);
     const storage = createFileAssetImageStorage(directory);
 
@@ -31,7 +31,7 @@ describe('asset image file storage', () => {
   });
 
   it('refuses path traversal and unknown extensions', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-assets-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-assets-'));
     directories.push(directory);
     const storage = createFileAssetImageStorage(directory);
 
@@ -40,7 +40,7 @@ describe('asset image file storage', () => {
   });
 
   it('keeps identical content hashes isolated across tenant projects', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-assets-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-assets-'));
     directories.push(directory);
     const tenantA = createScopedAssetImageStorage(directory, {
       tenantId: 'tenant-a',

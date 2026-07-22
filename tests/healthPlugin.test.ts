@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
+import { openContentStudioDatabase } from '../src/server/persistence/sqliteDatabase';
 import {
   createHealthMiddleware,
   type HealthReadiness,
@@ -33,7 +33,7 @@ describe('health API', () => {
       statusCode: 200,
       body: {
         status: 'ok',
-        service: 'pias-image-studio',
+        service: 'content-studio',
         version: '0.1.0',
         revision: 'abc1234',
       },
@@ -46,7 +46,7 @@ describe('health API', () => {
     const response = await invoke(createHealthMiddleware({
       release,
       readinessCheck: async () => {
-        throw new Error('database missing at /private/production/pias.sqlite');
+        throw new Error('database missing at /private/production/content-studio.sqlite');
       },
     }), 'GET', '/api/health/ready');
 
@@ -54,7 +54,7 @@ describe('health API', () => {
       statusCode: 503,
       body: {
         status: 'not_ready',
-        code: 'PIAS_NOT_READY',
+        code: 'CONTENT_STUDIO_NOT_READY',
         checks: {
           database: 'failed',
           artifact: 'failed',
@@ -86,10 +86,10 @@ describe('health API', () => {
 
 describe('production readiness', () => {
   it('checks the current schema, build artifact, writable asset directory and identity', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-readiness-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-readiness-'));
     directories.push(directory);
-    const databaseFile = join(directory, 'pias.sqlite');
-    const database = openPiasDatabase(databaseFile);
+    const databaseFile = join(directory, 'content-studio.sqlite');
+    const database = openContentStudioDatabase(databaseFile);
     database.close();
     const artifactDirectory = join(directory, 'dist');
     const assetDirectory = join(directory, 'assets');
@@ -112,11 +112,11 @@ describe('production readiness', () => {
   });
 
   it('loads the health identity from release metadata without exposing build paths', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-release-identity-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-release-identity-'));
     directories.push(directory);
     await writeFile(join(directory, 'release.json'), JSON.stringify({
       schemaVersion: 1,
-      service: 'pias-image-studio',
+      service: 'content-studio',
       version: '1.2.3',
       revision: 'def5678',
       dirty: false,

@@ -3727,7 +3727,7 @@ textarea:disabled {
   }
 }
 
-/* TheSEA footage fidelity layer: preserve PIAS behavior while matching the filmed workspace. */
+/* TheSEA footage fidelity layer: preserve Content Studio behavior while matching the filmed workspace. */
 
 .app-frame.is-workbench {
   grid-template-columns: minmax(0, 1fr) 52px;

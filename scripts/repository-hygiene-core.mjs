@@ -14,6 +14,8 @@ const sensitiveTextPatterns = [
   ['PRIVATE_KEY_MATERIAL', /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/],
 ];
 
+const forbiddenBrandPattern = new RegExp(['p', 'i', 'a', 's'].join(''), 'i');
+
 export function inspectTrackedFile({ path, size, content }) {
   const normalizedPath = path.replaceAll('\\', '/');
   const findings = [];
@@ -24,7 +26,13 @@ export function inspectTrackedFile({ path, size, content }) {
   if (size > MAX_TRACKED_FILE_BYTES) {
     findings.push({ path: normalizedPath, code: 'TRACKED_FILE_TOO_LARGE' });
   }
+  if (forbiddenBrandPattern.test(normalizedPath)) {
+    findings.push({ path: normalizedPath, code: 'FORBIDDEN_LEGACY_BRAND' });
+  }
   if (typeof content === 'string') {
+    if (forbiddenBrandPattern.test(content)) {
+      findings.push({ path: normalizedPath, code: 'FORBIDDEN_LEGACY_BRAND' });
+    }
     for (const [code, pattern] of sensitiveTextPatterns) {
       if (pattern.test(content)) findings.push({ path: normalizedPath, code });
     }

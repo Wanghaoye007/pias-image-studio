@@ -43,7 +43,7 @@ const deliveryMocks = vi.hoisted(() => ({
 }));
 
 const falClientMocks = vi.hoisted(() => ({
-  FAL_LIFECYCLE_ABORT_REASON: 'pias:lifecycle-unmount',
+  FAL_LIFECYCLE_ABORT_REASON: 'content-studio:lifecycle-unmount',
   runFalImageJob: vi.fn(async (
     _input: unknown,
     options: {
@@ -136,7 +136,7 @@ function ResultCompareHarness({ results }: { results: Result[] }) {
 
 function createDataTransfer(assetId: string): DataTransfer {
   return {
-    getData: (type: string) => type === 'application/x-pias-asset' ? assetId : '',
+    getData: (type: string) => type === 'application/x-content-studio-asset' ? assetId : '',
     setData: vi.fn(),
   } as unknown as DataTransfer;
 }
@@ -365,7 +365,7 @@ describe('workbench canvas', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: '场景' }));
 
-    expect(screen.getByRole('button', { name: '定向光场景，PIAS-SF-001' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '定向光场景，AST-SF-001' })).toBeInTheDocument();
     expect(screen.queryByText('Directional Light场景')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Directional Light场景/ })).not.toBeInTheDocument();
   });
@@ -791,7 +791,7 @@ describe('workbench canvas', () => {
     const picker = screen.getByRole('dialog', { name: '选择参考素材' });
     expect(picker).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索参考素材' })).toBeInTheDocument();
-    expect(within(picker).getByRole('button', { name: /活动参考，PIAS-REF-SEA/ })).toBeInTheDocument();
+    expect(within(picker).getByRole('button', { name: /活动参考，AST-REF-SEA/ })).toBeInTheDocument();
   });
 
   it('shows Fal-native controls and snapshots a single multiple-angles node', () => {
@@ -874,7 +874,7 @@ describe('workbench canvas', () => {
     expect(falClientMocks.runFalImageJob).toHaveBeenCalledWith(
       expect.objectContaining({
         profileId: 'generate',
-        imageUrls: ['/demo-assets/pias-product-source.png'],
+        imageUrls: ['/demo-assets/demo-product-source.png'],
         outputCount: 1,
         parameters: { sceneTemplate: '日光展台', quality: '精细' },
       }),
@@ -1239,7 +1239,7 @@ describe('workbench canvas', () => {
     fireEvent.change(within(exportDialog).getByRole('combobox', { name: '输出尺寸' }), {
       target: { value: '1080' },
     });
-    expect(within(exportDialog).getByText(/PIAS_PIAS-SF-001_.*\.webp/)).toBeInTheDocument();
+    expect(within(exportDialog).getByText(/AST-SF-001_.*\.webp/)).toBeInTheDocument();
     fireEvent.click(within(exportDialog).getByRole('button', { name: '生成生产导出' }));
 
     await waitFor(() => {
@@ -1322,7 +1322,7 @@ describe('workbench canvas', () => {
 
   it('creates a source node when a library asset is dropped on the canvas', () => {
     render(<WorkbenchHarness />);
-    const asset = screen.getByRole('button', { name: /PIAS-SK-014/ });
+    const asset = screen.getByRole('button', { name: /AST-SK-014/ });
     const dataTransfer = createDataTransfer('asset-pack');
 
     fireEvent.dragStart(asset, { dataTransfer });
@@ -1332,7 +1332,7 @@ describe('workbench canvas', () => {
       dataTransfer,
     });
 
-    expect(screen.getAllByText('PIAS-SK-014')).toHaveLength(2);
+    expect(screen.getAllByText('AST-SK-014')).toHaveLength(2);
   });
 
   it('opens a node picker from the selected source creation handle and cancels the draft cleanly', async () => {
@@ -1381,7 +1381,7 @@ describe('workbench canvas', () => {
   it('binds an asset as a blend reference when it is dropped on an existing image node', () => {
     let latestState = initialStudioState();
     render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
-    const asset = screen.getByRole('button', { name: /护肤套装，PIAS-SK-014/ });
+    const asset = screen.getByRole('button', { name: /护肤套装，AST-SK-014/ });
     const sourceImage = screen.getByAltText('源场景');
     const dataTransfer = createDataTransfer('asset-pack');
 
@@ -1443,7 +1443,7 @@ describe('workbench canvas', () => {
     render(<WorkbenchHarness />);
 
     fireEvent.click(screen.getByRole('tab', { name: '场景' }));
-    fireEvent.click(screen.getByRole('button', { name: /源场景，PIAS-SF-001/ }));
+    fireEvent.click(screen.getByRole('button', { name: /源场景，AST-SF-001/ }));
 
     expect(reactFlowMocks.fitView).toHaveBeenCalledWith(expect.objectContaining({
       nodes: [{ id: 'scene:scene-source' }],
@@ -1555,7 +1555,7 @@ describe('workbench canvas', () => {
     let latestState = initialStudioState();
     render(<WorkbenchHarness onStateChange={(state) => { latestState = state; }} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /护肤套装，PIAS-SK-014/ }));
+    fireEvent.click(screen.getByRole('button', { name: /护肤套装，AST-SK-014/ }));
 
     expect(latestState.scenes.at(-1)).toMatchObject({ sourceAssetId: 'asset-pack' });
   });

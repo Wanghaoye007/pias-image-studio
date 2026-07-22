@@ -9,7 +9,7 @@ import {
   OrganizationError,
   createOrganizationService,
 } from '../src/server/organization/organizationService';
-import { openPiasDatabase } from '../src/server/persistence/sqliteDatabase';
+import { openContentStudioDatabase } from '../src/server/persistence/sqliteDatabase';
 
 const directories: string[] = [];
 const now = '2026-07-22T06:30:00.000Z';
@@ -26,8 +26,8 @@ describe('organization service', () => {
     const { databasePath, service, close } = await setup();
     const created = service.createProject(creatorContext(), {
       name: '2026 秋季新品',
-      defaultBrand: 'PIAS',
-      defaultSku: 'PIAS-AW-001',
+      defaultBrand: 'Content Studio',
+      defaultSku: 'CS-AW-001',
       reviewRequired: true,
     });
 
@@ -40,7 +40,7 @@ describe('organization service', () => {
     expect(service.projectIdsForUser('tenant-a', 'user-creator')).toContain(created.id);
     close();
 
-    const reopenedDatabase = openPiasDatabase(databasePath);
+    const reopenedDatabase = openContentStudioDatabase(databasePath);
     const reopened = createOrganizationService(reopenedDatabase, { now: () => now });
     expect(reopened.listProjects(creatorContext())).toEqual([
       expect.objectContaining({ id: created.id, name: '2026 秋季新品' }),
@@ -59,14 +59,14 @@ describe('organization service', () => {
     });
 
     const created = service.createInvitation(ownerContext(), {
-      email: ' Reviewer@PIAS.TEST ',
+      email: ' Reviewer@Studio.TEST ',
       displayName: '秋季审核员',
       role: 'reviewer',
       projectIds: [project.id],
     });
     const { invitation } = created;
     expect(invitation).toMatchObject({
-      email: 'reviewer@pias.test',
+      email: 'reviewer@studio.test',
       deliveryStatus: 'pending_configuration',
       role: 'reviewer',
       status: 'pending',
@@ -75,12 +75,12 @@ describe('organization service', () => {
     expect(service.listInvitations(ownerContext())).toHaveLength(1);
 
     expect(() => service.createInvitation(ownerContext(), {
-      email: 'reviewer@pias.test',
+      email: 'reviewer@studio.test',
       role: 'reviewer',
       projectIds: [project.id],
     })).toThrow(expect.objectContaining({ code: 'ORG_INVITATION_DUPLICATE' }));
     expect(() => service.createInvitation(creatorContext(), {
-      email: 'other@pias.test',
+      email: 'other@studio.test',
       role: 'viewer',
       projectIds: [project.id],
     })).toThrow(expect.objectContaining({ code: 'AUTH_FORBIDDEN' }));
@@ -94,7 +94,7 @@ describe('organization service', () => {
       reviewRequired: true,
     });
     const created = service.createInvitation(ownerContext(), {
-      email: 'member@pias.test',
+      email: 'member@studio.test',
       displayName: '持久成员',
       role: 'reviewer',
       projectIds: [project.id],
@@ -112,7 +112,7 @@ describe('organization service', () => {
       password: strongPassword,
     });
     expect(accepted).toMatchObject({
-      email: 'member@pias.test',
+      email: 'member@studio.test',
       displayName: '持久成员',
       role: 'reviewer',
       projectIds: [project.id],
@@ -123,7 +123,7 @@ describe('organization service', () => {
     })).rejects.toMatchObject({ code: 'ORG_INVITATION_NOT_PENDING' });
     close();
 
-    const reopenedDatabase = openPiasDatabase(databasePath);
+    const reopenedDatabase = openContentStudioDatabase(databasePath);
     const reopened = createOrganizationService(reopenedDatabase, { now: () => now });
     const identity = new IdentityService([]);
     identity.setUserResolver({
@@ -131,7 +131,7 @@ describe('organization service', () => {
       findById: reopened.findUserById,
     });
     identity.setProjectAccessResolver(reopened.projectIdsForUser);
-    const login = await identity.beginLogin('member@pias.test', strongPassword);
+    const login = await identity.beginLogin('member@studio.test', strongPassword);
     expect(login.status).toBe('authenticated');
     if (login.status !== 'authenticated') throw new Error('session missing');
     expect(identity.authenticateSession(login.sessionToken).projectIds).toEqual([project.id]);
@@ -146,7 +146,7 @@ describe('organization service', () => {
       reviewRequired: true,
     });
     const revoked = service.createInvitation(ownerContext(), {
-      email: 'revoked@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'revoked@studio.test', role: 'viewer', projectIds: [project.id],
     });
     expect(service.revokeInvitation(ownerContext(), revoked.invitation.id).status).toBe('canceled');
     expect(service.revokeInvitation(ownerContext(), revoked.invitation.id).status).toBe('canceled');
@@ -155,7 +155,7 @@ describe('organization service', () => {
     })).rejects.toMatchObject({ code: 'ORG_INVITATION_NOT_PENDING' });
 
     const stale = service.createInvitation(ownerContext(), {
-      email: 'expired@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'expired@studio.test', role: 'viewer', projectIds: [project.id],
     });
     currentNow = '2026-07-30T06:30:00.000Z';
     await expect(service.acceptInvitation({
@@ -173,7 +173,7 @@ describe('organization service', () => {
       reviewRequired: true,
     });
     const original = service.createInvitation(ownerContext(), {
-      email: 'resend@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'resend@studio.test', role: 'viewer', projectIds: [project.id],
     });
 
     const replacement = service.resendInvitation(ownerContext(), original.invitation.id);
@@ -189,7 +189,7 @@ describe('organization service', () => {
     expect(() => service.previewInvitation(original.acceptToken))
       .toThrow(expect.objectContaining({ code: 'ORG_INVITATION_NOT_PENDING' }));
     expect(service.previewInvitation(replacement.acceptToken)).toMatchObject({
-      email: 'resend@pias.test',
+      email: 'resend@studio.test',
     });
     expect(service.listInvitations(ownerContext())).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: original.invitation.id, status: 'canceled' }),
@@ -209,7 +209,7 @@ describe('organization service', () => {
       name: '已接受邀请项目', reviewRequired: true,
     });
     const created = service.createInvitation(ownerContext(), {
-      email: 'accepted-resend@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'accepted-resend@studio.test', role: 'viewer', projectIds: [project.id],
     });
     await service.acceptInvitation({ token: created.acceptToken, password: strongPassword });
 
@@ -240,9 +240,9 @@ describe('organization service', () => {
   });
 
   it('upgrades an existing v4 invitation table without losing rows', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-org-v4-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-org-v4-'));
     directories.push(directory);
-    const databasePath = join(directory, 'pias.sqlite');
+    const databasePath = join(directory, 'content-studio.sqlite');
     const legacy = new DatabaseSync(databasePath);
     legacy.exec(`
       CREATE TABLE organization_invitations (
@@ -259,25 +259,25 @@ describe('organization service', () => {
         expires_at TEXT NOT NULL
       ) STRICT;
       INSERT INTO organization_invitations VALUES (
-        'invitation-legacy', 'tenant-a', 'legacy@pias.test', NULL, 'viewer', '["project-a"]',
+        'invitation-legacy', 'tenant-a', 'legacy@studio.test', NULL, 'viewer', '["project-a"]',
         'pending', 'pending_configuration', 'user-owner', '${now}', '2026-07-29T06:30:00.000Z'
       );
       PRAGMA user_version = 4;
     `);
     legacy.close();
 
-    const upgraded = openPiasDatabase(databasePath);
+    const upgraded = openContentStudioDatabase(databasePath);
     expect(upgraded.connection.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
     expect(upgraded.connection.prepare(`
       SELECT email, token_hash FROM organization_invitations WHERE invitation_id = 'invitation-legacy'
-    `).get()).toEqual({ email: 'legacy@pias.test', token_hash: null });
+    `).get()).toEqual({ email: 'legacy@studio.test', token_hash: null });
     upgraded.close();
   });
 
   it('upgrades v5 members to v6 without losing existing rows', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pias-org-v5-'));
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-org-v5-'));
     directories.push(directory);
-    const databasePath = join(directory, 'pias.sqlite');
+    const databasePath = join(directory, 'content-studio.sqlite');
     const legacy = new DatabaseSync(databasePath);
     legacy.exec(`
       CREATE TABLE organization_invitations (
@@ -294,18 +294,18 @@ describe('organization service', () => {
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       ) STRICT;
       INSERT INTO organization_users VALUES (
-        'user-legacy', 'tenant-a', 'legacy-member@pias.test', '旧成员', 'hash', 'viewer',
+        'user-legacy', 'tenant-a', 'legacy-member@studio.test', '旧成员', 'hash', 'viewer',
         'active', 0, NULL, '${now}', '${now}'
       );
       PRAGMA user_version = 5;
     `);
     legacy.close();
 
-    const upgraded = openPiasDatabase(databasePath);
+    const upgraded = openContentStudioDatabase(databasePath);
     expect(upgraded.connection.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
     expect(upgraded.connection.prepare(`
       SELECT email, first_login_at FROM organization_users WHERE user_id = 'user-legacy'
-    `).get()).toEqual({ email: 'legacy-member@pias.test', first_login_at: null });
+    `).get()).toEqual({ email: 'legacy-member@studio.test', first_login_at: null });
     upgraded.close();
   });
 
@@ -315,7 +315,7 @@ describe('organization service', () => {
       name: '管理员项目', reviewRequired: true,
     });
     const created = service.createInvitation(ownerContext(), {
-      email: 'admin-member@pias.test', role: 'admin', projectIds: [project.id],
+      email: 'admin-member@studio.test', role: 'admin', projectIds: [project.id],
     });
     await expect(service.acceptInvitation({
       token: created.acceptToken, password: strongPassword,
@@ -353,7 +353,7 @@ describe('organization service', () => {
       name: '成员项目二', reviewRequired: false,
     });
     const created = service.createInvitation(ownerContext(), {
-      email: 'managed@pias.test', role: 'creator', projectIds: [firstProject.id],
+      email: 'managed@studio.test', role: 'creator', projectIds: [firstProject.id],
     });
     const member = await service.acceptInvitation({
       token: created.acceptToken, password: strongPassword, displayName: '受管成员',
@@ -399,7 +399,7 @@ describe('organization service', () => {
       name: '会话项目二', reviewRequired: true,
     });
     const created = service.createInvitation(ownerContext(), {
-      email: 'session-member@pias.test', role: 'creator', projectIds: [firstProject.id],
+      email: 'session-member@studio.test', role: 'creator', projectIds: [firstProject.id],
     });
     const member = await service.acceptInvitation({
       token: created.acceptToken, password: strongPassword,
@@ -431,7 +431,7 @@ describe('organization service', () => {
       name: '登录审计项目', reviewRequired: true,
     });
     const created = service.createInvitation(ownerContext(), {
-      email: 'audit-login@pias.test', role: 'viewer', projectIds: [project.id],
+      email: 'audit-login@studio.test', role: 'viewer', projectIds: [project.id],
     });
     const member = await service.acceptInvitation({
       token: created.acceptToken, password: strongPassword,
@@ -452,13 +452,13 @@ describe('organization service', () => {
   });
 });
 
-const strongPassword = 'PIAS-member-2026!';
+const strongPassword = 'Studio-member-2026!';
 
 async function setup(options: { now?: () => string } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'pias-org-'));
+  const directory = await mkdtemp(join(tmpdir(), 'content-studio-org-'));
   directories.push(directory);
-  const databasePath = join(directory, 'pias.sqlite');
-  const database = openPiasDatabase(databasePath);
+  const databasePath = join(directory, 'content-studio.sqlite');
+  const database = openContentStudioDatabase(databasePath);
   return {
     database,
     databasePath,

@@ -14,8 +14,8 @@ type PersistedQueueState = {
 };
 
 export function createFileFalQueuePersistence(
-  filePath = process.env.PIAS_FAL_JOB_STATE_FILE
-    || '/tmp/pias-image-studio/fal-queue-state.json',
+  filePath = process.env.CONTENT_STUDIO_FAL_JOB_STATE_FILE
+    || '/tmp/content-studio/fal-queue-state.json',
 ): FalQueuePersistence {
   return {
     async load() {

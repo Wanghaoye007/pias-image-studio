@@ -15,7 +15,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/studio.example.com/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_timeout 1d;
-    ssl_session_cache shared:PIAS_TLS:10m;
+    ssl_session_cache shared:CONTENT_STUDIO_TLS:10m;
     ssl_session_tickets off;
 
     server_tokens off;
