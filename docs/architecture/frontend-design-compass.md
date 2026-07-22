@@ -1,5 +1,9 @@
 # Content Studio Frontend Design Compass
 
+> 图片工作台工具编辑器、共享控件和 Modal 的具体结构与验收规则以
+> [`2026-07-23-image-workbench-design-system-convergence.md`](../superpowers/specs/2026-07-23-image-workbench-design-system-convergence.md)
+> 为准。本文件保留产品级视觉方向，不再为同一组件定义另一套尺寸。
+
 ## Direction
 
 Content Studio is an enterprise AI image production workbench, not a marketing site. The first screen should feel like a serious creative operations surface: dense enough for repeated work, soft enough for long sessions, and tactile enough that canvas actions feel direct.
@@ -26,17 +30,18 @@ The current design direction is "precision glass workbench":
 
 ## Radius
 
-- Global control radius: 14px.
-- Compact chips and icon buttons: 16px.
-- Repeated item cards: 18px.
-- Floating menus and node cards: 20px to 24px; the docked editor keeps a square outer edge.
+- Compact surfaces: 8px.
+- Controls and icon buttons: 10px.
+- Repeated sections and node cards: 12px.
+- Independent modals: 16px; the docked editor keeps a square outer edge.
 - Pills and state badges: 999px.
 
 ## Spacing
 
-- Shell rail padding: 10px to 18px.
-- Floating toolbar offset: 22px from canvas edge.
-- Panel internal spacing: 16px to 18px.
+- Spacing scale: 4px, 8px, 12px, 16px, 24px, 32px, and 48px only.
+- Shell rail padding: 8px to 16px.
+- Floating toolbar offset: 24px from canvas edge.
+- Panel safe area and section spacing: 24px.
 - Node header height: 42px.
 - Canvas node size: source/job 336 x 380, result 304 x 348.
 - Node picker: 320px wide, searchable single-column menu, 48px minimum action height.
