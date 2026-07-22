@@ -1016,11 +1016,14 @@
 ### 测试和构建结果
 
 - 先以缺失扫描器和缺失工作流建立红灯，再实现仓库规则和 CI 契约；2 个专项文件、12 项测试通过。
-- `npm run repo:check` 扫描 194 个已跟踪文件，通过且无敏感内容或禁入文件。
+- `npm run repo:check` 在最终提交上扫描 200 个已跟踪文件，通过且无敏感内容或禁入文件。
 - `npm run lint` 与 `npm run typecheck` 通过。
 - 全量回归：46 个测试文件、405 项测试通过。
 - 前端与独立 Node 服务双产物构建通过，所有 JS 块继续低于 500 kB。
 - `npm audit --omit=dev --audit-level=high` 为 0 漏洞。
+- GitHub PR 运行 `29884548194` 与分支推送运行 `29884547736` 均在提交 `eb9470d0a5212b517e45f50319d83db673cd04b1` 上通过全部 11 个步骤。
+- PR 运行上传发布候选 `pias-release-feb1b6a4bb0ac0f96a1329b0c516a48aa427b2f2`，大小 9,119,225 字节，摘要 `sha256:ba11c283ea626552501174d11a9fc1bc2d4f2f344f269524cb732b8df5910b4f`，保留至 2026-07-29。
+- 本地 `dist/release.json` 确认 revision 为 `eb9470d0a5212b517e45f50319d83db673cd04b1` 且 `dirty=false`。
 
 ### 风险控制
 
@@ -1032,8 +1035,8 @@
 
 - P1 `USAGE-001`：仍缺具备 Billing Events 权限的生产 Fal Admin Key。
 - P1 `MEMBER-001`：仍缺生产 HTTPS 域名、邮件 Relay、发件人域名和专用邮箱真实收件证据。
-- CI 尚需推送后由 GitHub 实际解析并完成首轮远端运行。
+- P2 `CI-GOV-001`：私有仓库当前套餐不支持分支保护，GitHub API 返回 403；远端检查已生效，但合并前仍可能被仓库管理员绕过。升级 GitHub Pro 或将仓库转为公开后再把 `Lint, test, and build` 设为必需检查。
 
 ### 下一轮优先事项
 
-提交并推送 CI，等待 PR #1 的远端 `Release quality / Lint, test, and build` 结论；若失败直接读取日志修复。远端通过后，将其设置为合并前必需检查（若仓库权限允许），再审查剩余可离线安全风险。
+继续审查不依赖生产凭证的部署与供应链风险；外部配置到位后优先完成 Fal Billing Events 对账和真实邀请邮件收件验证。仓库套餐支持分支保护时，将 `Lint, test, and build` 设为合并前必需检查。
