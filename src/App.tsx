@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
-import { GlobalNav, SecondaryView, type NavKey } from './SecondaryViews';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { GlobalNav, type NavKey } from './GlobalNav';
 import { AuthBoundary, type AuthBoundaryValue } from './auth/AuthBoundary';
 import { listProjects } from './organization/organizationClient';
 import { InvitationAcceptance, readInvitationToken } from './organization/InvitationAcceptance';
 import type { OrganizationProject } from './organization/organizationService';
 import { createBlankProjectStudioState } from './studio/demoState';
 import { usePersistentStudioState } from './studio/usePersistentStudioState';
-import { Workbench } from './workbench/Workbench';
+
+const SecondaryView = lazy(() => import('./SecondaryViews'));
+const Workbench = lazy(() => import('./workbench/Workbench'));
 
 function App() {
   const [invitationToken, setInvitationToken] = useState(() => readInvitationToken(window.location.hash));
@@ -98,6 +100,7 @@ function StudioWorkspace({
       : undefined,
   );
   const [activeNav, setActiveNav] = useState<NavKey>('studio');
+  const [secondaryRequested, setSecondaryRequested] = useState(false);
 
   if (loadStatus === 'error') {
     return (
@@ -125,39 +128,68 @@ function StudioWorkspace({
         activeNav={activeNav}
         authSession={auth.session}
         onLogout={auth.logout}
-        onNavigate={setActiveNav}
+        onNavigate={(nextNav) => {
+          if (nextNav !== 'studio') setSecondaryRequested(true);
+          setActiveNav(nextNav);
+        }}
         state={state}
       />
       <div className={`workspace ${activeNav === 'studio' ? 'is-workbench' : ''}`}>
         <div className="workspace-panel workspace-panel--workbench" hidden={activeNav !== 'studio'}>
-          <Workbench
-            actorId={auth.session.status === 'authenticated' ? auth.session.user.id : 'Mika Tanaka'}
-            onReloadState={retryLoad}
-            onRetrySave={retrySave}
-            saveStatus={saveStatus}
-            state={state}
-            setState={setState}
-          />
+          <Suspense fallback={<WorkbenchFallback />}>
+            <Workbench
+              actorId={auth.session.status === 'authenticated' ? auth.session.user.id : 'Mika Tanaka'}
+              onReloadState={retryLoad}
+              onRetrySave={retrySave}
+              saveStatus={saveStatus}
+              state={state}
+              setState={setState}
+            />
+          </Suspense>
         </div>
         <div className="workspace-panel workspace-panel--secondary" hidden={activeNav === 'studio'}>
-          <SecondaryView
-            activeNav={activeNav}
-            activeProject={activeProject}
-            activeProjectId={projectScope}
-            authSession={auth.session}
-            onOpenProject={(project) => {
-              onOpenProject(project);
-              setActiveNav('studio');
-            }}
-            onReloadState={retryLoad}
-            onRetrySave={retrySave}
-            saveStatus={saveStatus}
-            setState={setState}
-            state={state}
-          />
+          {secondaryRequested && (
+            <Suspense fallback={<SecondaryViewFallback />}>
+              <SecondaryView
+                activeNav={activeNav}
+                activeProject={activeProject}
+                activeProjectId={projectScope}
+                authSession={auth.session}
+                onOpenProject={(project) => {
+                  onOpenProject(project);
+                  setActiveNav('studio');
+                }}
+                onReloadState={retryLoad}
+                onRetrySave={retrySave}
+                saveStatus={saveStatus}
+                setState={setState}
+                state={state}
+              />
+            </Suspense>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function WorkbenchFallback() {
+  return (
+    <main aria-live="polite" className="app-state-screen">
+      <div className="app-state-screen__indicator" />
+      <h1>正在打开工作台</h1>
+      <p>正在准备节点画布</p>
+    </main>
+  );
+}
+
+function SecondaryViewFallback() {
+  return (
+    <main aria-live="polite" className="app-state-screen">
+      <div className="app-state-screen__indicator" />
+      <h1>正在打开页面</h1>
+      <p>正在读取项目数据</p>
+    </main>
   );
 }
 

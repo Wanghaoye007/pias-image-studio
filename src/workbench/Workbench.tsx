@@ -1429,3 +1429,5 @@ function canDeleteScene(state: StudioState, sceneId: string): boolean {
 function getSceneTitleForNotice(scene: Scene): string {
   return scene.title;
 }
+
+export default Workbench;

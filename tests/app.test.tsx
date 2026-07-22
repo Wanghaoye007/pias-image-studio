@@ -188,7 +188,7 @@ describe('PIAS 中文应用框架', () => {
   it('从素材库上传图片并保存为可复用素材', async () => {
     await renderApp();
     fireEvent.click(screen.getByRole('button', { name: '素材库' }));
-    fireEvent.click(screen.getByRole('button', { name: '上传' }));
+    fireEvent.click(await screen.findByRole('button', { name: '上传' }));
 
     const dialog = screen.getByRole('dialog', { name: '上传素材' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: '品牌' }), {
