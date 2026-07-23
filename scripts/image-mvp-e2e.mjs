@@ -99,6 +99,9 @@ try {
   await page.getByRole('status', { name: '画布操作反馈' })
     .filter({ hasText: '已上传并添加到画布' }).waitFor();
 
+  log('selected-node-media-geometry');
+  await assertSelectedNodeMediaGeometry(page, 'E2E 商品图');
+
   log('tool-panel-geometry');
   await exerciseToolPanelMatrix(page);
 
@@ -267,6 +270,76 @@ async function exerciseToolPanelMatrix(page) {
   }
   await mobilePanel.getByRole('button', { name: '关闭参数面板' }).click();
   await page.setViewportSize({ width: 1440, height: 960 });
+}
+
+async function assertSelectedNodeMediaGeometry(page, imageName) {
+  const node = page.locator('.canvas-node.is-selected', {
+    has: page.getByAltText(imageName),
+  });
+  const metrics = await node.evaluate((element) => {
+    const header = element.querySelector(':scope > .canvas-node__header');
+    const image = element.querySelector(':scope > img');
+    if (!header || !image) return null;
+    const nodeRect = element.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+    const imageRect = image.getBoundingClientRect();
+    const nodeStyle = globalThis.getComputedStyle(element);
+    const headerStyle = globalThis.getComputedStyle(header);
+    const imageStyle = globalThis.getComputedStyle(image);
+    return {
+      node: {
+        top: nodeRect.top,
+        right: nodeRect.right,
+        bottom: nodeRect.bottom,
+        left: nodeRect.left,
+      },
+      header: {
+        top: headerRect.top,
+        right: headerRect.right,
+        left: headerRect.left,
+        radiusLeft: Number.parseFloat(headerStyle.borderTopLeftRadius),
+        radiusRight: Number.parseFloat(headerStyle.borderTopRightRadius),
+      },
+      image: {
+        right: imageRect.right,
+        bottom: imageRect.bottom,
+        left: imageRect.left,
+        radiusLeft: Number.parseFloat(imageStyle.borderBottomLeftRadius),
+        radiusRight: Number.parseFloat(imageStyle.borderBottomRightRadius),
+      },
+      border: {
+        top: Number.parseFloat(nodeStyle.borderTopWidth),
+        right: Number.parseFloat(nodeStyle.borderRightWidth),
+        bottom: Number.parseFloat(nodeStyle.borderBottomWidth),
+        left: Number.parseFloat(nodeStyle.borderLeftWidth),
+      },
+      overflow: nodeStyle.overflow,
+    };
+  });
+
+  if (!metrics) throw new Error('选中图片节点缺少标题或图片视觉层');
+  if (metrics.overflow !== 'visible') throw new Error('选中节点的外置操作控件会被裁切');
+  const tolerance = 0.5;
+  if (
+    metrics.header.top < metrics.node.top + metrics.border.top - tolerance
+    || metrics.header.left < metrics.node.left + metrics.border.left - tolerance
+    || metrics.header.right > metrics.node.right - metrics.border.right + tolerance
+  ) {
+    throw new Error('选中节点标题越过节点内容边界');
+  }
+  if (
+    metrics.image.left < metrics.node.left + metrics.border.left - tolerance
+    || metrics.image.right > metrics.node.right - metrics.border.right + tolerance
+    || metrics.image.bottom > metrics.node.bottom - metrics.border.bottom + tolerance
+  ) {
+    throw new Error('选中节点图片越过节点内容边界');
+  }
+  if (metrics.header.radiusLeft < 20 || metrics.header.radiusRight < 20) {
+    throw new Error('选中节点标题未遵循顶部圆角安全区');
+  }
+  if (metrics.image.radiusLeft < 20 || metrics.image.radiusRight < 20) {
+    throw new Error('选中节点图片未遵循底部圆角安全区');
+  }
 }
 
 async function assertToolPanelGeometry(panel, dialogName, options = {}) {
