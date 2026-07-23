@@ -348,9 +348,9 @@ async function assertOrdinaryDialogGeometry(dialog, dialogName) {
 }
 
 async function waitForPanelMotion(panel) {
-  await panel.evaluate((element) => Promise.all(
-    element.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
-  ));
+  await panel.evaluate(() => new Promise((resolve) => {
+    globalThis.setTimeout(resolve, 320);
+  }));
 }
 
 function createStatefulApi() {
