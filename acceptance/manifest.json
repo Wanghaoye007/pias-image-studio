@@ -173,6 +173,8 @@
       "command": "npm",
       "args": ["run", "build"],
       "env": {
+        "CONTENT_STUDIO_RELEASE_ARTIFACT_DIR": "dist",
+        "CONTENT_STUDIO_RELEASE_SERVER_FILE": "dist-server/server.mjs",
         "NODE_OPTIONS": "--max-old-space-size=512"
       }
     },
