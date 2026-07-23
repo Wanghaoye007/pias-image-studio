@@ -582,6 +582,10 @@
 }
 
 @media (max-width: 767px) {
+  .canvas-stage.is-panel-open {
+    z-index: 200;
+  }
+
   .tool-panel {
     position: fixed;
     inset: 0;

@@ -188,6 +188,9 @@ describe('Content Studio 中文应用框架', () => {
     );
     expect(panelStyles).toMatch(/\.panel-field textarea\s*\{[^}]*resize:\s*vertical;/s);
     expect(panelStyles).toMatch(/\.generation-footer__run\s*\{[^}]*min-height:\s*48px;/s);
+    expect(panelStyles).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*\.canvas-stage\.is-panel-open\s*\{[^}]*z-index:\s*200;[\s\S]*\.tool-panel\s*\{[^}]*position:\s*fixed;[^}]*width:\s*100%;/,
+    );
     expect(softGlass).not.toMatch(
       /\.(context-panel|advanced-editor-footer|segmented|range-control|toggle-control|reference-slot|remove-mask-status|credit-estimate|angle-risk)/,
     );
