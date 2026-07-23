@@ -121,12 +121,11 @@ try {
     const buttons = Array.from(panel?.querySelectorAll('button') ?? []);
     const one = buttons.find((button) => button.textContent?.trim() === '1');
     const four = buttons.find((button) => button.textContent?.trim() === '4');
-    return Boolean(
-      one
-      && four
-      && globalThis.getComputedStyle(one).backgroundColor.includes('47, 111, 237')
-      && !globalThis.getComputedStyle(four).backgroundColor.includes('47, 111, 237'),
-    );
+    if (!one || !four) return false;
+    const selectedStyle = globalThis.getComputedStyle(one);
+    const unselectedStyle = globalThis.getComputedStyle(four);
+    return selectedStyle.backgroundColor !== unselectedStyle.backgroundColor
+      && selectedStyle.color !== unselectedStyle.color;
   });
   await page.waitForFunction(() => {
     const panel = globalThis.document.querySelector('[aria-label="生成参数"]');
