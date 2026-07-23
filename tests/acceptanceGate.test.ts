@@ -45,6 +45,15 @@ describe('acceptance gate', () => {
     });
   });
 
+  it('isolates acceptance build artifacts from the active release directory', () => {
+    const buildAutomation = manifest.automation.find((item: { id: string }) => item.id === 'AUTO-BUILD');
+
+    expect(buildAutomation?.env).toMatchObject({
+      CONTENT_STUDIO_RELEASE_ARTIFACT_DIR: 'dist',
+      CONTENT_STUDIO_RELEASE_SERVER_FILE: 'dist-server/server.mjs',
+    });
+  });
+
   it('returns red for any unresolved P0', () => {
     expect(evaluateAcceptance(fixture('fail', 'P0')).conclusion).toBe('red');
   });
