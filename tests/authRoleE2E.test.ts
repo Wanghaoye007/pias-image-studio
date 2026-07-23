@@ -33,6 +33,41 @@ type ResponseResult = {
 };
 
 describe('authenticated role command flow', () => {
+  it('allows a creator to initialize a new project through the authenticated API stack', async () => {
+    const creator = await user('user-creator', 'creator');
+    const identity = new IdentityService([creator]);
+    const creatorSession = await login(identity, creator);
+    let stored: PersistedStudioSnapshot | null = null;
+    const persistence: StudioStatePersistence = {
+      load: vi.fn(async () => structuredClone(stored)),
+      save: vi.fn(async (expectedRevision, state) => {
+        if (expectedRevision !== 0) throw new Error('unexpected test revision');
+        stored = snapshot(structuredClone(state), 1);
+        return structuredClone(stored);
+      }),
+    };
+    const guard = createApiAuthGuard(identity);
+    const stateApi = createStudioStateMiddleware(persistence, {
+      authorizeWrite: (request, previous, requested) => authorizeStudioStateWrite({
+        context: getRequestAuthContext(request),
+        scope: getRequestProjectScope(request),
+        previous,
+        requested,
+      }),
+    });
+
+    const response = await invokeStack(
+      guard,
+      stateApi,
+      creatorSession,
+      0,
+      initialStudioState(),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(stored).toMatchObject({ revision: 1 });
+  });
+
   it('uses trusted sessions for submit/approve authorization and persisted actors', async () => {
     const users = await Promise.all([
       user('user-creator', 'creator'),

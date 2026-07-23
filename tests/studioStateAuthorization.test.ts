@@ -40,6 +40,51 @@ function stateWithDraftResult() {
 }
 
 describe('StudioState command authorization', () => {
+  it('allows a creator to initialize a clean project state', () => {
+    const requested = initialStudioState();
+    requested.projectName = '运营工作台';
+
+    const authorized = authorizeStudioStateWrite({
+      context: context('creator', 'user-creator'),
+      scope,
+      previous: null,
+      requested,
+    });
+
+    expect(authorized.projectName).toBe('运营工作台');
+  });
+
+  it('rejects project initialization without edit permission', () => {
+    expect(() => authorizeStudioStateWrite({
+      context: context('viewer', 'user-viewer'),
+      scope,
+      previous: null,
+      requested: initialStudioState(),
+    })).toThrow(expect.objectContaining({ code: 'AUTH_FORBIDDEN' }));
+  });
+
+  it('rejects privileged history in a creator project initialization', () => {
+    expect(() => authorizeStudioStateWrite({
+      context: context('creator', 'user-creator'),
+      scope,
+      previous: null,
+      requested: stateWithDraftResult(),
+    })).toThrow(expect.objectContaining({ code: 'STUDIO_INITIAL_STATE_INVALID' }));
+  });
+
+  it('preserves administrator initialization of an imported project history', () => {
+    const authorized = authorizeStudioStateWrite({
+      context: context('admin', 'user-admin'),
+      scope,
+      previous: null,
+      requested: stateWithDraftResult(),
+    });
+
+    expect(authorized.jobs).toHaveLength(1);
+    expect(authorized.results).toHaveLength(1);
+    expect(authorized.auditEvents.every((event) => event.actor === 'user-admin')).toBe(true);
+  });
+
   it('allows a creator to submit review and replaces an untrusted audit actor', () => {
     const previous = stateWithDraftResult();
     const requested = submitForReview(previous, previous.results[0].id);

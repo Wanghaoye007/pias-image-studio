@@ -5,7 +5,13 @@ import {
   type Permission,
   type ResourceScope,
 } from '../auth/authPolicy';
-import type { AuditEvent, Result, StudioNotification, StudioState } from '../../shared/domain';
+import {
+  initialStudioState,
+  type AuditEvent,
+  type Result,
+  type StudioNotification,
+  type StudioState,
+} from '../../shared/domain';
 
 type AuthorizeStudioStateWriteInput = {
   context: AuthContext;
@@ -58,6 +64,7 @@ export class StudioStateCommandError extends Error {
       | 'STUDIO_USAGE_LEDGER_INVALID'
       | 'STUDIO_NOTIFICATION_INVALID'
       | 'STUDIO_RETRY_LINEAGE_INVALID'
+      | 'STUDIO_INITIAL_STATE_INVALID'
       | 'STUDIO_COMMAND_AUDIT_REQUIRED'
       | 'STUDIO_COMMAND_UNKNOWN',
     readonly statusCode: 400 | 409,
@@ -74,10 +81,8 @@ export function authorizeStudioStateWrite({
   requested,
 }: AuthorizeStudioStateWriteInput): StudioState {
   if (!previous) {
-    if (context.role !== 'owner' && context.role !== 'admin') {
-      throw new AuthorizationError('只有管理员可以初始化项目状态', 'AUTH_FORBIDDEN', 403);
-    }
     requirePermission(context, 'project.edit', scope);
+    if (context.role !== 'owner' && context.role !== 'admin') assertInitialState(requested);
     return normalizeInitialState(requested, context.userId);
   }
 
@@ -113,6 +118,30 @@ export function authorizeStudioStateWrite({
   authorizeSectionChanges(previous, next, appendedEvents, permissions, context);
   for (const permission of permissions) requirePermission(context, permission, scope);
   return next;
+}
+
+function assertInitialState(requested: StudioState): void {
+  const baselineUsage = initialStudioState().usage;
+  const hasPrivilegedHistory = (
+    requested.jobs.length > 0
+    || requested.results.length > 0
+    || requested.auditEvents.length > 0
+    || (requested.notifications?.length ?? 0) > 0
+    || (requested.usageLedger?.length ?? 0) > 0
+  );
+  const hasModifiedUsage = (
+    requested.usage.monthlyCredits !== baselineUsage.monthlyCredits
+    || requested.usage.availableCredits !== baselineUsage.availableCredits
+    || requested.usage.frozenCredits !== baselineUsage.frozenCredits
+    || requested.usage.spentCredits !== baselineUsage.spentCredits
+  );
+  if (hasPrivilegedHistory || hasModifiedUsage) {
+    throw new StudioStateCommandError(
+      '新项目不能夹带任务、审核或用量历史',
+      'STUDIO_INITIAL_STATE_INVALID',
+      400,
+    );
+  }
 }
 
 function assertRetryLineage(
